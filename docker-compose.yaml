@@ -3,11 +3,11 @@ services:
     #restart: always
     build:
       context: ./
-      dockerfile: docker_vis/Dockerfile
+      dockerfile: docker/Dockerfile
       # args:
       #   - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
       #   - CYCLONEDDS_URI=file:///root/turtlebot3_ws/cylconedds_config.xml
-    image: nobel86/turtlebot-rpi5-vis:latest
+    #image: nobel86/turtlebot-rpi5-vis:latest
     stdin_open: true
     network_mode: host
     tty: true  
