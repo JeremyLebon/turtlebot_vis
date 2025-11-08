@@ -1,12 +1,5 @@
 services:
   turtlebot-vis:
-    #restart: always
-    # build:
-    #   context: ./
-    #   dockerfile: docker/Dockerfile
-      # args:
-      #   - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-      #   - CYCLONEDDS_URI=file:///root/turtlebot3_ws/cylconedds_config.xml
     image: nobel86/turtlebot-rpi5-vis:latest
     stdin_open: true
     network_mode: host
@@ -15,7 +8,7 @@ services:
       - DISPLAY=${DISPLAY}
       - QT_X11_NO_MITSHM=1
       - XAUTHORITY=${XAUTH}
-      - ROS_DOMAIN_ID=0
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID}
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
       - CYCLONEDDS_URI=file:///root/turtlebot3_ws/cylconedds_config.xml
     container_name: turtlebot-vis
