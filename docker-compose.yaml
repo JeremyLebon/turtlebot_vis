@@ -3,7 +3,7 @@ services:
     image: nobel86/turtlebot-rpi5-vis:latest
     stdin_open: true
     network_mode: host
-    tty: true  
+    tty: true
     environment:
       - DISPLAY=${DISPLAY}
       - QT_X11_NO_MITSHM=1
@@ -11,11 +11,23 @@ services:
       - ROS_DOMAIN_ID=${ROS_DOMAIN_ID}
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
       - CYCLONEDDS_URI=file:///root/turtlebot3_ws/cylconedds_config.xml
+ # Set a fancy prompt (See ~/.bashrc in the container)
+      - TERM=xterm-256color
+
+      # WSLg settings
+      # https://www.reddit.com/r/bashonubuntuonwindows/comments/n2nthu/can_i_use_the_new_wslg_with_docker/
+      - DISPLAY
+      - WAYLAND_DISPLAY
+      - XDG_RUNTIME_DIR
+      - PULSE_SERVER
     container_name: turtlebot-vis
     privileged: true
     cap_add:
       - NET_ADMIN
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-    command: bash 
-
+            # WSLg settings
+      - /mnt/wslg:/mnt/wslg
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - /home/ubuntu/ros2_ws:/root/ros2_ws
+    command: bash
