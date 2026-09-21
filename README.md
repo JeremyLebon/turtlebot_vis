@@ -49,14 +49,22 @@ rviz2                    # of: ros2 launch turtlebot3_navigation2 navigation2.la
 
 ### Problemen oplossen
 
-- `ros2 topic list` toont niets: controleer `echo $ZENOH_CONFIG_OVERRIDE`
-  in de container (moet het juiste IP tonen), en of de robot's
-  Zenoh-router effectief draait en bereikbaar is
-  (`ping <ROBOT_ZENOH_IP>` vanuit WSL, en dat je op hetzelfde netwerk/
-  dezelfde robot-AP zit).
+- `ros2 topic list` toont niets: meest voorkomende oorzaak is een
+  **`ROS_DOMAIN_ID`-mismatch** met de robot - dit moet exact matchen,
+  ook al is de Zenoh-verbinding zelf oké (domain ID is onderdeel van
+  Zenoh's topic-key-namespacing, zelfde isolatie-effect als bij DDS).
+  Controleer daarnaast `echo $ZENOH_CONFIG_OVERRIDE` in de container (moet
+  het juiste IP tonen), en of de robot's Zenoh-router effectief draait en
+  bereikbaar is (`ping <ROBOT_ZENOH_IP>` vanuit WSL, en dat je op hetzelfde
+  netwerk/dezelfde robot-AP zit).
 - Geen GUI-venster (rviz2/rqt): controleer of WSLg werkt met een simpele
   test buiten Docker (bv. `xeyes` of een andere Linux GUI-app rechtstreeks
   in WSL), vóór je het in de container probeert.
+- De compose gebruikt `network_mode: host`. Op Docker Desktop (Windows)
+  moet host-networking expliciet aanstaan: Docker Desktop instellingen ->
+  Resources -> Network -> "Enable host networking". Staat dit uit, dan
+  lijkt de container te starten maar is poort 7447 van buiten de container
+  niet bereikbaar zoals verwacht.
 
 ### Terugvallen op CycloneDDS
 
