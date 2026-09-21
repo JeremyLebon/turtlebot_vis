@@ -17,7 +17,8 @@ ros-humble-navigation2 \
 ros-humble-nav2-bringup \
 ros-humble-urdf \
 ros-humble-rmw-cyclonedds-cpp \
-ros-humble-rmw-zenoh-cpp
+ros-humble-rmw-zenoh-cpp \
+ros-humble-compressed-image-transport
 
 
 
