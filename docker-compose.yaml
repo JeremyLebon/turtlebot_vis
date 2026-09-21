@@ -17,10 +17,10 @@ services:
       #   RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
       - CYCLONEDDS_URI=file:///root/turtlebot3_ws/cylconedds_config.xml
       # Zenoh client config: connect directly (unicast TCP) to the robot's
-      # Zenoh router instead of relying on multicast scouting, which is
-      # exactly what does NOT work through WSL2's virtual network (see
-      # turtlebot_docker/README.md - this is the whole reason for this
-      # branch). ROBOT_ZENOH_IP is set in .env, one per robot you connect to.
+      # Zenoh router instead of relying on multicast scouting. DDS also
+      # works over WSL2, but its multicast discovery generates noticeably
+      # more network overhead - this is lighter, especially on constrained
+      # wifi. ROBOT_ZENOH_IP is set in .env, one per robot you connect to.
       - ZENOH_CONFIG_OVERRIDE=mode="client";connect/endpoints=["tcp/${ROBOT_ZENOH_IP}:7447"]
  # Set a fancy prompt (See ~/.bashrc in the container)
       - TERM=xterm-256color

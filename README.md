@@ -6,10 +6,12 @@ turtlebot van op afstand te bekijken/besturen.
 ## Op WSL (Windows) - Zenoh branch
 
 Deze branch (`zenoh`) is aangepast om via Zenoh te verbinden i.p.v.
-CycloneDDS. Reden: DDS-multicast-discovery werkt niet door WSL2's virtuele
-netwerk heen (zie `turtlebot_docker/README.md`), maar Zenoh in
-client-modus (rechtstreekse unicast TCP-verbinding naar de robot's
-Zenoh-router) wel. De robot moet uiteraard al op de `zenoh`/
+CycloneDDS. Reden: DDS werkt op zich ook door WSL2 heen, maar de
+multicast-discovery-mechanica van DDS geeft merkbaar veel netwerk-overhead
+(zeker relevant op een gedeelde/beperkte wifi-verbinding met meerdere
+robots/studenten tegelijk). Zenoh in client-modus (rechtstreekse unicast
+TCP-verbinding naar de robot's Zenoh-router, geen multicast-discovery
+nodig) is hier lichter. De robot moet uiteraard al op de `zenoh`/
 `raspios-migration`-branch draaien (met een actieve Zenoh-router op poort
 7447) - zie `turtlebot_setup/docs/zenoh-migration.md`.
 
@@ -69,6 +71,5 @@ rviz2                    # of: ros2 launch turtlebot3_navigation2 navigation2.la
 ### Terugvallen op CycloneDDS
 
 Zet in `docker-compose.yaml` de `RMW_IMPLEMENTATION`-regel om naar
-`rmw_cyclonedds_cpp` (staat als commentaar klaar) - werkt enkel als je
-niet via WSL2 verbindt (dus rechtstreeks Linux, of de robot op hetzelfde
-fysieke netwerk zonder WSL ertussen).
+`rmw_cyclonedds_cpp` (staat als commentaar klaar) - werkt ook via WSL2,
+maar verwacht dan meer netwerk-verkeer dan met Zenoh.
