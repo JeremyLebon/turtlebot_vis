@@ -33,10 +33,14 @@ Pas `.env` aan: zet `ROBOT_ZENOH_IP` op het IP van de turtlebot waarmee je
 verbindt (en `ROS_DOMAIN_ID` indien nodig - moet niet per se matchen met
 de robot, maar overzichtelijker als het wel matcht).
 
-### Bouwen en starten
+### Starten
+
+De image staat al op Docker Hub (`nobel86/turtlebot-rpi5-vis:zenoh`), dus
+pullen is genoeg - lokaal bouwen (`docker compose build`) kan ook, maar is
+niet nodig:
 
 ```bash
-docker compose build
+docker compose pull
 docker compose up -d
 docker exec -it turtlebot-vis bash
 ```
