@@ -43,3 +43,17 @@ RUN echo "source /root/turtlebot3_ws/install/setup.bash" >> /root/.bashrc
 # Werkmap /root/ros2_ws (bind mount uit docker-compose.yaml): na een
 # `colcon build` daar wordt de overlay in elke nieuwe shell gesourcet.
 RUN echo '[ -f /root/ros2_ws/install/setup.bash ] && source /root/ros2_ws/install/setup.bash' >> /root/.bashrc    
+# tf2: nooit 0.25.23 (Humble-sync 2026-09-07) - die heeft een deadlock waardoor
+# de TF-listener van een proces bevriest (ros2/geometry2#982/#995; op de robot
+# faalde Nav2 erdoor, 2026-10-09). Deze image heeft nu 0.25.22 (niet getroffen),
+# maar een rebuild met verse apt-lijsten zou 0.25.23 binnenhalen: dan 0.25.24
+# uit ros2-testing. Mag weg zodra 0.25.24 in de gewone ROS-repo staat.
+RUN if [ "$(dpkg-query -W -f='${Version}' ros-humble-tf2-ros | cut -d- -f1)" = "0.25.23" ]; then \
+      sed -e 's#^Types: .*#Types: deb#' -e 's#/ros2/ubuntu#/ros2-testing/ubuntu#' \
+          /etc/apt/sources.list.d/ros2.sources > /etc/apt/sources.list.d/ros2-testing.sources \
+      && apt-get update \
+      && apt-get install -y --no-install-recommends --only-upgrade \
+          $(dpkg-query -W -f='${Package}\n' 'ros-humble-tf2*') \
+      && rm /etc/apt/sources.list.d/ros2-testing.sources && rm -rf /var/lib/apt/lists/*; \
+    fi \
+    && dpkg-query -W -f='${Package} ${Version}\n' ros-humble-tf2-ros
