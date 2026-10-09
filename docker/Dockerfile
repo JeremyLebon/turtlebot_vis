@@ -32,8 +32,14 @@ COPY ./cyclonedds_config.xml /root/turtlebot3_ws/cylconedds_config.xml
 
 RUN /bin/bash -c '. /opt/ros/${ROS_DISTRO}/setup.bash; colcon build --parallel-workers $(nproc) --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_WITH_CUDA=ON -DBUILD_WITH_VIEWER=ON'
 
-RUN echo "source /ros_entrypoint.sh" >> /root/.bashrc  
+# Niet /ros_entrypoint.sh sourcen: dat script doet `set -e`, waardoor de
+# interactieve shell (en dus `docker exec -it ... bash`) sluit bij het eerste
+# commando dat faalt (typfout, ros2 topic echo met Ctrl+C, ...).
+RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /root/.bashrc
 # RUN echo 'export ROS_DOMAIN_ID=30 #TURTLEBOT3' >> /root/.bashrc  
 # RUN echo 'export LDS_MODEL=LDS-01' >> /root/.bashrc  
 RUN echo 'export TURTLEBOT3_MODEL=burger' >> /root/.bashrc
-RUN echo "source /root/turtlebot3_ws/install/setup.bash" >> /root/.bashrc    
+RUN echo "source /root/turtlebot3_ws/install/setup.bash" >> /root/.bashrc
+# Werkmap /root/ros2_ws (bind mount uit docker-compose.yaml): na een
+# `colcon build` daar wordt de overlay in elke nieuwe shell gesourcet.
+RUN echo '[ -f /root/ros2_ws/install/setup.bash ] && source /root/ros2_ws/install/setup.bash' >> /root/.bashrc    

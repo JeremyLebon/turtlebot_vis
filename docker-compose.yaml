@@ -40,8 +40,9 @@ services:
             # WSLg settings
       - /mnt/wslg:/mnt/wslg
       - /tmp/.X11-unix:/tmp/.X11-unix
-      # Optional: bind-mount a local ROS2 workspace from inside WSL. Only
-      # uncomment/adjust if you actually have one - "/home/ubuntu" assumed
-      # a specific WSL username and likely won't exist on your machine.
-      # - /home/<your-wsl-username>/ros2_ws:/root/ros2_ws
+      # Werkmap van de student (colcon-workspace): ./ros2_ws naast dit
+      # bestand in WSL, in de container /root/ros2_ws. Overleeft het opnieuw
+      # aanmaken van de container en is vanuit Windows/VS Code bereikbaar.
+      # Zelfde naam als de werkmap op de robot (~/turtlebot_setup/ros2_ws).
+      - ./ros2_ws:/root/ros2_ws
     command: bash
