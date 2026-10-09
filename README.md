@@ -77,3 +77,17 @@ rviz2                    # of: ros2 launch turtlebot3_navigation2 navigation2.la
 Zet in `docker-compose.yaml` de `RMW_IMPLEMENTATION`-regel om naar
 `rmw_cyclonedds_cpp` (staat als commentaar klaar) - werkt ook via WSL2,
 maar verwacht dan meer netwerk-verkeer dan met Zenoh.
+
+## Camera kalibreren (intrinsiek)
+
+Nodig voor alles wat afstanden uit het camerabeeld haalt (AprilTag, lidar op
+het camerabeeld). Eenmalig per robot en per resolutie:
+
+1. Print een dambord (bv. 9x7 vakjes = 8x6 binnenhoeken, vakjes van 25 mm -
+   meet na!) en kleef het op iets vlaks.
+2. Laptop verbonden met de robot, `turtlebot-vis` draait, en X11 werkt
+   (de kalibratie opent een venster).
+3. `./calibrate_camera.sh 8x6 0.025`
+4. Beweeg het dambord tot X, Y, Size en Skew groen zijn, dan CALIBRATE en
+   COMMIT. De robot bewaart de kalibratie zelf; de Systeem-pagina toont
+   "Intrinsiek gekalibreerd".
