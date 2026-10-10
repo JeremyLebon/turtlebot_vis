@@ -1,6 +1,9 @@
 services:
   turtlebot-vis:
-    image: nobel86/turtlebot-rpi5-vis:latest
+    build:
+      context: ./
+      dockerfile: docker/Dockerfile
+    image: nobel86/turtlebot-rpi5-vis:zenoh  # new tag - keep :latest (cyclonedds) untouched until validated
     stdin_open: true
     network_mode: host
     tty: true
@@ -9,8 +12,16 @@ services:
       - QT_X11_NO_MITSHM=1
       - XAUTHORITY=${XAUTH}
       - ROS_DOMAIN_ID=${ROS_DOMAIN_ID}
-      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - RMW_IMPLEMENTATION=rmw_zenoh_cpp
+      # Fallback middleware, kept for reference / easy rollback:
+      #   RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
       - CYCLONEDDS_URI=file:///root/turtlebot3_ws/cylconedds_config.xml
+      # Zenoh client config: connect directly (unicast TCP) to the robot's
+      # Zenoh router instead of relying on multicast scouting. DDS also
+      # works over WSL2, but its multicast discovery generates noticeably
+      # more network overhead - this is lighter, especially on constrained
+      # wifi. ROBOT_ZENOH_IP is set in .env, one per robot you connect to.
+      - ZENOH_CONFIG_OVERRIDE=mode="client";connect/endpoints=["tcp/${ROBOT_ZENOH_IP}:7447"]
  # Set a fancy prompt (See ~/.bashrc in the container)
       - TERM=xterm-256color
 
@@ -29,5 +40,9 @@ services:
             # WSLg settings
       - /mnt/wslg:/mnt/wslg
       - /tmp/.X11-unix:/tmp/.X11-unix
-      - /home/ubuntu/ros2_ws:/root/ros2_ws
+      # Werkmap van de student (colcon-workspace): ./ros2_ws naast dit
+      # bestand in WSL, in de container /root/ros2_ws. Overleeft het opnieuw
+      # aanmaken van de container en is vanuit Windows/VS Code bereikbaar.
+      # Zelfde naam als de werkmap op de robot (~/turtlebot_setup/ros2_ws).
+      - ./ros2_ws:/root/ros2_ws
     command: bash
