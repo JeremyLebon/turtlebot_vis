@@ -65,6 +65,15 @@ RUN python3 -c "import json; p='/opt/lichtblick/index.html'; s=open(p).read(); \
 RUN sed -i 's#<head>#<head><script>if(!new URLSearchParams(location.search).has("ds"))location.replace("?ds=foxglove-websocket\&ds.url=ws://"+location.hostname+":8765")</script>#' \
       /opt/lichtblick/index.html && grep -q 'ds=foxglove-websocket' /opt/lichtblick/index.html
 COPY docker/vis_start.sh /root/vis_start.sh
+# Robot automatisch kiezen (geen .env meer aanpassen); elke interactieve shell
+# neemt de keuze over en toont welke robot. Zie robot_select.sh.
+COPY docker/robot_select.sh /root/robot_select.sh
+RUN printf '%s\n' 'source /root/robot_select.sh' \
+      '[ -s "$ROBOT_ENV" ] || { nr=$(robot_detect) && [ -n "$nr" ] && robot_write_env "$nr"; }' \
+      '_robot_refresh' \
+      '[ -s "$ROBOT_ENV" ] || echo "Nog geen TurtleBot gevonden (laptop op de wifi TB-AP-<nr>? robot aan?). Opnieuw zoeken: robot   Vast nummer: robot <nr>"' \
+      'PROMPT_COMMAND="_robot_refresh${PROMPT_COMMAND:+;$PROMPT_COMMAND}"' \
+      >> /root/.bashrc
 ENTRYPOINT ["/root/vis_start.sh"]
 CMD ["bash"]
 

@@ -10,6 +10,8 @@
 # draait in de browser - geen WSLg/OpenGL in Docker nodig, het alternatief
 # voor rviz2 als dat venster niet zichtbaar wordt. De bridge haalt de topics
 # via Zenoh bij de robot, net als rviz2: geen extra belasting op de robot.
+#
+# Welke robot: automatisch, zie robot_select.sh.
 # Logs: /tmp/vis_services/.
 
 LOG=/tmp/vis_services
@@ -18,33 +20,48 @@ mkdir -p "$LOG"
 python3 -m http.server "${LICHTBLICK_PORT:-8080}" --bind 0.0.0.0 \
     --directory /opt/lichtblick > "$LOG/lichtblick.log" 2>&1 &
 
-# Zenoh-router van de robot uit ZENOH_CONFIG_OVERRIDE (tcp/<ip>:<poort>).
-ROUTER=$(grep -oE 'tcp/[0-9.]+:[0-9]+' <<< "$ZENOH_CONFIG_OVERRIDE" | head -1)
-ROUTER=${ROUTER#tcp/}
-
-# In een lus: valt de bridge weg (robot uit, Zenoh-router herstart), dan
-# komt ze vanzelf terug.
 (
     source /opt/ros/${ROS_DISTRO}/setup.bash
     # turtlebot3_description: de bridge levert de meshes (package://...)
     # van het robotmodel aan Lichtblick.
     source /root/turtlebot3_ws/install/setup.bash
+    source /root/robot_select.sh
+
     while true; do
-        # Zonder bereikbare router blijft rmw_zenoh hangen vóór de bridge
-        # poort 8765 opent: Lichtblick toont dan enkel "connection failed".
-        # Daarom eerst wachten, met een duidelijke melding in het log.
-        if [ -n "$ROUTER" ]; then
-            n=0
-            until timeout 2 bash -c "exec 3<>/dev/tcp/${ROUTER%:*}/${ROUTER#*:}" 2>/dev/null; do
-                [ $((n % 10)) -eq 0 ] && echo "$(date +%T) wacht op de robot: Zenoh-router $ROUTER niet bereikbaar" \
-                    "(robot aan? laptop op TB-AP-<nr>? juiste robot gekozen met ./start.sh <nr>?)"
-                n=$((n + 1)); sleep 3
-            done
-            echo "$(date +%T) Zenoh-router $ROUTER bereikbaar - foxglove_bridge start"
-        fi
+        # Robot zoeken. Zonder bereikbare router blijft rmw_zenoh hangen vóór
+        # de bridge poort 8765 opent (Lichtblick: "connection failed"), dus
+        # eerst wachten, met een duidelijke melding in het log.
+        n=0
+        until NR=$(robot_detect 2>&1) && [[ $NR =~ ^[0-9]+$ ]] && robot_reachable "$NR"; do
+            if [ $((n % 10)) -eq 0 ]; then
+                if [[ $NR =~ ^[0-9]+$ ]]; then
+                    echo "$(date +%T) wacht op robot $NR: 10.0.$NR.10:7447 niet bereikbaar (robot aan? laptop op TB-AP-$NR?)"
+                else
+                    echo "$(date +%T) wacht op de robot: ${NR:-geen TurtleBot bereikbaar (laptop op de wifi TB-AP-<nr>? robot aan?)}"
+                fi
+            fi
+            n=$((n + 1)); sleep 3
+        done
+        robot_write_env "$NR"
+        source "$ROBOT_ENV"
+        echo "$(date +%T) TurtleBot $NR (10.0.$NR.10) - foxglove_bridge start"
+
         ros2 launch foxglove_bridge foxglove_bridge_launch.xml \
-            port:="${FOXGLOVE_BRIDGE_PORT:-8765}"
-        sleep 3
+            port:="${FOXGLOVE_BRIDGE_PORT:-8765}" &
+        BRIDGE=$!
+        # Robot 15 s onbereikbaar (andere wifi, robot uit)? Bridge stoppen en
+        # opnieuw zoeken. `robot` in een shell stopt de bridge ook.
+        miss=0
+        while kill -0 $BRIDGE 2>/dev/null; do
+            sleep 5
+            if robot_reachable "$NR"; then miss=0; else miss=$((miss + 1)); fi
+            if [ $miss -ge 3 ]; then
+                echo "$(date +%T) robot $NR niet meer bereikbaar - opnieuw zoeken"
+                kill $BRIDGE; break
+            fi
+        done
+        wait $BRIDGE
+        sleep 2
     done
 ) > "$LOG/foxglove_bridge.log" 2>&1 &
 

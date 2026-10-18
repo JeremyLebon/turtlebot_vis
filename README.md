@@ -41,14 +41,22 @@ docker compose pull
 Daarna, met de laptop op de wifi van de robot (`TB-AP-<nr>`):
 
 ```bash
-./start.sh        # robotnummer automatisch uit de wifinaam, anders gevraagd
-./start.sh 5      # of expliciet robot 5
+docker compose up -d
+docker exec -it turtlebot-vis bash
 ```
 
-`start.sh` zet `ROS_DOMAIN_ID=<nr>` en `ROBOT_ZENOH_IP=10.0.<nr>.10` (gaan
-voor de waarden in `.env`), controleert of de Zenoh-router van de robot
-bereikbaar is, start de container (opnieuw aangemaakt bij een andere robot)
-en opent een shell erin. Extra terminals: `docker exec -it turtlebot-vis bash`.
+**Welke robot** zoekt de container zelf (`docker/robot_select.sh`): de
+access points zijn van elkaar afgeschermd, dus vanaf `TB-AP-<nr>` antwoordt
+alleen robot `<nr>` op `10.0.<nr>.10:7447`. Die keuze (`ROS_DOMAIN_ID=<nr>`,
+Zenoh-router `10.0.<nr>.10`) komt in `/tmp/robot.env` en elke shell neemt ze
+over; bij het openen staat er bv. `TurtleBot 9 (ROS_DOMAIN_ID=9, ...)`.
+
+- Andere wifi gekozen? De container merkt dat de robot weg is en zoekt
+  opnieuw; open shells passen zich aan bij de volgende prompt (draaiende
+  programma's zoals rviz2 opnieuw starten).
+- In de container: `robot` = opnieuw zoeken, `robot 5` = vast robot 5.
+- Meer dan één robot bereikbaar (bv. docent op een gerouteerd netwerk): kies
+  met `robot <nr>` of zet `ROBOT_NR=<nr>` in `.env`.
 
 In de container:
 
@@ -68,19 +76,20 @@ onder WSLg niet verschijnt. De bridge haalt de topics via Zenoh, net als
 rviz2: geen extra belasting op de robot. Logs: `/tmp/vis_services/` in de
 container. "Connection failed" in Lichtblick: kijk in
 `/tmp/vis_services/foxglove_bridge.log` - wacht de bridge nog op de robot,
-dan is de robot niet bereikbaar (verkeerd nummer, verkeerde wifi, robot uit).
+dan is de robot niet bereikbaar (verkeerde wifi, robot uit, verkeerd vast
+nummer).
 
 ### Problemen oplossen
 
-- `ros2 topic list` toont niets: meest voorkomende oorzaak is een
-  **`ROS_DOMAIN_ID`-mismatch** met de robot - dit moet exact matchen,
-  ook al is de Zenoh-verbinding zelf oké (domain ID is onderdeel van
-  Zenoh's topic-key-namespacing, zelfde isolatie-effect als bij DDS).
-  Controleer daarnaast `echo $ZENOH_CONFIG_OVERRIDE` in de container (moet
-  het juiste IP tonen), en of de robot's Zenoh-router effectief draait en
-  bereikbaar is (`ping <ROBOT_ZENOH_IP>` vanuit WSL, en dat je op hetzelfde
-  netwerk/dezelfde robot-AP zit).
-- Geen GUI-venster (rviz2/rqt): controleer of WSLg werkt met een simpele
+- `ros2 topic list` toont niets: welke robot meldt de shell bij het openen
+  (`TurtleBot <nr>`)? Geen of de verkeerde: laptop op de juiste wifi
+  `TB-AP-<nr>`, robot aan? Dan `robot` (opnieuw zoeken). `ROS_DOMAIN_ID`
+  moet exact het robotnummer zijn (onderdeel van Zenoh's
+  topic-key-namespacing) - de automatische keuze zorgt daarvoor. Draait de
+  bringup op de robot? Anders `ros2 daemon stop` en opnieuw proberen.
+- Geen GUI-venster (rviz2/rqt): gebruik Lichtblick (hierboven), of probeer
+  `LIBGL_ALWAYS_SOFTWARE=1 rviz2` (tekenen via de CPU i.p.v. de GPU).
+- WSLg nakijken: controleer of WSLg werkt met een simpele
   test buiten Docker (bv. `xeyes` of een andere Linux GUI-app rechtstreeks
   in WSL), vóór je het in de container probeert.
 - De compose gebruikt `network_mode: host`. Op Docker Desktop (Windows)

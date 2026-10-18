@@ -1,7 +1,7 @@
 #!/bin/bash
 # Intrinsieke camerakalibratie van een TurtleBot (Raspberry Pi Camera Module 3)
 # met een geprint dambord - draait in de turtlebot-vis-container op de laptop
-# (verbonden met de robot zoals altijd: .env ROBOT_ZENOH_IP / ROS_DOMAIN_ID).
+# (verbonden met de robot zoals altijd: automatisch gekozen, zie docker/robot_select.sh).
 #
 #   ./calibrate_camera.sh [binnenhoeken] [vakje_in_m]
 #   ./calibrate_camera.sh 8x6 0.025        # standaard: 9x7 vakjes = 8x6 binnenhoeken, 25 mm
