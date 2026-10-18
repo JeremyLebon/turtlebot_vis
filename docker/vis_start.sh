@@ -37,7 +37,7 @@ ROUTER=${ROUTER#tcp/}
             n=0
             until timeout 2 bash -c "exec 3<>/dev/tcp/${ROUTER%:*}/${ROUTER#*:}" 2>/dev/null; do
                 [ $((n % 10)) -eq 0 ] && echo "$(date +%T) wacht op de robot: Zenoh-router $ROUTER niet bereikbaar" \
-                    "(robot aan? laptop op TB-AP-<nr>? ROBOT_ZENOH_IP in .env juist?)"
+                    "(robot aan? laptop op TB-AP-<nr>? juiste robot gekozen met ./start.sh <nr>?)"
                 n=$((n + 1)); sleep 3
             done
             echo "$(date +%T) Zenoh-router $ROUTER bereikbaar - foxglove_bridge start"

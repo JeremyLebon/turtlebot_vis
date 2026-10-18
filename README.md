@@ -29,29 +29,46 @@ git clone -b zenoh --recurse-submodules https://github.com/JeremyLebon/turtlebot
 cd turtlebot_vis
 ```
 
-Pas `.env` aan: zet `ROBOT_ZENOH_IP` op het IP van de turtlebot waarmee je
-verbindt (en `ROS_DOMAIN_ID` indien nodig - moet niet per se matchen met
-de robot, maar overzichtelijker als het wel matcht).
-
 ### Starten
 
-De image staat al op Docker Hub (`nobel86/turtlebot-rpi5-vis:zenoh`), dus
-pullen is genoeg - lokaal bouwen (`docker compose build`) kan ook, maar is
-niet nodig:
+De image staat al op Docker Hub (`nobel86/turtlebot-rpi5-vis:zenoh`): eerst
+pullen, **met internet** (ca. 4 GB):
 
 ```bash
 docker compose pull
-docker compose up -d
-docker exec -it turtlebot-vis bash
 ```
+
+Daarna, met de laptop op de wifi van de robot (`TB-AP-<nr>`):
+
+```bash
+./start.sh        # robotnummer automatisch uit de wifinaam, anders gevraagd
+./start.sh 5      # of expliciet robot 5
+```
+
+`start.sh` zet `ROS_DOMAIN_ID=<nr>` en `ROBOT_ZENOH_IP=10.0.<nr>.10` (gaan
+voor de waarden in `.env`), controleert of de Zenoh-router van de robot
+bereikbaar is, start de container (opnieuw aangemaakt bij een andere robot)
+en opent een shell erin. Extra terminals: `docker exec -it turtlebot-vis bash`.
 
 In de container:
 
 ```bash
-source /root/turtlebot3_ws/install/setup.bash
 ros2 topic list          # zou de topics van de robot moeten tonen
 rviz2                    # of: ros2 launch turtlebot3_navigation2 navigation2.launch.py
 ```
+
+### Lichtblick (visualisatie in de browser)
+
+De container start ook **Lichtblick** (open-source web-versie van Foxglove
+Studio) en **foxglove_bridge**: surf vanuit Windows naar
+<http://localhost:8080>. De pagina verbindt vanzelf met de bridge
+(`ws://localhost:8765`) en opent een layout met 3D (kaart, scan, robot, pad,
+doel zetten), camera en teleop (`/cmd_vel_web`). Handig als het rviz2-venster
+onder WSLg niet verschijnt. De bridge haalt de topics via Zenoh, net als
+rviz2: geen extra belasting op de robot. Logs: `/tmp/vis_services/` in de
+container. "Connection failed" in Lichtblick: kijk in
+`/tmp/vis_services/foxglove_bridge.log` - wacht de bridge nog op de robot,
+dan is de robot niet bereikbaar (verkeerd nummer, verkeerde wifi, robot uit).
 
 ### Problemen oplossen
 

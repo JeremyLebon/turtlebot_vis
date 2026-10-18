@@ -32,6 +32,9 @@ services:
       - XDG_RUNTIME_DIR
       - PULSE_SERVER
     container_name: turtlebot-vis
+    # Hoofdproces is een interactieve bash, die SIGTERM negeert: zonder dit
+    # wacht `docker compose up` (andere robot -> nieuwe container) 10 s.
+    stop_grace_period: 1s
     privileged: true
     cap_add:
       - NET_ADMIN
