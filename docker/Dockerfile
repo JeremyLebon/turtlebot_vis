@@ -43,6 +43,31 @@ RUN echo "source /root/turtlebot3_ws/install/setup.bash" >> /root/.bashrc
 # Werkmap /root/ros2_ws (bind mount uit docker-compose.yaml): na een
 # `colcon build` daar wordt de overlay in elke nieuwe shell gesourcet.
 RUN echo '[ -f /root/ros2_ws/install/setup.bash ] && source /root/ros2_ws/install/setup.bash' >> /root/.bashrc    
+# Lichtblick (open-source web-versie van Foxglove Studio) + foxglove_bridge:
+# alternatief voor rviz2 in de browser, zonder WSLg/OpenGL. Gestart door
+# vis_start.sh (entrypoint): http://localhost:8080, bridge op ws://localhost:8765.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ros-humble-foxglove-bridge curl \
+    && rm -rf /var/lib/apt/lists/*
+ARG LICHTBLICK_VERSION=v1.29.1
+RUN mkdir -p /opt/lichtblick \
+    && curl -fsSL https://github.com/lichtblick-suite/lichtblick/releases/download/${LICHTBLICK_VERSION}/lichtblick-web.tar.gz \
+       | tar xz -C /opt/lichtblick \
+    && find /opt/lichtblick -name '*.map' -delete
+# Standaard-layout (3D met kaart/scan/robot/pad + camera + teleop naar
+# /cmd_vel_web) in index.html; geldt zolang de student niets aanpast.
+COPY docker/lichtblick_layout.json /opt/lichtblick/turtlebot_layout.json
+RUN python3 -c "import json; p='/opt/lichtblick/index.html'; s=open(p).read(); \
+    ph='/*LICHTBLICK_SUITE_DEFAULT_LAYOUT_PLACEHOLDER*/'; assert ph in s; \
+    open(p,'w').write(s.replace(ph, json.dumps(json.load(open('/opt/lichtblick/turtlebot_layout.json')))))"
+# http://localhost:8080 zonder parameters -> meteen verbinden met de bridge,
+# zodat de student niets hoeft in te stellen.
+RUN sed -i 's#<head>#<head><script>if(!new URLSearchParams(location.search).has("ds"))location.replace("?ds=foxglove-websocket\&ds.url=ws://"+location.hostname+":8765")</script>#' \
+      /opt/lichtblick/index.html && grep -q 'ds=foxglove-websocket' /opt/lichtblick/index.html
+COPY docker/vis_start.sh /root/vis_start.sh
+ENTRYPOINT ["/root/vis_start.sh"]
+CMD ["bash"]
+
 # tf2: nooit 0.25.23 (Humble-sync 2026-09-07) - die heeft een deadlock waardoor
 # de TF-listener van een proces bevriest (ros2/geometry2#982/#995; op de robot
 # faalde Nav2 erdoor, 2026-10-09). Deze image heeft nu 0.25.22 (niet getroffen),

@@ -1,0 +1,130 @@
+{
+  "configById": {
+    "3D!robot": {
+      "cameraState": {
+        "perspective": true,
+        "distance": 4,
+        "phi": 50,
+        "thetaOffset": 45,
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOffset": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "fovy": 45,
+        "near": 0.01,
+        "far": 5000
+      },
+      "scene": {
+        "transforms": {
+          "showLabel": false
+        }
+      },
+      "layers": {
+        "grid": {
+          "layerId": "foxglove.Grid",
+          "visible": true,
+          "size": 10,
+          "divisions": 10,
+          "lineWidth": 1,
+          "color": "#248eff80",
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "order": 1
+        }
+      },
+      "topics": {
+        "/map": {
+          "visible": true
+        },
+        "/scan": {
+          "visible": true,
+          "colorMode": "flat",
+          "flatColor": "#ff3b30ff",
+          "pointSize": 4
+        },
+        "/robot_description": {
+          "visible": true
+        },
+        "/plan": {
+          "visible": true
+        },
+        "/global_costmap/costmap": {
+          "visible": false
+        },
+        "/local_costmap/costmap": {
+          "visible": false
+        }
+      },
+      "publish": {
+        "type": "pose",
+        "poseTopic": "/goal_pose",
+        "pointTopic": "/clicked_point",
+        "poseEstimateTopic": "/initialpose",
+        "poseEstimateXDeviation": 0.5,
+        "poseEstimateYDeviation": 0.5,
+        "poseEstimateThetaDeviation": 0.26179939
+      }
+    },
+    "Image!camera": {
+      "imageMode": {
+        "imageTopic": "/camera/image_raw/compressed"
+      }
+    },
+    "Teleop!drive": {
+      "topic": "/cmd_vel_web",
+      "publishRate": 5,
+      "upButton": {
+        "field": "linear-x",
+        "value": 0.1
+      },
+      "downButton": {
+        "field": "linear-x",
+        "value": -0.1
+      },
+      "leftButton": {
+        "field": "angular-z",
+        "value": 0.5
+      },
+      "rightButton": {
+        "field": "angular-z",
+        "value": -0.5
+      }
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": "3D!robot",
+    "second": {
+      "direction": "column",
+      "first": "Image!camera",
+      "second": "Teleop!drive",
+      "splitPercentage": 60
+    },
+    "splitPercentage": 68
+  }
+}
