@@ -8,6 +8,10 @@
 #
 # Vast nummer i.p.v. zoeken: `robot <nr>` in de container, of ROBOT_NR=<nr>
 # in .env (nodig als er meer dan één robot bereikbaar is).
+#
+# Simulatie (Gazebo, thuis of zonder robot): `robot sim`, of ROBOT_NR=sim in
+# .env. De container start dan zijn eigen Zenoh-router, enkel op localhost
+# (andere laptops op dezelfde wifi zien je simulatie niet).
 
 ROBOT_ENV=/tmp/robot.env      # gekozen robot (TB_NR, ROS_DOMAIN_ID, Zenoh);
                               # elke shell leest dit in. ROBOT_NR (.env) is
@@ -15,8 +19,26 @@ ROBOT_ENV=/tmp/robot.env      # gekozen robot (TB_NR, ROS_DOMAIN_ID, Zenoh);
 ROBOT_FIXED=/tmp/robot_nr     # vast nummer, gezet met `robot <nr>`
 ROBOT_MAX=12                  # zoek 10.0.1.10 .. 10.0.12.10
 
+robot_host() {
+    if [ "$1" = sim ]; then echo 127.0.0.1; else echo "10.0.$1.10"; fi
+}
+
 robot_reachable() {
-    timeout 1 bash -c "exec 3<>/dev/tcp/10.0.$1.10/7447" 2>/dev/null
+    timeout 1 bash -c "exec 3<>/dev/tcp/$(robot_host "$1")/7447" 2>/dev/null
+}
+
+# Zenoh-router voor de simulatie (rmw_zenohd), enkel op localhost. Gestart
+# door `robot sim` en door vis_start.sh (ROBOT_NR=sim, herstart container).
+sim_router_start() {
+    pgrep -f "[r]mw_zenohd" > /dev/null && return 0
+    mkdir -p /tmp/vis_services
+    ( export ZENOH_CONFIG_OVERRIDE='listen/endpoints=["tcp/127.0.0.1:7447"];scouting/multicast/enabled=false'
+      source /opt/ros/${ROS_DISTRO}/setup.bash
+      nohup ros2 run rmw_zenoh_cpp rmw_zenohd > /tmp/vis_services/zenohd.log 2>&1 & )
+    local i
+    for i in $(seq 1 40); do robot_reachable sim && return 0; sleep 0.25; done
+    echo "Zenoh-router voor de simulatie start niet, zie /tmp/vis_services/zenohd.log" >&2
+    return 1
 }
 
 # Nummers van alle robots waarvan de Zenoh-router antwoordt (parallel, ~1 s).
@@ -44,10 +66,11 @@ robot_detect() {
 # Schrijf ROBOT_ENV, enkel als de keuze verandert (shells reageren op de
 # wijziging, zie _robot_refresh).
 robot_write_env() {
-    local new
+    local new domain=$1
+    [ "$1" = sim ] && domain=0
     new="export TB_NR=$1
-export ROS_DOMAIN_ID=$1
-export ZENOH_CONFIG_OVERRIDE='mode=\"client\";connect/endpoints=[\"tcp/10.0.$1.10:7447\"]'"
+export ROS_DOMAIN_ID=$domain
+export ZENOH_CONFIG_OVERRIDE='mode=\"client\";connect/endpoints=[\"tcp/$(robot_host "$1"):7447\"]'"
     [ "$(cat "$ROBOT_ENV" 2>/dev/null)" = "$new" ] || echo "$new" > "$ROBOT_ENV"
 }
 
@@ -55,10 +78,12 @@ export ZENOH_CONFIG_OVERRIDE='mode=\"client\";connect/endpoints=[\"tcp/10.0.$1.1
 
 # `robot`       opnieuw zoeken
 # `robot <nr>`  vast robotnummer
+# `robot sim`   simulatie (Gazebo in deze container)
 robot() {
     if [ -n "$1" ]; then
-        [[ $1 =~ ^[0-9]+$ ]] || { echo "gebruik: robot [nummer]"; return 1; }
+        [[ $1 =~ ^([0-9]+|sim)$ ]] || { echo "gebruik: robot [nummer|sim]"; return 1; }
         echo "$1" > "$ROBOT_FIXED"
+        [ "$1" = sim ] && { sim_router_start || return 1; }
     else
         rm -f "$ROBOT_FIXED"
     fi
@@ -68,7 +93,7 @@ robot() {
         echo "Geen TurtleBot gevonden. Laptop op de wifi TB-AP-<nr>? Robot aan?"
         return 1
     fi
-    robot_reachable "$nr" || echo "LET OP: robot $nr is (nog) niet bereikbaar op 10.0.$nr.10:7447."
+    robot_reachable "$nr" || echo "LET OP: robot $nr is (nog) niet bereikbaar op $(robot_host "$nr"):7447."
     robot_write_env "$nr"
     _robot_refresh
     # foxglove_bridge (Lichtblick) herstarten met de nieuwe robot.
@@ -77,8 +102,14 @@ robot() {
 }
 
 _robot_banner() {
-    echo "TurtleBot $TB_NR  (ROS_DOMAIN_ID=$ROS_DOMAIN_ID, Zenoh-router 10.0.$TB_NR.10)"
-    echo "Lichtblick in de browser: http://localhost:8080   Andere robot: robot <nr>"
+    if [ "$TB_NR" = sim ]; then
+        echo "Simulatie  (ROS_DOMAIN_ID=0, Zenoh-router in deze container)"
+        echo "Gazebo starten: ros2 launch turtlebot3_gazebo turtlebot3_world.launch.py"
+        echo "Lichtblick in de browser: http://localhost:8080   Echte robot: robot"
+    else
+        echo "TurtleBot $TB_NR  (ROS_DOMAIN_ID=$ROS_DOMAIN_ID, Zenoh-router 10.0.$TB_NR.10)"
+        echo "Lichtblick in de browser: http://localhost:8080   Andere robot: robot <nr>   Simulatie: robot sim"
+    fi
 }
 
 # Voor elke prompt: is de robotkeuze gewijzigd (wifi gewisseld, `robot`),
