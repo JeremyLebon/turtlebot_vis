@@ -3,7 +3,7 @@ services:
     build:
       context: ./
       dockerfile: docker/Dockerfile
-    image: nobel86/turtlebot-rpi5-vis:zenoh  # new tag - keep :latest (cyclonedds) untouched until validated
+    image: nobel86/turtlebot-rpi5-vis:zenoh  # ROS 2 Humble (robot 0.x); :jazzy = robot v1.x
     stdin_open: true
     network_mode: host
     tty: true
@@ -16,9 +16,6 @@ services:
       # nummer (enkel nodig als er meer dan één robot bereikbaar is).
       - ROBOT_NR=${ROBOT_NR:-}
       - RMW_IMPLEMENTATION=rmw_zenoh_cpp
-      # Fallback middleware, kept for reference / easy rollback:
-      #   RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-      - CYCLONEDDS_URI=file:///root/turtlebot3_ws/cylconedds_config.xml
       # Zenoh client config (ZENOH_CONFIG_OVERRIDE, unicast TCP naar de
       # Zenoh-router van de robot i.p.v. multicast scouting) wordt per
       # gekozen robot gezet door robot_select.sh.

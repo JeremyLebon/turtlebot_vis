@@ -3,17 +3,12 @@
 Visualisatie-client (rviz2/rqt) voor op de studenten-laptop, om een
 turtlebot van op afstand te bekijken/besturen.
 
-## Op WSL (Windows) - Zenoh branch
+## Op de laptop (Ubuntu of WSL op Windows)
 
-Deze branch (`zenoh`) is aangepast om via Zenoh te verbinden i.p.v.
-CycloneDDS. Reden: DDS werkt op zich ook door WSL2 heen, maar de
-multicast-discovery-mechanica van DDS geeft merkbaar veel netwerk-overhead
-(zeker relevant op een gedeelde/beperkte wifi-verbinding met meerdere
-robots/studenten tegelijk). Zenoh in client-modus (rechtstreekse unicast
-TCP-verbinding naar de robot's Zenoh-router, geen multicast-discovery
-nodig) is hier lichter. De robot moet uiteraard al op de `zenoh`/
-`raspios-migration`-branch draaien (met een actieve Zenoh-router op poort
-7447) - zie `turtlebot_setup/docs/zenoh-migration.md`.
+De container praat via **Zenoh** met de robot: een rechtstreekse
+TCP-verbinding naar de Zenoh-router van de robot (`10.0.<nr>.10:7447`),
+zonder de multicast-discovery van DDS - lichter op de wifi en het werkt ook
+door WSL2 heen.
 
 ### Vereisten
 
@@ -25,7 +20,7 @@ nodig) is hier lichter. De robot moet uiteraard al op de `zenoh`/
 ### Setup
 
 ```bash
-git clone -b zenoh --recurse-submodules https://github.com/JeremyLebon/turtlebot_vis.git
+git clone --recurse-submodules https://github.com/JeremyLebon/turtlebot_vis.git
 cd turtlebot_vis
 ```
 
@@ -44,6 +39,10 @@ Daarna, met de laptop op de wifi van de robot (`TB-AP-<nr>`):
 docker compose up -d
 docker exec -it turtlebot-vis bash
 ```
+
+Bij de eerste shell loopt vanzelf **`check`**: robot gevonden, Zenoh-router
+bereikbaar, aantal topics, komt er echt data binnen, zelfde ROS-versie als de
+robot, Lichtblick, bridge, display (rviz2) en `ros2_ws`. Opnieuw: `check`.
 
 **Welke robot** zoekt de container zelf (`docker/robot_select.sh`): de
 access points zijn van elkaar afgeschermd, dus vanaf `TB-AP-<nr>` antwoordt
@@ -81,6 +80,7 @@ nummer).
 
 ### Problemen oplossen
 
+- Eerst `check` in de container: die zegt meestal wat er mis is.
 - `ros2 topic list` toont niets: welke robot meldt de shell bij het openen
   (`TurtleBot <nr>`)? Geen of de verkeerde: laptop op de juiste wifi
   `TB-AP-<nr>`, robot aan? Dan `robot` (opnieuw zoeken). `ROS_DOMAIN_ID`
@@ -97,12 +97,6 @@ nummer).
   Resources -> Network -> "Enable host networking". Staat dit uit, dan
   lijkt de container te starten maar is poort 7447 van buiten de container
   niet bereikbaar zoals verwacht.
-
-### Terugvallen op CycloneDDS
-
-Zet in `docker-compose.yaml` de `RMW_IMPLEMENTATION`-regel om naar
-`rmw_cyclonedds_cpp` (staat als commentaar klaar) - werkt ook via WSL2,
-maar verwacht dan meer netwerk-verkeer dan met Zenoh.
 
 ## Camera kalibreren (intrinsiek)
 

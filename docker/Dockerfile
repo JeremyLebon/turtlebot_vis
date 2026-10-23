@@ -16,7 +16,6 @@ ros-humble-cartographer-ros \
 ros-humble-navigation2 \
 ros-humble-nav2-bringup \
 ros-humble-urdf \
-ros-humble-rmw-cyclonedds-cpp \
 ros-humble-rmw-zenoh-cpp \
 ros-humble-compressed-image-transport
 
@@ -28,7 +27,6 @@ WORKDIR /root/turtlebot3_ws/src/turtlebot3
 
 WORKDIR /root/turtlebot3_ws
 
-COPY ./cyclonedds_config.xml /root/turtlebot3_ws/cylconedds_config.xml
 
 RUN /bin/bash -c '. /opt/ros/${ROS_DISTRO}/setup.bash; colcon build --parallel-workers $(nproc) --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_WITH_CUDA=ON -DBUILD_WITH_VIEWER=ON'
 
