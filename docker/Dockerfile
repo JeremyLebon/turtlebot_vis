@@ -36,8 +36,11 @@ RUN echo '[ -f /root/ros2_ws/install/setup.bash ] && source /root/ros2_ws/instal
 # Lichtblick (open-source web-versie van Foxglove Studio) + foxglove_bridge:
 # alternatief voor rviz2 in de browser, zonder WSLg/OpenGL. Gestart door
 # vis_start.sh (entrypoint): http://localhost:8080, bridge op ws://localhost:8765.
+# rosbridge-msgs: de robot publiceert /connected_clients (rosbridge); zonder dit
+# berichttype logt de bridge daar telkens een ERROR, rood op de robotpagina.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ros-${ROS_DISTRO}-foxglove-bridge curl \
+      ros-${ROS_DISTRO}-rosbridge-msgs \
     && rm -rf /var/lib/apt/lists/*
 ARG LICHTBLICK_VERSION=v1.29.1
 RUN mkdir -p /opt/lichtblick \
