@@ -16,9 +16,6 @@ services:
       # nummer (enkel nodig als er meer dan één robot bereikbaar is).
       - ROBOT_NR=${ROBOT_NR:-}
       - RMW_IMPLEMENTATION=rmw_zenoh_cpp
-      # Fallback middleware, kept for reference / easy rollback:
-      #   RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-      - CYCLONEDDS_URI=file:///root/turtlebot3_ws/cylconedds_config.xml
       # Zenoh client config (ZENOH_CONFIG_OVERRIDE, unicast TCP naar de
       # Zenoh-router van de robot i.p.v. multicast scouting) wordt per
       # gekozen robot gezet door robot_select.sh.

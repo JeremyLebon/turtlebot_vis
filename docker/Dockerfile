@@ -19,14 +19,11 @@ ros-${ROS_DISTRO}-navigation2 \
 ros-${ROS_DISTRO}-nav2-bringup \
 ros-${ROS_DISTRO}-slam-toolbox \
 ros-${ROS_DISTRO}-teleop-twist-keyboard \
-ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
 ros-${ROS_DISTRO}-rmw-zenoh-cpp \
 ros-${ROS_DISTRO}-compressed-image-transport \
 && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /root
-# Zelfde pad als vroeger (CYCLONEDDS_URI in docker-compose.yaml)
-COPY ./cyclonedds_config.xml /root/turtlebot3_ws/cylconedds_config.xml
 
 # Niet /ros_entrypoint.sh sourcen: dat script doet `set -e`, waardoor de
 # interactieve shell (en dus `docker exec -it ... bash`) sluit bij het eerste
