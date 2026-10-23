@@ -46,6 +46,9 @@ zelfde ROS-versie als de robot, Lichtblick, bridge, display voor rviz2,
 container blijft draaien. Opties: `./start.sh --no-shell` (enkel starten en
 check), `./start.sh --pull` (eerst de nieuwste image ophalen).
 
+Nog een terminal in de container: **`./connect.sh`** (start de container
+eerst als hij niet draait). Eén commando: `./connect.sh ros2 topic list`.
+
 Met de hand kan ook: `docker compose up -d` en `docker exec -it turtlebot-vis
 bash` - de eerste shell doet de check dan vanzelf. Opnieuw controleren:
 `check` in de container.
