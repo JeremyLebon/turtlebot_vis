@@ -76,9 +76,16 @@ robot() {
     return 0
 }
 
+# `check`: draait alles en praat de container met de robot? (vis_check.py)
+# Ook vanzelf bij de eerste shell na het starten van de container.
+check() {
+    _robot_refresh > /dev/null
+    timeout -s KILL 20 python3 /root/vis_check.py
+}
+
 _robot_banner() {
     echo "TurtleBot $TB_NR  (ROS_DOMAIN_ID=$ROS_DOMAIN_ID, Zenoh-router 10.0.$TB_NR.10)"
-    echo "Lichtblick in de browser: http://localhost:8080   Andere robot: robot <nr>"
+    echo "Lichtblick in de browser: http://localhost:8080   Andere robot: robot <nr>   Controle: check"
 }
 
 # Voor elke prompt: is de robotkeuze gewijzigd (wifi gewisseld, `robot`),
