@@ -101,6 +101,13 @@ robot() {
     return 0
 }
 
+# `check`: draait alles en praat de container met de robot? (vis_check.py)
+# Ook vanzelf bij de eerste shell na het starten van de container.
+check() {
+    _robot_refresh > /dev/null
+    timeout -s KILL 20 python3 /root/vis_check.py
+}
+
 _robot_banner() {
     if [ "$TB_NR" = sim ]; then
         echo "Simulatie  (ROS_DOMAIN_ID=0, Zenoh-router in deze container)"
@@ -108,7 +115,7 @@ _robot_banner() {
         echo "Lichtblick in de browser: http://localhost:8080   Echte robot: robot"
     else
         echo "TurtleBot $TB_NR  (ROS_DOMAIN_ID=$ROS_DOMAIN_ID, Zenoh-router 10.0.$TB_NR.10)"
-        echo "Lichtblick in de browser: http://localhost:8080   Andere robot: robot <nr>   Simulatie: robot sim"
+        echo "Lichtblick in de browser: http://localhost:8080   Andere robot: robot <nr>   Simulatie: robot sim   Controle: check"
     fi
 }
 
