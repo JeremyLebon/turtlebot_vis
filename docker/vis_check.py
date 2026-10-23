@@ -35,7 +35,7 @@ def port_open(host, port, timeout=1.0):
         return None
 
 
-def http_ok(url, timeout=2.0):
+def http_ok(url, timeout=4.0):
     try:
         with urllib.request.urlopen(url, timeout=timeout) as r:
             return r.status == 200

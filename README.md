@@ -36,13 +36,19 @@ docker compose pull
 Daarna, met de laptop op de wifi van de robot (`TB-AP-<nr>`):
 
 ```bash
-docker compose up -d
-docker exec -it turtlebot-vis bash
+./start.sh
 ```
 
-Bij de eerste shell loopt vanzelf **`check`**: robot gevonden, Zenoh-router
-bereikbaar, aantal topics, komt er echt data binnen, zelfde ROS-versie als de
-robot, Lichtblick, bridge, display (rviz2) en `ros2_ws`. Opnieuw: `check`.
+Dat start de container op de achtergrond, voert **`check`** uit (robot
+gevonden, Zenoh-router bereikbaar, aantal topics, komt er echt data binnen,
+zelfde ROS-versie als de robot, Lichtblick, bridge, display voor rviz2,
+`ros2_ws`) en opent een shell in de container. `exit` verlaat de shell, de
+container blijft draaien. Opties: `./start.sh --no-shell` (enkel starten en
+check), `./start.sh --pull` (eerst de nieuwste image ophalen).
+
+Met de hand kan ook: `docker compose up -d` en `docker exec -it turtlebot-vis
+bash` - de eerste shell doet de check dan vanzelf. Opnieuw controleren:
+`check` in de container.
 
 **Welke robot** zoekt de container zelf (`docker/robot_select.sh`): de
 access points zijn van elkaar afgeschermd, dus vanaf `TB-AP-<nr>` antwoordt
