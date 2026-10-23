@@ -19,8 +19,17 @@
 LOG=/tmp/vis_services
 mkdir -p "$LOG"
 
-python3 -m http.server "${LICHTBLICK_PORT:-8080}" --bind 0.0.0.0 \
-    --directory /opt/lichtblick > "$LOG/lichtblick.log" 2>&1 &
+# Zoals python3 -m http.server, maar met Cache-Control: no-cache: na een nieuwe
+# image moet de browser de nieuwe index.html laden (layout-reset, Lichtblick-update).
+python3 - "${LICHTBLICK_PORT:-8080}" > "$LOG/lichtblick.log" 2>&1 <<'PY' &
+import functools, http.server, sys
+class NoCache(http.server.SimpleHTTPRequestHandler):
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
+http.server.ThreadingHTTPServer(("0.0.0.0", int(sys.argv[1])),
+    functools.partial(NoCache, directory="/opt/lichtblick")).serve_forever()
+PY
 
 (
     source /opt/ros/${ROS_DISTRO}/setup.bash

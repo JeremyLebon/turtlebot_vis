@@ -57,6 +57,17 @@ RUN python3 -c "import json; p='/opt/lichtblick/index.html'; s=open(p).read(); \
 # zodat de student niets hoeft in te stellen.
 RUN sed -i 's#<head>#<head><script>if(!new URLSearchParams(location.search).has("ds"))location.replace("?ds=foxglove-websocket\&ds.url=ws://"+location.hostname+":8765")</script>#' \
       /opt/lichtblick/index.html && grep -q 'ds=foxglove-websocket' /opt/lichtblick/index.html
+# Eén keer de layouts uit de Humble-tijd weg (Jazzy-overschakeling, 23-10):
+# Lichtblick bewaart ze in de browser (IndexedDB lichtblick-layouts, actieve
+# layout in localStorage studio.layout) en http://localhost:8080 is dezelfde
+# oorsprong als vroeger - de oude teleop publiceerde Twist op /cmd_vel_web en
+# blokkeerde zo de webpagina's van de robot. Zonder bewaarde layout neemt
+# Lichtblick de standaardlayout hierboven. Nieuwe reset nodig: TB_LAYOUT verhogen.
+ARG TB_LAYOUT=jazzy-1
+RUN python3 -c "p='/opt/lichtblick/index.html'; s=open(p).read(); \
+    js='<script>try{if(localStorage.getItem(\"tbLayout\")!==\"${TB_LAYOUT}\"){indexedDB.deleteDatabase(\"lichtblick-layouts\");localStorage.removeItem(\"studio.layout\");localStorage.setItem(\"tbLayout\",\"${TB_LAYOUT}\")}}catch(e){}</script>'; \
+    assert '<head>' in s; open(p,'w').write(s.replace('<head>', '<head>'+js, 1))" \
+    && grep -q 'tbLayout' /opt/lichtblick/index.html
 COPY docker/vis_start.sh /root/vis_start.sh
 # Lichtblick-Teleop (Twist) -> /cmd_vel (TwistStamped) in de simulatie; op
 # de echte robot doet cmd_vel_guard dat (zie sim_teleop_relay.py).
