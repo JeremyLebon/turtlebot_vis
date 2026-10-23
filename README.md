@@ -73,6 +73,20 @@ ros2 topic list          # zou de topics van de robot moeten tonen
 rviz2                    # of: ros2 launch turtlebot3_navigation2 navigation2.launch.py
 ```
 
+### HTML-simulator (thuis, huiswerk)
+
+```bash
+./start.sh --htmlsim
+```
+
+Start in de container een eigen Zenoh-router en rosbridge; surf naar
+<http://localhost:8080/sim/>. De **TB3 Lite Sim 3D** (TurtleBot3 in de browser,
+met de automatische tests van de huiswerkopdrachten) verbindt vanzelf. Je
+nodes draai je in de container (`./connect.sh`), zoals op de robot. Geen
+internet nodig. Terug naar de echte robot: `robot` in de container. Gazebo in
+de container: `./start.sh --sim`. Broncode en tests van de simulator:
+`htmlsim/` (zie `htmlsim/README.md`).
+
 ### Lichtblick (visualisatie in de browser)
 
 De container start ook **Lichtblick** (open-source web-versie van Foxglove

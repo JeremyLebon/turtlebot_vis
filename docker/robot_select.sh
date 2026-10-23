@@ -20,7 +20,7 @@ ROBOT_FIXED=/tmp/robot_nr     # vast nummer, gezet met `robot <nr>`
 ROBOT_MAX=12                  # zoek 10.0.1.10 .. 10.0.12.10
 
 robot_host() {
-    if [ "$1" = sim ]; then echo 127.0.0.1; else echo "10.0.$1.10"; fi
+    case $1 in sim|htmlsim) echo 127.0.0.1 ;; *) echo "10.0.$1.10" ;; esac
 }
 
 robot_reachable() {
@@ -67,7 +67,7 @@ robot_detect() {
 # wijziging, zie _robot_refresh).
 robot_write_env() {
     local new domain=$1
-    [ "$1" = sim ] && domain=0
+    case $1 in sim|htmlsim) domain=0 ;; esac
     new="export TB_NR=$1
 export ROS_DOMAIN_ID=$domain
 export ZENOH_CONFIG_OVERRIDE='mode=\"client\";connect/endpoints=[\"tcp/$(robot_host "$1"):7447\"]'"
@@ -79,11 +79,12 @@ export ZENOH_CONFIG_OVERRIDE='mode=\"client\";connect/endpoints=[\"tcp/$(robot_h
 # `robot`       opnieuw zoeken
 # `robot <nr>`  vast robotnummer
 # `robot sim`   simulatie (Gazebo in deze container)
+# `robot htmlsim` HTML-simulator in de browser (http://localhost:8080/sim/, rosbridge)
 robot() {
     if [ -n "$1" ]; then
-        [[ $1 =~ ^([0-9]+|sim)$ ]] || { echo "gebruik: robot [nummer|sim]"; return 1; }
+        [[ $1 =~ ^([0-9]+|sim|htmlsim)$ ]] || { echo "gebruik: robot [nummer|sim|htmlsim]"; return 1; }
         echo "$1" > "$ROBOT_FIXED"
-        [ "$1" = sim ] && { sim_router_start || return 1; }
+        [[ $1 =~ ^(sim|htmlsim)$ ]] && { sim_router_start || return 1; }
     else
         rm -f "$ROBOT_FIXED"
     fi
@@ -109,13 +110,16 @@ check() {
 }
 
 _robot_banner() {
-    if [ "$TB_NR" = sim ]; then
+    if [ "$TB_NR" = htmlsim ]; then
+        echo "HTML-simulator  (ROS_DOMAIN_ID=0, Zenoh-router en rosbridge in deze container)"
+        echo "Open in de browser: http://localhost:8080/sim/ (verbindt vanzelf)   Lichtblick: http://localhost:8080   Echte robot: robot"
+    elif [ "$TB_NR" = sim ]; then
         echo "Simulatie  (ROS_DOMAIN_ID=0, Zenoh-router in deze container)"
         echo "Gazebo starten: ros2 launch turtlebot3_gazebo turtlebot3_world.launch.py"
         echo "Lichtblick in de browser: http://localhost:8080   Echte robot: robot"
     else
         echo "TurtleBot $TB_NR  (ROS_DOMAIN_ID=$ROS_DOMAIN_ID, Zenoh-router 10.0.$TB_NR.10)"
-        echo "Lichtblick in de browser: http://localhost:8080   Andere robot: robot <nr>   Simulatie: robot sim   Controle: check"
+        echo "Lichtblick in de browser: http://localhost:8080   Andere robot: robot <nr>   Simulatie: robot sim / robot htmlsim   Controle: check"
     fi
 }
 

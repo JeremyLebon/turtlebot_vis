@@ -13,7 +13,8 @@
 #
 # Welke robot: automatisch, zie robot_select.sh. Met `robot sim` de
 # simulatie: eigen Zenoh-router, de bridge op simulatietijd en
-# sim_teleop_relay.py voor het Teleop-paneel.
+# sim_teleop_relay.py voor het Teleop-paneel. `robot htmlsim`: hetzelfde plus
+# rosbridge (ws://localhost:9090) voor de HTML-simulator op /sim/.
 # Logs: /tmp/vis_services/.
 
 LOG=/tmp/vis_services
@@ -42,10 +43,10 @@ PY
         # de bridge poort 8765 opent (Lichtblick: "connection failed"), dus
         # eerst wachten, met een duidelijke melding in het log.
         n=0
-        until NR=$(robot_detect 2>&1) && [[ $NR =~ ^([0-9]+|sim)$ ]] \
-              && { [ "$NR" != sim ] || sim_router_start; } && robot_reachable "$NR"; do
+        until NR=$(robot_detect 2>&1) && [[ $NR =~ ^([0-9]+|sim|htmlsim)$ ]] \
+              && { [[ ! $NR =~ ^(sim|htmlsim)$ ]] || sim_router_start; } && robot_reachable "$NR"; do
             if [ $((n % 10)) -eq 0 ]; then
-                if [[ $NR =~ ^([0-9]+|sim)$ ]]; then
+                if [[ $NR =~ ^([0-9]+|sim|htmlsim)$ ]]; then
                     echo "$(date +%T) wacht op robot $NR: $(robot_host "$NR"):7447 niet bereikbaar (robot aan? laptop op TB-AP-$NR?)"
                 else
                     echo "$(date +%T) wacht op de robot: ${NR:-geen TurtleBot bereikbaar (laptop op de wifi TB-AP-<nr>? robot aan?)}"
@@ -55,12 +56,19 @@ PY
         done
         robot_write_env "$NR"
         source "$ROBOT_ENV"
-        SIM=false RELAY=
-        if [ "$NR" = sim ]; then
+        SIM=false RELAY= ROSBRIDGE=
+        if [ "$NR" = sim ] || [ "$NR" = htmlsim ]; then
             SIM=true
-            echo "$(date +%T) simulatie - foxglove_bridge start (simulatietijd)"
+            echo "$(date +%T) $NR - foxglove_bridge start (simulatietijd)"
             python3 /root/sim_teleop_relay.py >> "$LOG/sim_teleop_relay.log" 2>&1 &
             RELAY=$!
+            if [ "$NR" = htmlsim ]; then
+                # HTML-simulator (http://localhost:8080/sim/) praat via rosbridge
+                echo "$(date +%T) rosbridge start op ws://localhost:9090"
+                ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9090 \
+                    >> "$LOG/rosbridge.log" 2>&1 &
+                ROSBRIDGE=$!
+            fi
         else
             echo "$(date +%T) TurtleBot $NR (10.0.$NR.10) - foxglove_bridge start"
         fi
@@ -83,6 +91,7 @@ PY
         done
         wait $BRIDGE
         [ -n "$RELAY" ] && kill $RELAY 2>/dev/null
+        [ -n "$ROSBRIDGE" ] && kill -INT $ROSBRIDGE 2>/dev/null
         sleep 2
     done
 ) > "$LOG/foxglove_bridge.log" 2>&1 &

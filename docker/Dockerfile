@@ -38,9 +38,11 @@ RUN echo '[ -f /root/ros2_ws/install/setup.bash ] && source /root/ros2_ws/instal
 # vis_start.sh (entrypoint): http://localhost:8080, bridge op ws://localhost:8765.
 # rosbridge-msgs: de robot publiceert /connected_clients (rosbridge); zonder dit
 # berichttype logt de bridge daar telkens een ERROR, rood op de robotpagina.
+# rosbridge-server: voor de HTML-simulator (robot htmlsim, ws://localhost:9090).
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ros-${ROS_DISTRO}-foxglove-bridge curl \
       ros-${ROS_DISTRO}-rosbridge-msgs \
+      ros-${ROS_DISTRO}-rosbridge-server \
     && rm -rf /var/lib/apt/lists/*
 ARG LICHTBLICK_VERSION=v1.29.1
 RUN mkdir -p /opt/lichtblick \
@@ -68,6 +70,21 @@ RUN python3 -c "p='/opt/lichtblick/index.html'; s=open(p).read(); \
     js='<script>try{if(localStorage.getItem(\"tbLayout\")!==\"${TB_LAYOUT}\"){indexedDB.deleteDatabase(\"lichtblick-layouts\");localStorage.removeItem(\"studio.layout\");localStorage.setItem(\"tbLayout\",\"${TB_LAYOUT}\")}}catch(e){}</script>'; \
     assert '<head>' in s; open(p,'w').write(s.replace('<head>', '<head>'+js, 1))" \
     && grep -q 'tbLayout' /opt/lichtblick/index.html
+# HTML-simulator TB3 Lite Sim 3D (htmlsim/, `robot htmlsim`): http://localhost:8080/sim/,
+# zonder internet - three.js en Rapier uit de npm-registry, enkel wat hij gebruikt.
+ARG THREE_VERSION=0.160.0
+ARG RAPIER_VERSION=0.14.0
+COPY htmlsim /tmp/htmlsim
+RUN cd /tmp/htmlsim && python3 build.py --local \
+    && D=/opt/lichtblick/sim && mkdir -p $D/vendor/rapier /tmp/npm && cp dist/index.html $D/ \
+    && curl -fsSL https://registry.npmjs.org/three/-/three-${THREE_VERSION}.tgz | tar xz -C /tmp/npm \
+    && for f in build/three.module.js examples/jsm/controls/OrbitControls.js examples/jsm/loaders/STLLoader.js \
+                examples/jsm/loaders/ColladaLoader.js examples/jsm/loaders/OBJLoader.js examples/jsm/loaders/TGALoader.js; do \
+         install -D -m 644 /tmp/npm/package/$f $D/vendor/three/$f; done \
+    && rm -rf /tmp/npm/package \
+    && curl -fsSL https://registry.npmjs.org/@dimforge/rapier3d-compat/-/rapier3d-compat-${RAPIER_VERSION}.tgz | tar xz -C /tmp/npm \
+    && cp /tmp/npm/package/rapier.es.js $D/vendor/rapier/ \
+    && rm -rf /tmp/npm /tmp/htmlsim
 COPY docker/vis_start.sh /root/vis_start.sh
 # Lichtblick-Teleop (Twist) -> /cmd_vel (TwistStamped) in de simulatie; op
 # de echte robot doet cmd_vel_guard dat (zie sim_teleop_relay.py).
