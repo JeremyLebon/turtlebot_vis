@@ -112,6 +112,10 @@ def main():
     sim = nr == "sim"
     print("Turtlebot-vis check (ROS 2 %s)" % os.environ.get("ROS_DISTRO", "?"))
 
+    rmw = os.environ.get("RMW_IMPLEMENTATION", "")
+    if rmw != "rmw_zenoh_cpp":
+        line(BAD, "Middleware", "RMW_IMPLEMENTATION=%s, moet rmw_zenoh_cpp zijn (docker-compose.yaml) - zonder "
+             "Zenoh ziet de container de robot niet" % (rmw or "(niet gezet)"))
     if not nr:
         line(BAD, "Robot", "nog geen robot gekozen - laptop op de wifi TB-AP-<nr>? robot aan? (of: robot <nr>)")
     else:
