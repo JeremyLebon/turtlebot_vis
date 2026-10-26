@@ -1,0 +1,1093 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TB3 Lite Sim 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/*__CSS__*/
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<header class="bar">
+  <div class="brand"><span class="name">TB3 Lite Sim 3D</span><span class="sub" id="robotName">Burger · Rapier-fysica · rosbridge v2</span></div>
+  <button class="ghost" id="dlProject" hidden title="Broncode, build-script, tests en docentscript voor Claude Code">Project downloaden (.zip)</button>
+  <div class="status"><span id="dot" class="dot"></span><span id="statusText">Niet verbonden, lokaal rijden met toetsen</span></div>
+</header>
+
+<main class="layout">
+  <section class="stage" id="stage">
+    <div class="loading" id="loading">Fysica-engine laden…</div>
+    <div class="hud" id="hud"></div>
+    <div class="cam" id="camBox"><canvas id="camPreview" width="320" height="240" aria-label="Beeld van de robotcamera"></canvas><span id="camLabel">/camera/image_raw · 320×240</span></div>
+    <div class="testov" id="testOv" hidden aria-live="polite"></div>
+    <div class="modes" role="group" aria-label="Muismodus">
+      <button data-mode="orbit" class="on">Camera</button>
+      <button data-mode="place">Robot plaatsen</button>
+      <button data-mode="box">Doos</button>
+      <button data-mode="init">Startpositie</button>
+      <button data-mode="goal">Doel</button>
+    </div>
+    <div class="pad" id="pad" role="group" aria-label="Rijknoppen">
+      <button class="f" data-d="f" aria-label="Vooruit">▲</button>
+      <button class="l" data-d="l" aria-label="Links draaien">◀</button>
+      <button class="x" data-d="x" aria-label="Stoppen">STOP</button>
+      <button class="r" data-d="r" aria-label="Rechts draaien">▶</button>
+      <button class="b" data-d="b" aria-label="Achteruit">▼</button>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--robot)"></i>werkelijk spoor</span>
+      <span><i style="background:var(--odom)"></i>/odom</span>
+      <span><i style="background:var(--lidar)"></i>/scan</span>
+      <span id="legCloud" hidden><i style="background:var(--cloud)"></i>/points</span>
+      <span id="legPlan" hidden><i style="background:var(--plan)"></i>/plan</span>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <section class="student">
+      <h2>Student</h2>
+      <div class="grid2">
+        <label for="stuName">Naam</label><input type="text" id="stuName" autocomplete="name" placeholder="Voornaam Achternaam">
+        <label for="stuNr">Studentnr.</label><input type="text" id="stuNr" placeholder="r0123456">
+      </div>
+      <div class="row"><button class="act" id="stuSet">Vastleggen</button><span class="code" id="stuCode">–</span></div>
+      <p class="hint" id="stuHint">Naam en code verschijnen op de vloer, in het camerabeeld, in de HUD en op <code>/student_id</code>.</p>
+    </section>
+    <details open id="taskSec">
+      <summary>Opdrachten</summary>
+      <section>
+        <div class="grid2">
+          <label for="taskSel">Taak</label><select id="taskSel">
+            <option value="t1">1 · Obstakelalarm</option>
+            <option value="t1x">1 · Uitbreiding: vier sectoren</option>
+            <option value="t2">2 · Batterijwaarschuwing</option>
+            <option value="t3">3 · Exact 90° draaien</option>
+            <option value="t3x">3 · Uitbreiding: vierkant 0,5 m</option></select>
+          <label for="recSrc">Opname</label><select id="recSrc">
+            <option value="sim">simulatorbeeld (zonder toestemming)</option>
+            <option value="screen">volledig scherm, met terminal</option>
+            <option value="none">geen opname</option></select>
+        </div>
+        <p class="hint" id="taskHow"></p>
+        <div class="row"><button class="act" id="taskStart">Test starten</button><button class="ghost" id="taskStop" disabled>Stoppen</button><button class="ghost" id="recToggle">Opname starten</button></div>
+        <ol class="checks" id="taskChecks"></ol>
+        <p class="msg" id="taskMsg"></p>
+        <div class="row" id="taskOut" hidden><button class="act" id="dlReport">Rapport downloaden</button><button class="ghost" id="dlVideo">Opname downloaden</button></div>
+        <p class="hint">Lever het rapport (.json) en de opname samen in. De opname hoort bij het rapport via haar SHA-256 in het rapport.</p>
+      </section>
+    </details>
+
+    <section>
+      <h2>Verbinding</h2>
+      <div class="row">
+        <input type="text" id="url" value="ws://localhost:9090" aria-label="rosbridge URL">
+        <button class="act" id="connect">Verbinden</button>
+      </div>
+      <div class="row">
+        <select id="cmdType" aria-label="Type van /cmd_vel">
+          <option value="auto" selected>/cmd_vel: automatisch herkennen</option>
+          <option value="geometry_msgs/msg/Twist">/cmd_vel: Twist (Humble, oud)</option>
+          <option value="geometry_msgs/msg/TwistStamped">/cmd_vel: TwistStamped (Jazzy, labo-robot)</option>
+        </select>
+      </div>
+      <p class="msg" id="cmdInfo">Type wordt herkend zodra je script op /cmd_vel publiceert.</p>
+      <div class="row">
+        <select id="batTopic" aria-label="Topic van de batterij">
+          <option value="/sim/battery_state" selected>batterij: /sim/battery_state (opdracht)</option>
+          <option value="/battery_state">batterij: /battery_state (echte TurtleBot3)</option>
+        </select>
+      </div>
+      <div class="row"><button class="ghost" id="compatBtn">Klaar voor de echte robot?</button></div>
+      <ul class="checks" id="compatOut" hidden></ul>
+      <label class="chk"><input type="checkbox" id="pubModelTF" checked> tf van het robotmodel publiceren</label>
+      <p class="hint">Zet uit als je <code>robot_state_publisher</code> draait. Die maakt dan zelf de frames uit de URDF en <code>/joint_states</code>.</p>
+    </section>
+
+    <section>
+      <h2>Topics</h2>
+      <table id="topics"><tbody></tbody></table>
+    </section>
+
+    <details open>
+      <summary>Robot</summary>
+      <section>
+        <div class="file">
+          <label for="pkgDir">Map met URDF en meshes (bv. <code>turtlebot3_description</code>)</label>
+          <input type="file" id="pkgDir" webkitdirectory multiple>
+        </div>
+        <div class="file">
+          <label for="pkgFiles">of losse bestanden (.urdf, .stl, .dae, .obj)</label>
+          <input type="file" id="pkgFiles" multiple accept=".urdf,.xml,.stl,.dae,.obj">
+        </div>
+        <div class="row">
+          <select id="urdfPick" aria-label="URDF-bestand" hidden></select>
+          <button class="ghost" id="loadUrdf" hidden>URDF laden</button>
+        </div>
+        <div class="row">
+          <button class="ghost" id="fromTopic">Van /robot_description</button>
+          <button class="ghost" id="builtin">Ingebouwde Burger</button>
+        </div>
+        <p class="msg" id="robotMsg">Ingebouwde Burger geladen (primitieve vormen, met camera en 3D-lidar).</p>
+      </section>
+    </details>
+
+    <details>
+      <summary>Robotconfiguratie</summary>
+      <section>
+        <div class="grid2">
+          <label for="cfgLeft">Wiel links</label><select id="cfgLeft"></select>
+          <label for="cfgRight">Wiel rechts</label><select id="cfgRight"></select>
+          <label for="cfgR">Wielstraal (m)</label><input type="number" id="cfgR" step="0.001" min="0.005">
+          <label for="cfgSep">Wielafstand (m)</label><input type="number" id="cfgSep" step="0.001" min="0.02">
+          <label for="cfgV">v max (m/s)</label><input type="number" id="cfgV" step="0.01" min="0.01">
+          <label for="cfgW">ω max (rad/s)</label><input type="number" id="cfgW" step="0.01" min="0.1">
+          <label for="cfgLidar">2D-lidar</label><select id="cfgLidar"></select>
+          <label for="cfgLidar3d">3D-lidar</label><select id="cfgLidar3d"></select>
+          <label for="cfgImu">IMU</label><select id="cfgImu"></select>
+          <label for="cfgCam">Camera</label><select id="cfgCam"></select>
+        </div>
+        <label class="chk"><input type="checkbox" id="cfgFixed"> Basis vast aan de wereld (arm, graafmachine op sokkel)</label>
+        <label class="chk"><input type="checkbox" id="cfgBall" checked> Aandrijfwielen als bolcontact (geen schuurwrijving bij draaien)</label>
+        <div class="row"><button class="act" id="applyCfg">Toepassen en robot herbouwen</button></div>
+        <p class="hint">Sensoren zitten op het gekozen frame: de lidar scant in het xy-vlak van dat frame, de camera kijkt langs +x. Automatisch herkend op naam.</p>
+      </section>
+    </details>
+
+    <details id="jointSec" hidden open>
+      <summary>Joints</summary>
+      <section>
+        <div id="jointBox" style="display:flex;flex-direction:column;gap:8px"></div>
+        <p class="hint">Ook via ROS: <code>sensor_msgs/JointState</code> op <code>/joint_commands</code> (naam + positie).</p>
+      </section>
+    </details>
+
+    <details open>
+      <summary>Nav2 en SLAM</summary>
+      <section>
+        <div class="layers">
+          <label class="chk"><input type="checkbox" id="lyMap" checked><span class="sw" style="background:var(--fg)"></span>/map</label>
+          <label class="chk"><input type="checkbox" id="lyGlobal" checked><span class="sw" style="background:var(--cost)"></span>global costmap</label>
+          <label class="chk"><input type="checkbox" id="lyLocal" checked><span class="sw" style="background:var(--lethal)"></span>local costmap</label>
+          <label class="chk"><input type="checkbox" id="lyPlan" checked><span class="sw" style="background:var(--plan)"></span>paden</label>
+        </div>
+        <p class="hint">Kies onderaan <b>Startpositie</b> of <b>Doel</b>, klik op de vloer en sleep voor de richting. Dat publiceert <code>/initialpose</code> en <code>/goal_pose</code> in frame <code>map</code>. Kaarten worden op hun plaats getekend via <code>map → odom</code> uit <code>/tf</code>.</p>
+        <div class="row"><button class="ghost" id="refetchMap">Kaart opnieuw ophalen</button></div>
+        <p class="msg" id="navMsg">Nog geen kaart ontvangen.</p>
+      </section>
+    </details>
+
+    <details>
+      <summary>Simulatie</summary>
+      <section>
+        <div class="grid2"><label for="odomSrc">Odometrie</label><select id="odomSrc">
+          <option value="truth" selected>perfect (zoals Gazebo)</option>
+          <option value="wheels">wielencoders (met slip)</option></select></div>
+        <div class="slider" id="driftRow" hidden><label for="drift">Wielstraalfout L/R</label><output id="driftOut"></output><input type="range" id="drift" min="0" max="6" step="0.25" value="0"></div>
+        <div class="slider"><label for="noise">Lidar-ruis (σ)</label><output id="noiseOut"></output><input type="range" id="noise" min="0" max="30" step="1" value="10"></div>
+        <div class="grid2">
+          <label for="invalidAs">Geen echo</label><select id="invalidAs">
+            <option value="inf" selected>inf (zoals Gazebo)</option>
+            <option value="zero">0.0 (zoals de echte LDS)</option></select>
+          <label for="lidarPreset">2D-lidar</label><select id="lidarPreset">
+            <option value="lds01">LDS-01 (0,12–3,5 m)</option>
+            <option value="lds02">LDS-02 (0,16–8 m)</option>
+            <option value="custom">eigen bereik</option></select>
+          <label for="l2min">2D min (m)</label><input type="number" id="l2min" min="0" max="5" step="0.01" value="0.12">
+          <label for="l2max">2D max (m)</label><input type="number" id="l2max" min="0.5" max="100" step="0.1" value="3.5">
+          <label for="l3min">3D min (m)</label><input type="number" id="l3min" min="0" max="5" step="0.05" value="0.2">
+          <label for="l3max">3D max (m)</label><input type="number" id="l3max" min="0.5" max="200" step="0.5" value="15">
+        </div>
+        <p class="msg" id="lidarMsg"></p>
+        <label class="chk"><input type="checkbox" id="follow" checked> Camera volgt robot</label>
+        <label class="chk"><input type="checkbox" id="camOn" checked> Robotcamera publiceren (5 Hz, JPEG)</label>
+        <label class="chk"><input type="checkbox" id="l3On"> 3D-lidar (16 lagen, ±15°, 5 Hz)</label>
+        <div class="row">
+          <button class="ghost" id="pause">Pauzeren</button>
+          <button class="ghost" id="resetOdom">Odometrie op nul</button>
+          <button class="ghost" id="respawn">Robot terugzetten</button>
+        </div>
+        <div class="grid2"><label for="worldSel">Wereld</label><select id="worldSel">
+          <option value="turtlebot3">TurtleBot3-wereld (6 × 6 m)</option>
+          <option value="factory">Fabriekshal (16 × 12 m)</option>
+          <option value="empty">Lege kamer (5 × 5 m)</option>
+          <option value="custom" hidden>Eigen wereld</option></select></div>
+        <div class="row">
+          <label class="ghost" for="worldFile" style="cursor:pointer">Wereld laden (.json)</label>
+          <input type="file" id="worldFile" accept=".json,application/json" hidden>
+          <button class="ghost" id="worldSave">Wereld opslaan</button>
+        </div>
+        <p class="msg" id="worldMsg"></p>
+        <p class="hint">Eigen wereld: sla een ingebouwde wereld op als vertrekpunt en pas de JSON aan. Elementen (maten in m, hoeken in graden):
+          <code>wall</code> x0 y0 x1 y1 [t h], <code>box</code> x y [z] sx sy sz [yaw pitch], <code>cyl</code> x y r h,
+          <code>rack</code> x y [bays depth h yaw], <code>conveyor</code> x y l [w h yaw], <code>pallet</code> x y [load],
+          <code>movable</code> x y [sx sy sz mass], <code>mark</code> x y sx sy [yaw]; elk met optioneel <code>color</code>.
+          Verder <code>floor</code> [sx, sy] en <code>spawn</code> [x, y, θ].</p>
+        <p class="hint">Rijden: knoppen in beeld, of <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> en pijltjes (klik eerst in de 3D-weergave), <kbd>spatie</kbd> stopt. Lokaal rijden heeft voorrang op <code>/cmd_vel</code>.</p>
+      </section>
+    </details>
+
+    <details>
+      <summary>Starten in je container</summary>
+      <section>
+<pre id="snippet"># container met poort 9090 open (ports: "9090:9090")
+sudo apt install ros-jazzy-rosbridge-suite \
+  ros-jazzy-slam-toolbox ros-jazzy-navigation2 \
+  ros-jazzy-nav2-bringup ros-jazzy-turtlebot3*
+export TURTLEBOT3_MODEL=burger
+ros2 launch rosbridge_server rosbridge_websocket_launch.xml
+
+# SLAM (kaart maken)
+ros2 launch slam_toolbox online_async_launch.py use_sim_time:=true
+
+# Nav2 bovenop SLAM, met de Burger-parameters
+PARAMS=$(find $(ros2 pkg prefix turtlebot3_navigation2) -name burger.yaml | head -1)
+ros2 launch nav2_bringup navigation_launch.py use_sim_time:=true params_file:=$PARAMS
+
+# of Nav2 met een opgeslagen kaart (AMCL)
+ros2 run nav2_map_server map_saver_cli -f ~/kaart --ros-args -p use_sim_time:=true
+ros2 launch turtlebot3_navigation2 navigation2.launch.py use_sim_time:=true map:=$HOME/kaart.yaml
+
+# rijden (Jazzy: stamped), camera bekijken
+ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -p stamped:=true
+ros2 run rqt_image_view rqt_image_view /camera/image_raw/compressed
+
+# werkt de verbinding niet? in de container:
+ss -tlnp | grep 9090        # luistert rosbridge?
+ros2 topic list             # zie je /scan en /odom?</pre>
+        <div class="row"><button class="ghost" id="copy">Kopiëren</button><span class="hint" id="copyMsg"></span></div>
+      </section>
+    </details>
+  </aside>
+</main>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { STLLoader } from "three/addons/loaders/STLLoader.js";
+import { ColladaLoader } from "three/addons/loaders/ColladaLoader.js";
+import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+import RAPIER from "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.14.0/rapier.es.js";
+
+const $ = id => document.getElementById(id);
+try { await RAPIER.init(); }
+catch (e) { $("loading").textContent = "Fysica-engine kon niet laden. Is er internet voor de CDN? (" + e.message + ")"; throw e; }
+
+/*__CORE__*/
+
+const sim = createSim(RAPIER);
+const START = { x: 0, y: 0, th: 0 };
+function useWorld(def) { const wi = sim.loadWorld(def); [START.x, START.y, START.th] = wi.spawn; return wi; }
+useWorld(WORLDS.turtlebot3);
+let model = null, cfg = null, odomOrigin = { ...START }, opticalFrame = "", addOptical = false, builtin = true;
+
+/* ================= 3D-weergave (Z omhoog, zoals ROS) ================= */
+const stage = $("stage");
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+stage.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 80);   // near niet te klein: dieptenauwkeurigheid voor de kaartlagen
+camera.up.set(0, 0, 1); camera.position.set(-3.6, -2.4, 2.2);
+camera.layers.enable(1);                                  // laag 1 = hulpweergave, niet voor de robotcamera
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(START.x, START.y, 0.1); controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.49;
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x445048, 1.1));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(3, -2, 6); sun.castShadow = true;
+Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4, near: 0.5, far: 15 });
+sun.shadow.mapSize.set(2048, 2048);
+scene.add(sun);
+
+const tok = n => new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue("--" + n).trim());
+const M = {
+  floor: new THREE.MeshStandardMaterial({ roughness: 0.95 }),
+  wall: new THREE.MeshStandardMaterial({ roughness: 0.8 }),
+  box: new THREE.MeshStandardMaterial({ color: 0xc8955a, roughness: 0.7 }),
+  def: new THREE.MeshStandardMaterial({ color: 0x9aa3a0, roughness: 0.6 }),
+};
+const onL1 = o => { o.traverse(c => c.layers.set(1)); return o; };
+
+/* ================= student-identificatie ================= */
+// code = SHA-256 over naam, nummer, wereld en datum → 6 tekens. Narekenbaar, maar geen beveiliging:
+// de zout staat in dit bestand. Het doel is dat elke schermafbeelding en opname aan één student hangt.
+const STU_SALT = "tb3-lite-sim/vives";
+const B32 = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const student = { name: "", nr: "", code: "", date: "" };
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+// SHA-256 in JavaScript, als crypto.subtle ontbreekt (pagina buiten een secure context)
+function sha256js(bytes) {
+  const K = new Uint32Array([0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2]);
+  const H = new Uint32Array([0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19]);
+  const l = bytes.length, n = ((l + 9 + 63) >> 6) << 6, m = new Uint8Array(n); m.set(bytes); m[l] = 0x80;
+  const dv = new DataView(m.buffer); dv.setUint32(n - 4, l * 8 >>> 0); dv.setUint32(n - 8, Math.floor(l / 0x20000000));
+  const w = new Uint32Array(64), rot = (x, k) => (x >>> k) | (x << (32 - k));
+  for (let o = 0; o < n; o += 64) {
+    for (let i = 0; i < 16; i++) w[i] = dv.getUint32(o + i * 4);
+    for (let i = 16; i < 64; i++) { const a = w[i - 15], b = w[i - 2]; w[i] = (w[i - 16] + (rot(a, 7) ^ rot(a, 18) ^ (a >>> 3)) + w[i - 7] + (rot(b, 17) ^ rot(b, 19) ^ (b >>> 10))) >>> 0; }
+    let [a, b, c, d, e, f, g, h] = H;
+    for (let i = 0; i < 64; i++) {
+      const t1 = (h + (rot(e, 6) ^ rot(e, 11) ^ rot(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i]) >>> 0, t2 = ((rot(a, 2) ^ rot(a, 13) ^ rot(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) >>> 0;
+      h = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+    }
+    H[0] += a; H[1] += b; H[2] += c; H[3] += d; H[4] += e; H[5] += f; H[6] += g; H[7] += h;
+  }
+  const out = new Uint8Array(32), ov = new DataView(out.buffer); H.forEach((x, i) => ov.setUint32(i * 4, x)); return out;
+}
+async function sha256bytes(buf) {
+  const u8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  try { if (crypto?.subtle) return new Uint8Array(await crypto.subtle.digest("SHA-256", u8)); } catch {}
+  return sha256js(u8);
+}
+async function studentCode(name, nr, worldName, date) {
+  const txt = [STU_SALT, name.trim().toLowerCase(), nr.trim().toLowerCase(), worldName, date].join("|");
+  const bytes = await sha256bytes(new TextEncoder().encode(txt));
+  return Array.from(bytes.slice(0, 6), b => B32[b % 32]).join("");
+}
+
+const stuLabel = () => student.name ? `${student.name}${student.nr ? " · " + student.nr : ""} · ${student.code}` : "";
+const floorCanvas = document.createElement("canvas"); floorCanvas.width = 1024; floorCanvas.height = 512;
+const floorTex = new THREE.CanvasTexture(floorCanvas); floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping; floorTex.colorSpace = THREE.SRGBColorSpace; floorTex.anisotropy = 4;
+function drawFloorTexture() {                // vloer met herhaald watermerk (1 tegel = 4 × 2 m)
+  const c = floorCanvas.getContext("2d"), bg = "#" + (colors.floor || new THREE.Color(0xdfe5e1)).getHexString(), fg = "#" + (colors.fg || new THREE.Color(0x17201b)).getHexString();
+  c.fillStyle = bg; c.fillRect(0, 0, 1024, 512);
+  if (student.name) {
+    c.save(); c.globalAlpha = 0.13; c.fillStyle = fg; c.font = "600 34px Barlow, Arial, sans-serif"; c.textAlign = "center"; c.textBaseline = "middle";
+    const line = `${stuLabel()} · ${student.date}`;
+    // afwisselend 0° en 180°, zodat de tekst vanuit elke kijkrichting ergens rechtop staat
+    for (const [x, y, flip] of [[256, 90, 0], [768, 90, 0], [0, 256, 1], [512, 256, 1], [1024, 256, 1], [256, 422, 0], [768, 422, 0]]) {
+      c.save(); c.translate(x, y); c.rotate(flip ? Math.PI - 0.12 : -0.12); c.fillText(line, 0, 0); c.restore();
+    }
+    c.restore();
+  }
+  floorTex.needsUpdate = true;
+  M.floor.map = floorTex; M.floor.color = new THREE.Color(0xffffff); M.floor.needsUpdate = true;
+  const [fx, fy] = sim.worldInfo.floor; floorTex.repeat.set(fx / 4, fy / 2);
+}
+async function setStudent(name, nr) {
+  student.name = name.trim().replace(/\s+/g, " ").slice(0, 48); student.nr = nr.trim().slice(0, 20); student.date = today();
+  student.code = student.name ? await studentCode(student.name, student.nr, sim.worldInfo.name, student.date) : "";
+  $("stuCode").textContent = student.code || "–";
+  $("stuHint").textContent = student.name ? `Code geldt voor ${sim.worldInfo.name}, ${student.date}.` : "Vul je naam in en klik Vastleggen.";
+  try { localStorage.setItem("tb3sim.student", JSON.stringify({ name: student.name, nr: student.nr })); } catch {}
+  drawFloorTexture(); publishStudent();
+}
+function publishStudent() {
+  if (!student.name) return;
+  pub("/student_id", { data: JSON.stringify({ name: student.name, nr: student.nr, code: student.code, world: sim.worldInfo.name, date: student.date, sim_time: +sim.simTime.toFixed(2) }) });
+}
+$("stuSet").onclick = () => setStudent($("stuName").value, $("stuNr").value);
+for (const id of ["stuName", "stuNr"]) $(id).addEventListener("keydown", e => { if (e.key === "Enter") $("stuSet").click(); });
+
+
+/* ---- statische wereld ---- */
+const worldGroup = new THREE.Group(); scene.add(worldGroup);
+const movableMeshes = [];
+const matCache = new Map();
+const matFor = c => { if (!c) return M.wall; if (!matCache.has(c)) matCache.set(c, new THREE.MeshStandardMaterial({ color: new THREE.Color(c), roughness: 0.75 })); return matCache.get(c); };
+function buildWorldMeshes() {
+  worldGroup.clear(); movableMeshes.length = 0;
+  const [fx, fy] = sim.worldInfo.floor;
+  for (const s of sim.statics) {
+    let mesh;
+    if (s.kind === "floor") { mesh = new THREE.Mesh(new THREE.PlaneGeometry(fx, fy), M.floor); mesh.receiveShadow = true; worldGroup.add(mesh); continue; }
+    if (s.kind === "box") mesh = new THREE.Mesh(new THREE.BoxGeometry(s.size.x, s.size.y, s.size.z), matFor(s.color));
+    if (s.kind === "cyl") { mesh = new THREE.Mesh(new THREE.CylinderGeometry(s.size.r, s.size.r, s.size.h, 32), matFor(s.color)); mesh.geometry.rotateX(Math.PI / 2); }
+    const t = s.body.translation(), q = s.body.rotation();
+    mesh.position.set(t.x, t.y, t.z); mesh.quaternion.set(q.x, q.y, q.z, q.w);
+    mesh.castShadow = mesh.receiveShadow = true; worldGroup.add(mesh);
+  }
+  // vloermarkeringen: alleen beeld (ook zichtbaar voor de robotcamera), geen collider
+  for (const mk of sim.markings) {
+    const mat = matFor(mk.color || "#f2c230").clone(); mat.polygonOffset = true; mat.polygonOffsetFactor = -2; mat.polygonOffsetUnits = -2;
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(mk.sx, mk.sy), mat);
+    mesh.position.set(mk.x, mk.y, 0.003); mesh.rotation.z = (mk.yaw || 0) * Math.PI / 180; mesh.receiveShadow = true; worldGroup.add(mesh);
+  }
+  for (const m of sim.movables) addMovableMesh(m);
+  drawFloorTexture();
+  const half = Math.max(fx, fy) / 2 + 1;
+  Object.assign(sun.shadow.camera, { left: -half, right: half, top: half, bottom: -half, far: 30 }); sun.shadow.camera.updateProjectionMatrix();
+  sun.position.set(half * 0.6, -half * 0.4, 12);
+  makeGrid();
+}
+const probeMeshes = new Map();
+function addProbeMesh(pr) {
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(pr.r, pr.r, pr.h, 20), matFor("#d23c2a")); mesh.geometry.rotateX(Math.PI / 2);
+  mesh.castShadow = true; scene.add(mesh); probeMeshes.set(pr, mesh);
+}
+function removeProbeMesh(pr) { const m = probeMeshes.get(pr); if (m) { scene.remove(m); m.geometry.dispose(); probeMeshes.delete(pr); } }
+function addMovableMesh(m) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(m.size.x, m.size.y, m.size.z), m.color ? matFor(m.color) : M.box);
+  mesh.castShadow = mesh.receiveShadow = true; worldGroup.add(mesh); movableMeshes.push([m, mesh]);
+}
+
+/* ---- sporen, lidarpunten, odom-spook ---- */
+function makeTrail() {
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(3000 * 3), 3)); g.setDrawRange(0, 0);
+  const l = new THREE.Line(g, new THREE.LineBasicMaterial()); l.frustumCulled = false; scene.add(onL1(l)); l.userData.n = 0; return l;
+}
+const trailT = makeTrail(), trailO = makeTrail();
+function pushTrail(l, x, y) {
+  const a = l.geometry.attributes.position;
+  if (l.userData.n >= 3000) { a.array.copyWithin(0, 3); l.userData.n--; }
+  a.setXYZ(l.userData.n++, x, y, 0.026); a.needsUpdate = true; l.geometry.setDrawRange(0, l.userData.n);
+}
+const clearTrails = () => { for (const l of [trailT, trailO]) { l.userData.n = 0; l.geometry.setDrawRange(0, 0); } };
+function makePoints(n, size) {
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(n * 3), 3)); g.setDrawRange(0, 0);
+  const p = new THREE.Points(g, new THREE.PointsMaterial({ size })); p.frustumCulled = false; scene.add(onL1(p)); return p;
+}
+const lidarPts = makePoints(360, 0.03), cloudPts = makePoints(16 * 360, 0.02);
+const ghost = new THREE.Group();
+{ const ring = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.003, 6, 40), new THREE.MeshBasicMaterial()); ring.position.z = 0.003; ghost.add(ring);
+  const arrow = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.006, 0.002), new THREE.MeshBasicMaterial()); arrow.position.set(0.09, 0, 0.003); ghost.add(arrow); }
+scene.add(onL1(ghost));
+
+/* ---- Nav2-lagen: OccupancyGrid als textuur op de vloer, paden als lijnen ---- */
+const grids = {}, paths = {};
+let lastMapInfo = "";
+function updateNavMsg() {
+  if (!lastMapInfo) return;
+  $("navMsg").textContent = lastMapInfo + (mapOdom ? `\nmap → odom ontvangen (${mapOdom.p.x.toFixed(2)}, ${mapOdom.p.y.toFixed(2)})` : "\nnog geen map → odom in /tf: kaart getekend alsof map = odom");
+}
+const gridDefs = { map: { z: 0.008, box: "lyMap" }, global: { z: 0.014, box: "lyGlobal" }, local: { z: 0.020, box: "lyLocal" } };
+function setGrid(key, msg) {
+  const info = msg.info, w = info.width, h = info.height, data = msg.data;
+  if (!w || !h) return;
+  let g = grids[key];
+  if (!g || g.w !== w || g.h !== h) {
+    if (g) { scene.remove(g.mesh); g.tex.dispose(); g.mesh.geometry.dispose(); }
+    const px = new Uint8Array(w * h * 4), tex = new THREE.DataTexture(px, w, h, THREE.RGBAFormat);
+    tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter;
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+    mesh.renderOrder = { map: 2, global: 3, local: 4 }[key]; mesh.matrixAutoUpdate = false; scene.add(onL1(mesh));
+    g = grids[key] = { w, h, px, tex, mesh };
+  }
+  g.frame = (msg.header.frame_id || "map").replace(/^\//, ""); g.res = info.resolution;
+  const o = info.origin; g.origin = { p: V(o.position.x, o.position.y, o.position.z), q: o.orientation };
+  const isMap = key === "map", C = isMap ? colors.mapOcc : null, px = g.px;
+  for (let i = 0; i < w * h; i++) {
+    const v = data[i], k = i * 4;
+    if (isMap) {
+      if (v < 0) { px[k + 3] = 0; continue; }
+      const f = v / 100;                                  // 0 vrij … 100 bezet
+      px[k] = 255 * (colors.mapFree.r * (1 - f) + C.r * f); px[k + 1] = 255 * (colors.mapFree.g * (1 - f) + C.g * f); px[k + 2] = 255 * (colors.mapFree.b * (1 - f) + C.b * f);
+      px[k + 3] = v === 0 ? 110 : 140 + 1.1 * v;
+    } else {
+      if (v <= 0) { px[k + 3] = 0; continue; }
+      const lethal = v >= 99, c = lethal ? colors.lethal : colors.cost, a = lethal ? 200 : 40 + 1.6 * v;
+      px[k] = 255 * c.r; px[k + 1] = 255 * c.g; px[k + 2] = 255 * c.b; px[k + 3] = a;
+    }
+  }
+  g.tex.needsUpdate = true;
+  if (isMap) { lastMapInfo = `/map ${w}×${h} cellen, ${g.res} m/cel, frame ${g.frame}, ontvangen om sim-tijd ${sim.simTime.toFixed(1)} s`; updateNavMsg(); }
+}
+function setPath(key, msg) {
+  let p = paths[key];
+  if (!p) { p = paths[key] = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: key === "plan" ? colors.plan : colors.lethal })); p.frustumCulled = false; p.matrixAutoUpdate = false; scene.add(onL1(p)); }
+  p.userData.frame = (msg.header.frame_id || "map").replace(/^\//, "");
+  const pts = msg.poses.map(ps => new THREE.Vector3(ps.pose.position.x, ps.pose.position.y, 0.03));
+  p.geometry.dispose(); p.geometry = new THREE.BufferGeometry().setFromPoints(pts);
+  $("legPlan").hidden = false;
+}
+const goalMarker = onL1(new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 0.3, 0xffffff, 0.08, 0.05)); goalMarker.visible = false; scene.add(goalMarker);
+const initMarker = onL1(new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 0.3, 0xffffff, 0.08, 0.05)); initMarker.visible = false; scene.add(initMarker);
+let goalWorld = null;
+
+const colors = {};
+let gridHelper = null;
+function makeGrid() {                                       // 0,5 m raster over de vloer
+  if (!colors.grid) return;
+  if (gridHelper) scene.remove(gridHelper);
+  const n = Math.ceil(Math.max(...sim.worldInfo.floor));
+  gridHelper = onL1(new THREE.GridHelper(n, n * 2, colors.grid, colors.grid));
+  gridHelper.rotation.x = Math.PI / 2; gridHelper.position.z = 0.001; scene.add(gridHelper);
+}
+function applyTheme() {
+  for (const k of ["robot", "odom", "lidar", "cloud", "plan", "cost", "lethal", "fg", "floor", "sky", "wall", "grid", "surface"]) colors[k] = tok(k);
+  colors.mapOcc = colors.fg; colors.mapFree = colors.surface;
+  scene.background = colors.sky; M.wall.color = colors.wall; drawFloorTexture();
+  makeGrid();
+  lidarPts.material.color = colors.lidar; cloudPts.material.color = colors.cloud;
+  trailT.material.color = colors.robot; trailO.material.color = colors.odom;
+  ghost.children.forEach(c => c.material.color = colors.odom);
+  goalMarker.setColor(colors.plan); initMarker.setColor(colors.odom);
+  if (paths.plan) paths.plan.material.color = colors.plan;
+  if (paths.local_plan) paths.local_plan.material.color = colors.lethal;
+}
+applyTheme();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
+buildWorldMeshes();
+
+/* ================= robotmodel: meshes en weergave ================= */
+const files = new Map();                                    // relatief pad → File
+const meshCache = new Map();
+const robotG = new THREE.Group(); scene.add(robotG);
+let bodyGroups = [], linkNodes = {};
+
+function resolveFile(filename) {
+  let f = filename.replace(/^(package|file|model):\/\//, "").replace(/^\/+/, "");
+  const keys = [...files.keys()];
+  let hit = keys.find(k => k.endsWith(f) || f.endsWith(k));
+  if (!hit) { const rest = f.split("/").slice(1).join("/"); hit = rest && keys.find(k => k.endsWith(rest)); }
+  if (!hit) { const base = f.split("/").pop().toLowerCase(); hit = keys.find(k => k.split("/").pop().toLowerCase() === base); }
+  return hit ? files.get(hit) : null;
+}
+async function loadMesh(filename) {
+  if (meshCache.has(filename)) return meshCache.get(filename);
+  const file = resolveFile(filename); if (!file) { meshCache.set(filename, null); return null; }
+  const ext = file.name.split(".").pop().toLowerCase();
+  let obj = null;
+  if (ext === "stl") obj = new THREE.Mesh(new STLLoader().parse(await file.arrayBuffer()));
+  else if (ext === "dae") { obj = new ColladaLoader().parse(await file.text(), "").scene; obj.rotation.set(0, 0, 0); }   // URDF is al Z-omhoog
+  else if (ext === "obj") obj = new OBJLoader().parse(await file.text());
+  meshCache.set(filename, obj); return obj;
+}
+function meshPoints(obj, scale) {                           // hoekpunten voor de convexe collider
+  obj.updateMatrixWorld(true);
+  const out = [], v = new THREE.Vector3();
+  obj.traverse(m => {
+    if (!m.isMesh) return;
+    const pos = m.geometry.attributes.position, stride = Math.max(1, Math.floor(pos.count / 3000));
+    for (let i = 0; i < pos.count; i += stride) { v.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld); out.push(v.x * scale[0], v.y * scale[1], v.z * scale[2]); }
+  });
+  return new Float32Array(out);
+}
+function visualObject(vis) {
+  const g = vis.geom, c = vis.color;
+  const mat = c ? new THREE.MeshStandardMaterial({ color: new THREE.Color(c[0], c[1], c[2]), roughness: 0.6, transparent: c[3] < 1, opacity: c[3] }) : M.def;
+  let o;
+  if (g.type === "box") o = new THREE.Mesh(new THREE.BoxGeometry(...g.size), mat);
+  else if (g.type === "sphere") o = new THREE.Mesh(new THREE.SphereGeometry(g.radius, 20, 14), mat);
+  else if (g.type === "cylinder") { o = new THREE.Mesh(new THREE.CylinderGeometry(g.radius, g.radius, g.length, 28), mat); o.geometry.rotateX(Math.PI / 2); }
+  else if (g.type === "mesh") {
+    const src = meshCache.get(g.filename); if (!src) return null;
+    o = src.clone(true); o.scale.set(...g.scale);
+    o.traverse(m => { if (m.isMesh && (c || !m.material || m.material.type === "MeshBasicMaterial" || !m.material.color)) m.material = mat; });
+    if (!c) o.traverse(m => { if (m.isMesh && m.geometry && !m.geometry.attributes.normal) m.geometry.computeVertexNormals(); });
+  }
+  o.traverse(m => { if (m.isMesh) m.castShadow = true; });
+  o.position.set(vis.origin.p.x, vis.origin.p.y, vis.origin.p.z); o.quaternion.set(vis.origin.q.x, vis.origin.q.y, vis.origin.q.z, vis.origin.q.w);
+  return o;
+}
+function buildRobotVisuals() {
+  robotG.clear(); linkNodes = {};
+  const r = sim.robot;
+  bodyGroups = r.bodies.map(B => {
+    const g = new THREE.Group(); robotG.add(g);
+    for (const ln of B.links) {
+      const node = new THREE.Object3D(), off = r.linkOff[ln];
+      node.position.set(off.p.x, off.p.y, off.p.z); node.quaternion.set(off.q.x, off.q.y, off.q.z, off.q.w);
+      g.add(node); linkNodes[ln] = node;
+      for (const v of model.links[ln].visuals) { const o = visualObject(v); if (o) node.add(o); }
+    }
+    return g;
+  });
+  if (cfg.camera && linkNodes[cfg.camera]) { linkNodes[cfg.camera].add(robotCam); }
+  $("camBox").hidden = !cfg.camera;
+  $("l3On").disabled = !cfg.lidar3d; if (!cfg.lidar3d) $("l3On").checked = false;
+  syncL3();
+}
+
+/* ---- robotcamera: kijkt langs +x van het cameraframe, +z omhoog ---- */
+const CAM = { w: 320, h: 240, vfov: 62, hz: 5 };
+const robotCam = new THREE.PerspectiveCamera(CAM.vfov, CAM.w / CAM.h, 0.03, 20);
+robotCam.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(-1, 0, 0)));
+const camRT = new THREE.WebGLRenderTarget(CAM.w, CAM.h); camRT.texture.colorSpace = THREE.SRGBColorSpace;
+const camPix = new Uint8Array(CAM.w * CAM.h * 4);
+const camCtx = $("camPreview").getContext("2d"), camImg = camCtx.createImageData(CAM.w, CAM.h);
+const CAM_F = (CAM.h / 2) / Math.tan(CAM.vfov * Math.PI / 360);
+
+/* ---- model laden en bouwen ---- */
+function fillSelect(id, opts, val) {
+  const s = $(id); s.innerHTML = ['<option value="">geen</option>', ...opts.map(o => `<option value="${o}">${o}</option>`)].join(""); s.value = val || "";
+}
+function showConfig() {
+  const an = analyzeModel(model), conts = model.joints.filter(j => j.type === "continuous").map(j => j.name);
+  fillSelect("cfgLeft", conts, cfg.leftWheel); fillSelect("cfgRight", conts, cfg.rightWheel);
+  for (const [id, k] of [["cfgLidar", "lidar"], ["cfgLidar3d", "lidar3d"], ["cfgImu", "imu"], ["cfgCam", "camera"]]) fillSelect(id, an.order, cfg[k]);
+  $("cfgR").value = cfg.wheelRadius; $("cfgSep").value = cfg.wheelSep; $("cfgV").value = cfg.vmax; $("cfgW").value = cfg.wmax;
+  $("cfgFixed").checked = cfg.fixedBase;
+}
+function readConfig() {
+  Object.assign(cfg, { leftWheel: $("cfgLeft").value, rightWheel: $("cfgRight").value, wheelRadius: +$("cfgR").value || 0.033,
+    wheelSep: +$("cfgSep").value || 0.16, vmax: +$("cfgV").value || 0.22, wmax: +$("cfgW").value || 2.84,
+    lidar: $("cfgLidar").value, lidar3d: $("cfgLidar3d").value, imu: $("cfgImu").value, camera: $("cfgCam").value, fixedBase: $("cfgFixed").checked });
+  sim.params.ballWheels = $("cfgBall").checked;
+}
+function buildJointUI() {
+  const box = $("jointBox"), js = sim.robot.joints.filter(o => o.role === "position");
+  $("jointSec").hidden = !js.length;
+  box.innerHTML = js.map((o, i) => {
+    const pr = o.j.type === "prismatic", lo = o.lim ? o.lim.lower : (pr ? -0.5 : -Math.PI), hi = o.lim ? o.lim.upper : (pr ? 0.5 : Math.PI);
+    return `<div class="joint"><label for="jnt${i}">${o.j.name}</label><output id="jo${i}"></output>
+      <input type="range" id="jnt${i}" data-j="${o.j.name}" min="${lo}" max="${hi}" step="${pr ? 0.001 : 0.005}" value="${o.target}"></div>`;
+  }).join("");
+  box.querySelectorAll("input").forEach(inp => inp.oninput = () => { sim.robot.byName[inp.dataset.j].target = +inp.value; });
+}
+function rebuild(x = START.x, y = START.y, th = START.th) {
+  sim.buildRobot(model, cfg, x, y, th);
+  const p0 = sim.truthPose(); odomOrigin = { x: p0.x, y: p0.y, th: p0.th }; clearTrails(); prevRobot = null;
+  buildRobotVisuals(); buildJointUI();
+  // optisch cameraframe: uit de URDF als het bestaat, anders zelf toevoegen
+  const optical = cfg.camera ? model.joints.find(j => j.parent === cfg.camera && /optical/i.test(j.child)) : null;
+  opticalFrame = optical ? optical.child : (cfg.camera ? cfg.camera + "_optical_frame" : ""); addOptical = !!cfg.camera && !optical;
+  $("camLabel").textContent = `/camera/image_raw · ${CAM.w}×${CAM.h} · ${opticalFrame}`;
+  $("pad").hidden = !(cfg.leftWheel && cfg.rightWheel) || cfg.fixedBase;
+  $("robotName").textContent = model.name + " · Rapier-fysica · rosbridge v2";
+  if (live()) { advertiseAll(); setTimeout(publishStatic, 200); }
+}
+async function loadModelText(text, label) {
+  const msg = $("robotMsg"); msg.className = "msg"; msg.textContent = "URDF verwerken…";
+  try {
+    const m = parseURDF(text, DOMParser), missing = [];
+    const want = new Set();
+    for (const l of Object.values(m.links)) for (const e of [...l.visuals, ...l.collisions]) if (e.geom.type === "mesh") want.add(e.geom.filename);
+    for (const f of want) { if (!(await loadMesh(f))) missing.push(f); }
+    for (const l of Object.values(m.links)) for (const c of l.collisions) if (c.geom.type === "mesh" && meshCache.get(c.geom.filename)) c.geom.points = meshPoints(meshCache.get(c.geom.filename), c.geom.scale);
+    model = m; builtin = false; cfg = analyzeModel(model).cfg; showConfig(); readConfig();
+    rebuild();
+    const nl = Object.keys(m.links).length, nj = m.joints.filter(j => j.type !== "fixed").length;
+    msg.textContent = `${label}: ${m.name}, ${nl} links, ${nj} bewegende joints, ${want.size - missing.length}/${want.size} meshes.` +
+      (missing.length ? `\nNiet gevonden: ${missing.slice(0, 6).join(", ")}${missing.length > 6 ? " …" : ""}` : "") +
+      (cfg.leftWheel ? `\nAandrijving: ${cfg.leftWheel} + ${cfg.rightWheel}, r ${cfg.wheelRadius} m, b ${cfg.wheelSep} m.` : "\nGeen aandrijfwielen herkend: basis staat vast.");
+    if (missing.length) msg.className = "msg err";
+  } catch (e) { msg.className = "msg err"; msg.textContent = e.message; console.error(e); }
+}
+function loadBuiltin() {
+  model = parseURDF(BURGER_URDF, DOMParser); builtin = true; cfg = analyzeModel(model).cfg; showConfig(); sim.params.ballWheels = true; rebuild();
+  $("robotMsg").className = "msg"; $("robotMsg").textContent = "Ingebouwde Burger geladen (primitieve vormen, met camera en 3D-lidar).";
+}
+function onFiles(list) {
+  for (const f of list) files.set((f.webkitRelativePath || f.name).replace(/\\/g, "/"), f);
+  const urdfs = [...files.keys()].filter(k => /\.urdf$/i.test(k));
+  const pick = $("urdfPick");
+  pick.innerHTML = urdfs.map(k => `<option value="${k}">${k}</option>`).join("");
+  pick.hidden = $("loadUrdf").hidden = !urdfs.length;
+  const pref = urdfs.find(k => /burger/i.test(k)) || urdfs[0];
+  if (pref) { pick.value = pref; files.get(pref).text().then(t => loadModelText(t, pref.split("/").pop())); }
+  else $("robotMsg").textContent = `${files.size} bestanden ingelezen, nog geen .urdf. Een .xacro eerst omzetten: xacro robot.urdf.xacro > robot.urdf`;
+}
+$("pkgDir").onchange = e => onFiles(e.target.files);
+$("pkgFiles").onchange = e => onFiles(e.target.files);
+$("loadUrdf").onclick = () => { const k = $("urdfPick").value; files.get(k).text().then(t => loadModelText(t, k.split("/").pop())); };
+$("builtin").onclick = loadBuiltin;
+$("applyCfg").onclick = () => { readConfig(); const p = sim.truthPose(); rebuild(p.x, p.y, p.th); };
+
+/* ================= rosbridge v2 ================= */
+let ws = null;
+const OUT = {
+  "/clock": "rosgraph_msgs/msg/Clock", "/scan": "sensor_msgs/msg/LaserScan", "/odom": "nav_msgs/msg/Odometry",
+  "/tf": "tf2_msgs/msg/TFMessage", "/tf_static": "tf2_msgs/msg/TFMessage", "/imu": "sensor_msgs/msg/Imu",
+  "/joint_states": "sensor_msgs/msg/JointState", "/camera/image_raw/compressed": "sensor_msgs/msg/CompressedImage",
+  "/camera/camera_info": "sensor_msgs/msg/CameraInfo", "/points": "sensor_msgs/msg/PointCloud2",
+  "/ground_truth": "nav_msgs/msg/Odometry", "/goal_pose": "geometry_msgs/msg/PoseStamped", "/initialpose": "geometry_msgs/msg/PoseWithCovarianceStamped",
+  "/student_id": "std_msgs/msg/String",
+};
+const IN = {   // topic: [type, throttle ms]
+  "/cmd_vel": ["", 0], "/joint_commands": ["sensor_msgs/msg/JointState", 0], "/map": ["nav_msgs/msg/OccupancyGrid", 1000],
+  "/global_costmap/costmap": ["nav_msgs/msg/OccupancyGrid", 1000], "/local_costmap/costmap": ["nav_msgs/msg/OccupancyGrid", 500],
+  "/plan": ["nav_msgs/msg/Path", 250], "/local_plan": ["nav_msgs/msg/Path", 250], "/robot_description": ["std_msgs/msg/String", 0],
+  "/rosout": ["rcl_interfaces/msg/Log", 0],
+};
+const stats = {};
+for (const k in OUT) stats[k] = { dir: "→", n: 0, hz: 0 };
+for (const k in IN) if (k !== "/robot_description") stats[k + " "] = { dir: "←", n: 0, hz: 0 };
+const live = () => ws && ws.readyState === 1;
+const send = o => { if (live()) ws.send(JSON.stringify(o)); };
+const pub = (topic, msg) => { if (!live()) return; send({ op: "publish", topic, msg }); stats[topic].n++; };
+const stamp = () => { const t = sim.simTime, sec = Math.floor(t); return { sec, nanosec: Math.min(999999999, Math.round((t - sec) * 1e9)) }; };
+const Z36 = new Array(36).fill(0), Z9 = new Array(9).fill(0);
+const IMU_COV_G = [4e-6, 0, 0, 0, 4e-6, 0, 0, 0, 4e-6], IMU_COV_A = [4e-4, 0, 0, 0, 4e-4, 0, 0, 0, 4e-4];
+const tfMsg = (p, c, T, st) => ({ header: { stamp: st, frame_id: p }, child_frame_id: c, transform: { translation: T.p, rotation: T.q } });
+let rosCmd = { v: 0, w: 0, t: -1 }, mapOdom = null, wantDescription = false;
+function setStatus(kind, text) { $("dot").className = "dot " + kind; $("statusText").textContent = text; }
+
+function advertiseAll() {
+  for (const t in OUT) send({ op: "advertise", topic: t, type: OUT[t], ...(t === "/tf_static" || t === "/student_id" ? { latch: true } : {}) });
+}
+function publishStatic() {
+  publishStudent();
+  if (!$("pubModelTF").checked || !model) return;
+  const st = stamp(), list = model.joints.filter(j => j.type === "fixed").map(j => tfMsg(j.parent, j.child, j.origin, st));
+  if (addOptical) list.push(tfMsg(cfg.camera, opticalFrame, { p: V(), q: { x: -0.5, y: 0.5, z: -0.5, w: 0.5 } }, st));
+  pub("/tf_static", { transforms: list });
+}
+function connect() {
+  if (ws) { ws.close(); return; }
+  const url = $("url").value.trim();
+  setStatus("wait", "Verbinden met " + url + " …");
+  try { ws = new WebSocket(url); } catch (e) { setStatus("err", "Ongeldige URL: " + e.message); ws = null; return; }
+  $("connect").textContent = "Verbreken";
+  ws.onopen = () => {
+    setStatus("on", "Verbonden met " + url);
+    advertiseAll();
+    for (const [t, [type, thr]] of Object.entries(IN)) if (t !== "/robot_description" && t !== "/cmd_vel") send({ op: "subscribe", topic: t, type, throttle_rate: thr, queue_length: 1 });
+    cmdStart();
+    send({ op: "subscribe", topic: "/tf", type: OUT["/tf"], queue_length: 5 });
+    setTimeout(publishStatic, 300);
+    if (wantDescription) requestDescription();
+  };
+  ws.onmessage = ev => {
+    let m; try { m = JSON.parse(ev.data); } catch { return; }
+    if (m.op === "status" && m.level === "error") { setStatus("err", "rosbridge: " + m.msg); return; }
+    if (m.op === "service_response") { onServiceResponse(m); return; }
+    if (m.op !== "publish") return;
+    const t = m.topic, msg = m.msg;
+    if (stats[t + " "]) stats[t + " "].n++;
+    if (t === "/cmd_vel") { const tw = msg.twist || msg; rosCmd = { v: tw.linear.x, w: tw.angular.z, t: sim.simTime }; cmdState.lastMsg = performance.now(); }
+    else if (t === "/joint_commands") msg.name.forEach((n, i) => {
+      const o = sim.robot.byName[n]; if (!o || msg.position[i] == null) return;
+      o.target = msg.position[i]; const inp = document.querySelector(`#jointBox input[data-j="${n}"]`); if (inp) inp.value = o.target;
+    });
+    else if (t === "/tf") for (const tr of msg.transforms) {
+      if (tr.header.frame_id.replace(/^\//, "") === "map" && tr.child_frame_id.replace(/^\//, "") === "odom")
+      { const first = !mapOdom; mapOdom = { p: V(tr.transform.translation.x, tr.transform.translation.y, tr.transform.translation.z), q: tr.transform.rotation }; if (first) updateNavMsg(); }
+    }
+    else if (t === "/rosout") onRosout(msg);
+    else if (t === "/map") setGrid("map", msg);
+    else if (t === "/global_costmap/costmap") setGrid("global", msg);
+    else if (t === "/local_costmap/costmap") setGrid("local", msg);
+    else if (t === "/plan") setPath("plan", msg);
+    else if (t === "/local_plan") setPath("local_plan", msg);
+    else if (t === "/robot_description") {
+      send({ op: "unsubscribe", topic: "/robot_description" }); wantDescription = false;
+      loadModelText(msg.data, "/robot_description");
+    }
+  };
+  ws.onerror = () => setStatus("err", location.protocol === "file:" || /^(localhost|127\.)/.test(location.hostname) ? "Geen verbinding. Draait rosbridge en staat poort 9090 open?" : "Geen verbinding: vanaf een gepubliceerde pagina blokkeert de browser localhost. Open het HTML-bestand lokaal.");
+  ws.onclose = () => { ws = null; cmdStop(); $("connect").textContent = "Verbinden"; if ($("dot").className !== "dot err") setStatus("", "Niet verbonden, lokaal rijden met toetsen"); };
+}
+const GRID_TOPICS = ["/map", "/global_costmap/costmap", "/local_costmap/costmap"];
+function resubscribeMaps() {
+  if (!live()) return false;
+  for (const tp of GRID_TOPICS) { send({ op: "unsubscribe", topic: tp }); send({ op: "subscribe", topic: tp, type: IN[tp][0], throttle_rate: IN[tp][1], queue_length: 1 }); }
+  return true;
+}
+function requestDescription() {
+  send({ op: "subscribe", topic: "/robot_description", type: IN["/robot_description"][0], queue_length: 1 });
+  $("robotMsg").className = "msg"; $("robotMsg").textContent = "Wachten op /robot_description (draait robot_state_publisher?)…";
+}
+$("refetchMap").onclick = () => { $("navMsg").textContent = resubscribeMaps() ? "Kaart opnieuw aangevraagd…" : "Verbind eerst met rosbridge."; };
+$("fromTopic").onclick = () => { wantDescription = true; if (live()) requestDescription(); else { $("robotMsg").textContent = "Verbind eerst met rosbridge; daarna wordt /robot_description opgehaald."; } };
+
+/* ---- frames → simulatiewereld ---- */
+const tinv = T => { const qi = qconj(T.q); return { p: qrot(qi, vscale(T.p, -1)), q: qi }; };
+const worldOdom = () => ({ p: V(odomOrigin.x, odomOrigin.y, 0), q: qyaw(odomOrigin.th) });
+const worldMap = () => mapOdom ? tmul(worldOdom(), tinv(mapOdom)) : worldOdom();   // zonder SLAM/AMCL: map ≈ odom
+function frameToWorld(f) {
+  if (f === "odom") return worldOdom();
+  if (model && sim.robot && sim.robot.bodyOf[f] != null) return sim.linkWorld(f);
+  return worldMap();
+}
+const setMatrix = (obj, T) => { obj.matrix.compose(new THREE.Vector3(T.p.x, T.p.y, T.p.z), new THREE.Quaternion(T.q.x, T.q.y, T.q.z, T.q.w), new THREE.Vector3(1, 1, 1)); };
+
+/* ================= hoofdlus ================= */
+const RATES = { clock: 50, odom: 30, imu: 50, scan: 5 };
+const next = { clock: 0, odom: 0, imu: 0, scan: 0, cam: 0, l3: 0, trail: 0, stat: 0 };
+let paused = false, keyCmd = null, padCmd = null, cmdSrc = "–", acc = 0, lastReal = performance.now(), staticT = 0, camDue = null, prevRobot = null;
+
+function b64(typed) {
+  const u8 = new Uint8Array(typed.buffer, typed.byteOffset, typed.byteLength); let s = "";
+  for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+function odomWorld() {
+  const c = Math.cos(odomOrigin.th), s = Math.sin(odomOrigin.th), o = sim.odom;
+  return { x: odomOrigin.x + c * o.x - s * o.y, y: odomOrigin.y + s * o.x + c * o.y, th: odomOrigin.th + o.th };
+}
+function currentCmd() {
+  if (keyCmd) { cmdSrc = "toetsenbord"; return keyCmd; }
+  if (padCmd) { cmdSrc = "knoppen in beeld"; return padCmd; }
+  if (rosCmd.t >= 0 && sim.simTime - rosCmd.t < 0.5) { cmdSrc = "/cmd_vel"; return rosCmd; }   // time-out in sim-tijd
+  cmdSrc = rosCmd.t >= 0 ? "/cmd_vel time-out" : "–"; return { v: 0, w: 0 };
+}
+const mobile = () => cfg.leftWheel && cfg.rightWheel && !cfg.fixedBase;
+
+function simStep() {
+  sim.step(currentCmd());
+  const t = sim.simTime, r = sim.robot;
+  if (t >= next.clock) { next.clock += 1 / RATES.clock; pub("/clock", { clock: stamp() }); }
+  if (t >= next.odom) {
+    next.odom += 1 / RATES.odom;
+    const st = stamp(), o = sim.odom, q = qyaw(o.th), tfs = [];
+    if (mobile()) {
+      pub("/odom", { header: { stamp: st, frame_id: "odom" }, child_frame_id: model.root,
+        pose: { pose: { position: { x: o.x, y: o.y, z: 0 }, orientation: q }, covariance: Z36 },
+        twist: { twist: { linear: { x: o.v, y: 0, z: 0 }, angular: { x: 0, y: 0, z: o.w } }, covariance: Z36 } });
+      tfs.push(tfMsg("odom", model.root, { p: V(o.x, o.y, 0), q }, st));
+    }
+    if ($("pubModelTF").checked) for (const jo of r.joints) tfs.push(tfMsg(jo.j.parent, jo.j.child, sim.jointTF(jo), st));
+    if (tfs.length) pub("/tf", { transforms: tfs });
+    if (r.joints.length) pub("/joint_states", { header: { stamp: st, frame_id: "" }, name: r.joints.map(jo => jo.j.name),
+      position: r.joints.map(jo => jo.pos), velocity: r.joints.map(jo => jo.vel), effort: [] });
+    // grondwaarheid t.o.v. de startpose (zelfde oorsprong als odom en de SLAM-kaart bij de start)
+    const T = tmul(tinv(worldOdom()), sim.bodyT(r.rootBody)), lv = r.rootBody.rb.linvel(), av = r.rootBody.rb.angvel();
+    const qi = qconj(sim.bodyT(r.rootBody).q), vb = qrot(qi, lv), wb = qrot(qi, av);
+    pub("/ground_truth", { header: { stamp: st, frame_id: "sim_world" }, child_frame_id: model.root,
+      pose: { pose: { position: T.p, orientation: T.q }, covariance: Z36 }, twist: { twist: { linear: vb, angular: wb }, covariance: Z36 } });
+  }
+  if (cfg.imu && t >= next.imu) {
+    next.imu += 1 / RATES.imu; const m = sim.imu;
+    pub("/imu", { header: { stamp: stamp(), frame_id: cfg.imu }, orientation: m.q, orientation_covariance: Z9,
+      angular_velocity: m.gyro, angular_velocity_covariance: IMU_COV_G, linear_acceleration: m.acc, linear_acceleration_covariance: IMU_COV_A });
+  }
+  if (cfg.lidar && t >= next.scan) {
+    next.scan += 1 / RATES.scan;
+    const s = sim.scan(cfg.lidar);
+    publishScanMsg({ header: { stamp: stamp(), frame_id: cfg.lidar }, angle_min: 0, angle_max: s.inc * (sim.LIDAR.n - 1),
+      angle_increment: s.inc, time_increment: 0, scan_time: 1 / RATES.scan, range_min: sim.LIDAR.rmin, range_max: sim.LIDAR.rmax, ranges: s.ranges, intensities: [] });
+    const a = lidarPts.geometry.attributes.position; a.array.set(s.pts); a.needsUpdate = true; lidarPts.geometry.setDrawRange(0, s.pts.length / 3);
+  }
+  if (cfg.camera && t >= next.cam) { next.cam += 1 / CAM.hz; camDue = stamp(); }
+  if (t >= next.l3) {
+    next.l3 += 1 / 5;
+    if ($("l3On").checked && cfg.lidar3d) {
+      const c = sim.scan3d(cfg.lidar3d), n = c.sensor.length / 3, a = cloudPts.geometry.attributes.position;
+      a.array.set(c.worldPts.slice(0, a.array.length)); a.needsUpdate = true; cloudPts.geometry.setDrawRange(0, Math.min(n, a.count));
+      if (live()) pub("/points", { header: { stamp: stamp(), frame_id: cfg.lidar3d }, height: 1, width: n,
+        fields: ["x", "y", "z"].map((name, i) => ({ name, offset: 4 * i, datatype: 7, count: 1 })),
+        is_bigendian: false, point_step: 12, row_step: 12 * n, data: b64(new Float32Array(c.sensor)), is_dense: true });
+    }
+  }
+  if (t >= next.trail) { next.trail += 0.1; const p = sim.truthPose(), ow = odomWorld(); pushTrail(trailT, p.x, p.y); if (mobile()) pushTrail(trailO, ow.x, ow.y); }
+  staticT += sim.DT; if (staticT >= 5) { staticT = 0; publishStatic(); }
+}
+
+function captureCamera(st) {
+  renderer.setRenderTarget(camRT); renderer.render(scene, robotCam); renderer.readRenderTargetPixels(camRT, 0, 0, CAM.w, CAM.h, camPix); renderer.setRenderTarget(null);
+  const row = CAM.w * 4;
+  for (let y = 0; y < CAM.h; y++) camImg.data.set(camPix.subarray((CAM.h - 1 - y) * row, (CAM.h - y) * row), y * row);
+  camCtx.putImageData(camImg, 0, 0);
+  if (student.name) {                                    // stempel: ook zichtbaar in rqt_image_view
+    const lbl = `${stuLabel()} · t=${sim.simTime.toFixed(1)}s`;
+    camCtx.font = "600 11px Barlow, Arial, sans-serif"; const w = camCtx.measureText(lbl).width + 10;
+    camCtx.fillStyle = "rgba(0,0,0,0.55)"; camCtx.fillRect(0, CAM.h - 17, w, 17); camCtx.fillStyle = "#fff"; camCtx.fillText(lbl, 5, CAM.h - 5);
+  }
+  if (!live() || !$("camOn").checked) return;
+  const url = $("camPreview").toDataURL("image/jpeg", 0.7), hdr = { stamp: st, frame_id: opticalFrame }, f = CAM_F, cx = CAM.w / 2, cy = CAM.h / 2;
+  pub("/camera/image_raw/compressed", { header: hdr, format: "jpeg", data: url.slice(url.indexOf(",") + 1) });
+  pub("/camera/camera_info", { header: hdr, height: CAM.h, width: CAM.w, distortion_model: "plumb_bob", d: [0, 0, 0, 0, 0],
+    k: [f, 0, cx, 0, f, cy, 0, 0, 1], r: [1, 0, 0, 0, 1, 0, 0, 0, 1], p: [f, 0, cx, 0, 0, f, cy, 0, 0, 0, 1, 0],
+    binning_x: 0, binning_y: 0, roi: { x_offset: 0, y_offset: 0, height: 0, width: 0, do_rectify: false } });
+}
+
+const setObj = (obj, body) => { const t = body.translation(), q = body.rotation(); obj.position.set(t.x, t.y, t.z); obj.quaternion.set(q.x, q.y, q.z, q.w); };
+const deg = a => (a * 180 / Math.PI).toFixed(1).padStart(6);
+function render() {
+  const r = sim.robot;
+  r.bodies.forEach((B, i) => setObj(bodyGroups[i], B.rb));
+  for (const [m, mesh] of movableMeshes) setObj(mesh, m.body);
+  for (const [pr, mesh] of probeMeshes) setObj(mesh, pr.body);
+  const ow = odomWorld(); ghost.visible = mobile(); ghost.position.set(ow.x, ow.y, 0); ghost.rotation.set(0, 0, ow.th);
+  for (const [k, g] of Object.entries(grids)) {
+    g.mesh.visible = $(gridDefs[k].box).checked;
+    const T = tmul(tmul(frameToWorld(g.frame), g.origin), { p: V(g.w * g.res / 2, g.h * g.res / 2, gridDefs[k].z), q: Q0() });
+    g.mesh.matrix.compose(new THREE.Vector3(T.p.x, T.p.y, T.p.z), new THREE.Quaternion(T.q.x, T.q.y, T.q.z, T.q.w), new THREE.Vector3(g.w * g.res, g.h * g.res, 1));
+  }
+  for (const p of Object.values(paths)) { p.visible = $("lyPlan").checked; setMatrix(p, frameToWorld(p.userData.frame)); }
+
+  const p = sim.truthPose();
+  if ($("follow").checked && prevRobot) {
+    const dx = p.x - prevRobot.x, dy = p.y - prevRobot.y;
+    camera.position.x += dx; camera.position.y += dy; controls.target.x += dx; controls.target.y += dy;
+  }
+  prevRobot = p;
+  if (camDue) { captureCamera(camDue); camDue = null; }
+  testOverlayFrame();
+  controls.update(); renderer.render(scene, camera); drawComposite();
+
+  const q = p.q, roll = Math.atan2(2 * (q.w * q.x + q.y * q.z), 1 - 2 * (q.x * q.x + q.y * q.y)), pitch = Math.asin(Math.max(-1, Math.min(1, 2 * (q.w * q.y - q.z * q.x))));
+  const o = sim.odom, cmd = sim.cmdTarget, rb = r.rootBody.rb.linvel();
+  let txt = (student.name ? `student    ${stuLabel()}\n` : `<span class="bump">student    niet ingesteld</span>\n`) +
+    `sim-tijd   ${sim.simTime.toFixed(2)} s${paused ? "  (gepauzeerd)" : ""}\n` + `werkelijk  x ${p.x.toFixed(3)}  y ${p.y.toFixed(3)}  θ ${deg(p.th)}°\n`;
+  if (mobile()) {
+    const err = Math.hypot(ow.x - p.x, ow.y - p.y);
+    const slipping = Math.abs(cmd.v) > 0.02 && Math.abs(o.v) > 0.02 && Math.hypot(rb.x, rb.y) < 0.3 * Math.abs(o.v);
+    txt += `/odom      x ${o.x.toFixed(3)}  y ${o.y.toFixed(3)}  θ ${deg(o.th)}°\n` + `odom-fout  ${(err * 100).toFixed(1)} cm\n` +
+      `roll/pitch ${deg(roll)}° ${deg(pitch)}°\n` + `commando   ${cmdSrc}`;
+    if (goalWorld) txt += `\ndoel       ${(Math.hypot(goalWorld.x - p.x, goalWorld.y - p.y) * 100).toFixed(1)} cm, Δθ ${deg(Math.atan2(Math.sin(goalWorld.th - p.th), Math.cos(goalWorld.th - p.th)))}°`;
+    if (slipping) txt += `\n<span class="bump">wielslip: wielen draaien, robot schuift niet mee</span>`;
+  } else txt += `joints     ${r.joints.filter(j => j.role === "position").map(j => j.j.name + " " + j.pos.toFixed(3)).join("  ")}`;
+  $("hud").innerHTML = txt;
+}
+
+function tick(now) {
+  acc += Math.min(0.1, (now - lastReal) / 1000); lastReal = now;
+  while (acc >= sim.DT) { acc -= sim.DT; if (!paused) simStep(); }
+  if (now >= next.stat) {
+    for (const k in stats) { stats[k].hz = stats[k].n; stats[k].n = 0; }
+    next.stat = now + 1000; renderTopics();
+    document.querySelectorAll("#jointBox input").forEach((inp, i) => { const o = sim.robot.byName[inp.dataset.j]; const out = $("jo" + i); if (o && out) out.textContent = `${o.pos.toFixed(3)} → ${o.target.toFixed(3)}`; });
+  }
+  render(); requestAnimationFrame(tick);
+}
+function renderTopics() {
+  $("topics").tBodies[0].innerHTML = Object.entries(stats)
+    .filter(([k, s]) => live() ? (s.hz > 0 || ["/clock ", "/cmd_vel "].includes(k) || k === "/clock" || k === "/cmd_vel ") : ["/clock", "/scan", "/odom", "/tf", "/cmd_vel "].includes(k))
+    .map(([k, s]) => `<tr><td><span class="dir">${s.dir}</span>${k.trim()}</td><td>${live() || s.hz ? s.hz + " Hz" : "–"}</td></tr>`).join("");
+}
+
+/*__TASKS__*/
+
+/* ================= invoer ================= */
+function resetOdom() { const p = sim.truthPose(); odomOrigin = { x: p.x, y: p.y, th: p.th }; sim.resetOdom(); clearTrails(); }
+let mode = "orbit";
+document.querySelectorAll(".modes button").forEach(b => b.onclick = () => {
+  mode = b.dataset.mode;
+  document.querySelectorAll(".modes button").forEach(x => x.classList.toggle("on", x === b));
+  controls.enabled = mode === "orbit";
+  renderer.domElement.style.cursor = mode === "orbit" ? "grab" : "crosshair";
+});
+const ray = new THREE.Raycaster(), floorPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+function floorPoint(e) {
+  const rc = renderer.domElement.getBoundingClientRect();
+  ray.setFromCamera(new THREE.Vector2(((e.clientX - rc.left) / rc.width) * 2 - 1, -((e.clientY - rc.top) / rc.height) * 2 + 1), camera);
+  const v = new THREE.Vector3(); return ray.ray.intersectPlane(floorPlane, v) ? v : null;
+}
+let placing = null;
+renderer.domElement.addEventListener("pointerdown", e => {
+  if (mode === "orbit") return;
+  const v = floorPoint(e); if (!v) return;
+  if (mode === "box") { sim.addBox(v.x, v.y, 0); addMovableMesh(sim.movables[sim.movables.length - 1]); return; }
+  placing = { x: v.x, y: v.y, th: mode === "place" ? sim.truthPose().th : 0 }; renderer.domElement.setPointerCapture(e.pointerId);
+  const mk = mode === "goal" ? goalMarker : mode === "init" ? initMarker : null;
+  if (mk) { mk.visible = true; mk.position.set(v.x, v.y, 0.02); mk.setDirection(new THREE.Vector3(1, 0, 0)); }
+});
+renderer.domElement.addEventListener("pointermove", e => {
+  if (!placing) return; const v = floorPoint(e);
+  if (v && Math.hypot(v.x - placing.x, v.y - placing.y) > 0.05) {
+    placing.th = Math.atan2(v.y - placing.y, v.x - placing.x);
+    const mk = mode === "goal" ? goalMarker : mode === "init" ? initMarker : null;
+    if (mk) mk.setDirection(new THREE.Vector3(Math.cos(placing.th), Math.sin(placing.th), 0));
+  }
+});
+renderer.domElement.addEventListener("pointerup", () => {
+  if (!placing) return;
+  const P = placing; placing = null;
+  if (mode === "place") { rebuild(P.x, P.y, P.th); return; }
+  // klik in de simulatiewereld → pose in het map-frame
+  const T = tmul(tinv(worldMap()), { p: V(P.x, P.y, 0), q: qyaw(P.th) }), hdr = { stamp: stamp(), frame_id: "map" };
+  const pose = { position: { x: T.p.x, y: T.p.y, z: 0 }, orientation: qyaw(yawOf(T.q)) };
+  if (mode === "goal") { goalWorld = P; pub("/goal_pose", { header: hdr, pose }); }
+  if (mode === "init") {
+    const cov = new Array(36).fill(0); cov[0] = 0.25; cov[7] = 0.25; cov[35] = 0.06853891945200942;   // zelfde als RViz
+    pub("/initialpose", { header: hdr, pose: { pose, covariance: cov } });
+  }
+  if (!live()) $("navMsg").textContent = "Niet verbonden: " + (mode === "goal" ? "/goal_pose" : "/initialpose") + " werd niet verstuurd.";
+});
+
+const keys = new Set();
+const KEYMAP = { arrowup: "f", w: "f", z: "f", arrowdown: "b", s: "b", arrowleft: "l", a: "l", q: "l", arrowright: "r", d: "r" };
+function updateKeyCmd() {
+  if (!keys.size) { keyCmd = null; return; }
+  const f = keys.has("f") - keys.has("b"), t = keys.has("l") - keys.has("r");
+  keyCmd = { v: cfg.vmax * f, w: cfg.wmax * 0.6 * t };
+}
+window.addEventListener("keydown", e => {
+  if (e.target.matches("input,select")) return;
+  if (e.key === " ") { keys.clear(); keyCmd = { v: 0, w: 0 }; e.preventDefault(); return; }
+  const k = KEYMAP[e.key.toLowerCase()]; if (k) { keys.add(k); updateKeyCmd(); e.preventDefault(); }
+});
+window.addEventListener("keyup", e => {
+  if (e.key === " ") { keyCmd = null; return; }
+  const k = KEYMAP[e.key.toLowerCase()]; if (k) { keys.delete(k); updateKeyCmd(); }
+});
+window.addEventListener("blur", () => { keys.clear(); keyCmd = null; padCmd = null; });
+const PAD = { f: { v: 1, w: 0 }, b: { v: -1, w: 0 }, l: { v: 0, w: 1 }, r: { v: 0, w: -1 }, x: { v: 0, w: 0 } };
+document.querySelectorAll(".pad button").forEach(btn => {
+  const d = PAD[btn.dataset.d], release = () => { btn.classList.remove("held"); padCmd = null; };
+  btn.addEventListener("pointerdown", e => { btn.setPointerCapture(e.pointerId); btn.classList.add("held"); padCmd = { v: d.v * cfg.vmax, w: d.w * cfg.wmax * 0.6 }; });
+  btn.addEventListener("pointerup", release); btn.addEventListener("pointercancel", release);
+});
+function syncL3() {
+  const on = $("l3On").checked && !!cfg.lidar3d; $("legCloud").hidden = !on; if (!on) cloudPts.geometry.setDrawRange(0, 0);
+  if (builtin && linkNodes.lidar_3d_link) linkNodes.lidar_3d_link.visible = on;   // de mast hoort niet bij een standaard Burger
+}
+$("l3On").onchange = syncL3;
+$("connect").onclick = connect;
+// Geserveerd door turtlebot-vis (http://localhost:8080/sim/, `robot htmlsim`):
+// rosbridge draait in de container, dus meteen verbinden en bij uitval opnieuw.
+if (/^\/sim\b/.test(location.pathname) && /^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {
+  let userClosed = false;
+  $("connect").addEventListener("click", () => { userClosed = !!ws; }, true);   // eigen klik op Verbreken: niet opnieuw
+  setInterval(() => { if (!ws && !userClosed) connect(); }, 3000);
+  setTimeout(() => { if (!ws) connect(); }, 500);
+}
+$("pause").onclick = () => { paused = !paused; $("pause").textContent = paused ? "Hervatten" : "Pauzeren"; };
+$("resetOdom").onclick = resetOdom;
+$("respawn").onclick = () => rebuild();
+function switchWorld(def, label) {
+  try {
+    useWorld(def); buildWorldMeshes(); rebuild();
+    if (student.name) setStudent(student.name, student.nr);              // code hangt af van de wereld
+    for (const k in grids) { scene.remove(grids[k].mesh); delete grids[k]; }   // oude kaart hoort niet bij de nieuwe wereld
+    mapOdom = null; $("navMsg").textContent = "Nieuwe wereld: herstart slam_toolbox voor een nieuwe kaart.";
+    { const c = Math.cos(START.th), s = Math.sin(START.th), ox = 0.6, oy = 2.4; camera.position.set(START.x + c * ox - s * oy, START.y + s * ox + c * oy, 2.4); controls.target.set(START.x + c * 0.8, START.y + s * 0.8, 0.1); }
+    $("worldMsg").className = "msg"; $("worldMsg").textContent = `${label}: ${sim.statics.length - 1} vaste objecten, ${sim.movables.length} dozen. Herstart slam_toolbox voor een nieuwe kaart.`;
+  } catch (e) { $("worldMsg").className = "msg err"; $("worldMsg").textContent = "Wereld niet geladen: " + e.message; }
+}
+$("worldSel").onchange = () => { const k = $("worldSel").value; if (WORLDS[k]) switchWorld(WORLDS[k], WORLDS[k].name); };
+$("worldFile").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try { const def = JSON.parse(await f.text()); $("worldSel").value = "custom"; $("worldSel").querySelector('[value="custom"]').hidden = false; switchWorld(def, def.name || f.name); }
+  catch (err) { $("worldMsg").className = "msg err"; $("worldMsg").textContent = "Geen geldige JSON: " + err.message; }
+  e.target.value = "";
+};
+$("worldSave").onclick = () => {
+  const def = sim.exportWorld(), p = sim.truthPose(); def.spawn = [+p.x.toFixed(3), +p.y.toFixed(3), +p.th.toFixed(3)];
+  saveBlob(new Blob([JSON.stringify(def, null, 1)], { type: "application/json" }), (def.name || "wereld").replace(/\W+/g, "_").toLowerCase() + ".json");
+  $("worldMsg").className = "msg"; $("worldMsg").textContent = "Opgeslagen met de dozen op hun huidige plek en de robotpositie als startpunt.";
+};
+$("pubModelTF").onchange = () => publishStatic();
+function sliders() {
+  sim.params.odomErr = +$("drift").value / 100; sim.params.lidarSigma = +$("noise").value / 1000;
+  $("driftOut").textContent = $("drift").value + " %"; $("noiseOut").textContent = $("noise").value + " mm";
+}
+$("drift").oninput = $("noise").oninput = sliders; sliders();
+// lidarbereik: presets voor de TB3-lidars, of eigen waarden; range_min/range_max in /scan volgen mee
+const LIDAR_PRESETS = { lds01: [0.12, 3.5], lds02: [0.16, 8] };
+function applyLidarRange() {
+  const msg = $("lidarMsg"), num = id => parseFloat($(id).value);
+  const l2 = [num("l2min"), num("l2max")], l3 = [num("l3min"), num("l3max")];
+  const ok = r => r.every(Number.isFinite) && r[0] >= 0 && r[1] > r[0];
+  if (!ok(l2) || !ok(l3)) { msg.className = "msg err"; msg.textContent = "Min moet kleiner zijn dan max, en beide positief."; return; }
+  [sim.LIDAR.rmin, sim.LIDAR.rmax] = l2; [sim.L3.rmin, sim.L3.rmax] = l3;
+  msg.className = "msg"; msg.textContent = `/scan ${l2[0]}–${l2[1]} m · /points ${l3[0]}–${l3[1]} m`;
+}
+$("lidarPreset").onchange = () => {
+  const p = LIDAR_PRESETS[$("lidarPreset").value];
+  if (p) { $("l2min").value = p[0]; $("l2max").value = p[1]; }
+  applyLidarRange();
+};
+for (const id of ["l2min", "l2max"]) $(id).oninput = () => { $("lidarPreset").value = "custom"; applyLidarRange(); };
+for (const id of ["l3min", "l3max"]) $(id).oninput = applyLidarRange;
+applyLidarRange();
+$("odomSrc").onchange = () => { sim.params.odomSource = $("odomSrc").value; $("driftRow").hidden = sim.params.odomSource !== "wheels"; resetOdom(); };
+$("copy").onclick = () => {
+  const done = m => { $("copyMsg").textContent = m; setTimeout(() => $("copyMsg").textContent = "", 2000); };
+  if (navigator.clipboard) navigator.clipboard.writeText($("snippet").textContent).then(() => done("Gekopieerd"), () => done("Selecteer de tekst en kopieer manueel"));
+  else done("Selecteer de tekst en kopieer manueel");
+};
+new ResizeObserver(() => { const rc = stage.getBoundingClientRect(); renderer.setSize(rc.width, rc.height, false); camera.aspect = rc.width / Math.max(1, rc.height); camera.updateProjectionMatrix(); }).observe(stage);
+
+loadBuiltin();
+try { const s = JSON.parse(localStorage.getItem("tb3sim.student") || "null"); if (s && s.name) { $("stuName").value = s.name; $("stuNr").value = s.nr || ""; setStudent(s.name, s.nr || ""); } } catch {}
+$("loading").remove();
+renderTopics();
+requestAnimationFrame(t => { lastReal = t; tick(t); });
+</script>
+</body>
+</html>

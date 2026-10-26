@@ -93,7 +93,7 @@
       }
     },
     "Teleop!drive": {
-      "topic": "/cmd_vel_web",
+      "topic": "/cmd_vel_lichtblick",
       "publishRate": 5,
       "upButton": {
         "field": "linear-x",

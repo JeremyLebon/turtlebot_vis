@@ -3,7 +3,7 @@ services:
     build:
       context: ./
       dockerfile: docker/Dockerfile
-    image: nobel86/turtlebot-rpi5-vis:zenoh  # ROS 2 Humble (robot 0.x); :jazzy = robot v1.x
+    image: nobel86/turtlebot-rpi5-vis:jazzy  # ROS 2 Jazzy (robot v1.0.0+); :zenoh = Humble (robot 0.x)
     stdin_open: true
     network_mode: host
     tty: true

@@ -1,0 +1,19 @@
+{
+  "name": "tb3-lite-sim",
+  "version": "2026.10.21",
+  "private": true,
+  "description": "TurtleBot3 3D-simulator in de browser (Rapier + three.js) met rosbridge-koppeling en automatische taaktests",
+  "scripts": {
+    "build": "python3 build.py && python3 build.py --artifact",
+    "test": "node tests/test_core.mjs",
+    "test:e2e": "node tests/e2e_browser.cjs"
+  },
+  "devDependencies": {
+    "@dimforge/rapier3d-compat": "0.14.0",
+    "three": "0.160.0",
+    "@xmldom/xmldom": "0.8.10",
+    "puppeteer-core": "23.10.4",
+    "@sparticuz/chromium": "131.0.1",
+    "ws": "8.18.0"
+  }
+}

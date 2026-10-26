@@ -2,3 +2,6 @@ ros2_ws/*
 !ros2_ws/src/
 ros2_ws/src/*
 !ros2_ws/src/.gitkeep
+htmlsim/dist/
+htmlsim/node_modules/
+__pycache__/

@@ -43,7 +43,7 @@ def http_ok(url, timeout=4.0):
         return False
 
 
-def ros_checks(sim):
+def ros_checks(sim, html=False):
     import rclpy
     from rclpy.node import Node
     from std_msgs.msg import String
@@ -73,6 +73,9 @@ def ros_checks(sim):
     node.destroy_node()
     rclpy.shutdown()
 
+    if html and "clock" not in got:
+        line(WARN, "Simulator", "nog geen /clock - open http://localhost:8080/sim/ in de browser (verbindt vanzelf)")
+        return
     if not topics:
         line(BAD, "Topics", "geen enkel topic zichtbaar (ROS_DOMAIN_ID=%s klopt?)" % os.environ.get("ROS_DOMAIN_ID"))
         return
@@ -81,7 +84,7 @@ def ros_checks(sim):
              "laptop (Humble <-> Jazzy)? Zie de versie op de webpagina van de robot." % len(topics))
         return
     if sim:
-        line(OK, "Simulatie", "Gazebo draait (/clock), %d topics" % len(topics))
+        line(OK, "Simulatie", "%s draait (/clock), %d topics" % ("HTML-simulator" if html else "Gazebo", len(topics)))
         return
 
     launch = json.loads(got["launch"].data) if "launch" in got else {}
@@ -109,7 +112,8 @@ def ros_checks(sim):
 
 def main():
     nr = os.environ.get("TB_NR")
-    sim = nr == "sim"
+    html = nr == "htmlsim"
+    sim = nr in ("sim", "htmlsim")
     print("Turtlebot-vis check (ROS 2 %s)" % os.environ.get("ROS_DISTRO", "?"))
 
     rmw = os.environ.get("RMW_IMPLEMENTATION", "")
@@ -123,14 +127,18 @@ def main():
         ms = port_open(host, 7447)
         if ms is None:
             line(BAD, "Zenoh-router", "%s:7447 NIET bereikbaar - %s" % (
-                host, "start de simulatie opnieuw: robot sim" if sim else
+                host, "start de simulatie opnieuw: robot %s" % nr if sim else
                 "laptop op de wifi TB-AP-%s? robot aan (melodie gehoord)?" % nr))
         else:
             line(OK, "Zenoh-router", "%s:7447 bereikbaar (%.0f ms)%s" % (host, ms, "" if sim else ", robot %s" % nr))
             if not sim:
                 line(OK if http_ok("http://%s:8080/" % host) else WARN, "Webpagina", "http://%s:8080" % host)
+            if html:
+                rb = port_open("127.0.0.1", 9090) is not None
+                line(OK if rb else BAD, "rosbridge", "ws://localhost:9090" + ("" if rb else
+                     " luistert niet - zie /tmp/vis_services/rosbridge.log (of: robot htmlsim)"))
             try:
-                ros_checks(sim)
+                ros_checks(sim, html)
             except Exception as exc:     # never a traceback for the student
                 line(BAD, "ROS", "controle mislukt: %s" % exc)
 
