@@ -2,7 +2,7 @@
 """Fake robot sensors for at home (no robot): publishes random values once per
 second on /sim/battery_state, /sim/temperature, /sim/humidity and /sim/gas_value.
 
-Run it in the turtlebot-vis container, after `robot sim`:
+Run it in the turtlebot-vis container, after `./start.sh --htmlsim`:
     python3 simulation_sensors.py
 """
 import random
