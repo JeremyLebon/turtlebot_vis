@@ -237,8 +237,8 @@ const T1_STEPS = [
   { id: "s3", d: 0.60, a: 0, label: "Paal terug naar 0,60 m: één keer \"free again\"", warn: 0, info: true, inv: "zero" },
   { id: "s4", d: 0.20, a: 0, label: "Opnieuw op 0,20 m: weer één waarschuwing", warn: 1, inv: "inf" },
   { id: "s5", d: 0.25, a: 90, label: "Paal links (90°): vrij, geen alarm", warn: 0, info: true, inv: "inf" },
-  { id: "s6", d: 0.25, a: 10, label: "Schuin vóór (10°): alarm", warn: 1, inv: "inf" },
-  { id: "s7", d: 0.25, a: 35, label: "Buiten de voorsector (35°): vrij, geen alarm", warn: 0, info: true, inv: "inf" },
+  { id: "s6", d: 0.25, a: 10, label: "Schuin vóór (10°, binnen ±15°): alarm", warn: 1, inv: "inf" },
+  { id: "s7", d: 0.25, a: 35, label: "Buiten de voorsector ±15° (35°): vrij, geen alarm", warn: 0, info: true, inv: "inf" },
 ];
 async function runObstacle(run, steps, evalStep) {
   prepareEmptyArena();
@@ -267,7 +267,7 @@ function cleanupObstacle(run) {
 const TASKS = {
   t1: {
     label: "Taak 1 · Obstakelalarm",
-    how: "Start obstacle_alarm.py in je container en klik dan op Test starten. De robot staat stil in de lege kamer; een paaltje (Ø 8 cm, als een stoelpoot) wordt op vaste plaatsen gezet. Het lidarbereik gaat tijdelijk naar 2 m, zodat elke scan ongeldige waarden bevat (eerst 0.0, daarna inf). Duurt ongeveer 25 s.",
+    how: "Voorsector: ±15° rond de voorkant (n uit angle_increment). Start obstacle_alarm.py in je container en klik dan op Test starten. De robot staat stil in de lege kamer; een paaltje (Ø 8 cm, als een stoelpoot) wordt op vaste plaatsen gezet. Het lidarbereik gaat tijdelijk naar 2 m, zodat elke scan ongeldige waarden bevat (eerst 0.0, daarna inf). Duurt ongeveer 25 s.",
     checks: [...T1_STEPS.map(s => ({ id: s.id, label: s.label })), { id: "edge", label: "Melding één keer per obstakel (flankdetectie)" }, { id: "filt", label: "Ongeldige metingen (0.0 en inf) gefilterd" }],
     async run(run) {
       run.state.repeat = false; run.state.filt = true;
