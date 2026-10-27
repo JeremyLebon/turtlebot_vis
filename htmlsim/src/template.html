@@ -50,6 +50,10 @@
       <span><i style="background:var(--lidar)"></i>/scan</span>
       <span id="legCloud" hidden><i style="background:var(--cloud)"></i>/points</span>
       <span id="legPlan" hidden><i style="background:var(--plan)"></i>/plan</span>
+      <span class="legField" data-kind="gas" hidden><i style="background:#6fdc8c"></i>gasbron</span>
+      <span class="legField" data-kind="heat" hidden><i style="background:#ff7043"></i>warmtebron</span>
+      <span class="legField" data-kind="humidity" hidden><i style="background:#4fc3f7"></i>vochtbron</span>
+      <span class="legField" data-kind="light" hidden><i style="background:#ffe066"></i>lamp</span>
     </div>
   </section>
 
@@ -92,9 +96,18 @@
           <div class="row"><button class="ghost" id="batSwap">Batterij wisselen</button><button class="ghost" id="sw1">SW1</button><button class="ghost" id="sw2">SW2</button></div>
           <p class="hint">Publiceert <code>/battery_state</code> en <code>/sensor_state</code> (encoders, knoppen SW1/SW2 ingedrukt houden) en beantwoordt de service <code>/sound</code> met een piep. Onder 11,0 V vallen de motoren uit, zoals op de echte robot.</p>
           <p class="msg" id="sensMsg"></p>
-          <label class="chk"><input type="checkbox" id="fieldsOn" checked> Omgevingssensoren publiceren (<code>/sim/gas_value</code>, <code>/sim/temperature</code>, <code>/sim/humidity</code>, <code>/sim/illuminance</code>)</label>
+          <label class="chk"><input type="checkbox" id="fieldsOn" checked> Omgevingssensoren publiceren</label>
+          <p class="hint"><code>/sim/gas_value</code> · <code>/sim/temperature</code> · <code>/sim/humidity</code> · <code>/sim/illuminance</code>: hangen af van de plaats van de robot.</p>
           <label class="chk"><input type="checkbox" id="fieldsShow"> Bronnen tonen in 3D</label>
-          <label class="chk"><input type="checkbox" id="hudSens" checked> Meetwaarden tonen in de HUD (linksboven)</label>
+          <div class="hudsel" role="group" aria-label="Meetwaarden in de HUD (linksboven)">
+            <span class="hint">In de HUD (linksboven):</span>
+            <label class="chk"><input type="checkbox" class="hudOpt" data-k="bat" checked> batterij</label>
+            <label class="chk"><input type="checkbox" class="hudOpt" data-k="enc" checked> encoders en knop</label>
+            <label class="chk"><input type="checkbox" class="hudOpt" data-k="gas" checked> gas</label>
+            <label class="chk"><input type="checkbox" class="hudOpt" data-k="temp" checked> temperatuur</label>
+            <label class="chk"><input type="checkbox" class="hudOpt" data-k="hum" checked> vochtigheid</label>
+            <label class="chk"><input type="checkbox" class="hudOpt" data-k="lux" checked> licht</label>
+          </div>
           <p class="msg" id="fieldMsg"></p>
         </section>
       </details>
@@ -1077,12 +1090,17 @@ const nextS = { state: 0, bat: 0, field: 0 };
 const sensVals = { gas: null, temp: null, hum: null, lux: null };
 // regels voor de HUD (zelfde waarden als op de topics)
 function sensorHud() {
-  if (!$("hudSens").checked) return "";
+  const on = k => document.querySelector(`.hudOpt[data-k="${k}"]`).checked;
   const v = batVolt(), pc = Math.round(bat.q * 100), low = v < 11.2 || pc < 50;
-  let t = `\n${low ? '<span class="bump">' : ""}batterij   ${v.toFixed(2)} V  ${pc} %${bat.dead ? "  LEEG: motoren uit" : ""}${low ? "</span>" : ""}`;
-  t += `\nencoders   L ${Math.round(wheelPos("L") / (2 * Math.PI) * TICKS)}  R ${Math.round(wheelPos("R") / (2 * Math.PI) * TICKS)}  knop ${(btn.sw1 ? 1 : 0) | (btn.sw2 ? 2 : 0)}`;
-  if ($("fieldsOn").checked && sensVals.gas != null)
-    t += `\nomgeving   gas ${sensVals.gas.toFixed(0)} ppm · ${sensVals.temp.toFixed(1)} °C · ${(sensVals.hum * 100).toFixed(0)} % · ${sensVals.lux.toFixed(0)} lux`;
+  let t = "";
+  if (on("bat")) t += `\n${low ? '<span class="bump">' : ""}batterij   ${v.toFixed(2)} V  ${pc} %${bat.dead ? "  LEEG: motoren uit" : ""}${low ? "</span>" : ""}`;
+  if (on("enc")) t += `\nencoders   L ${Math.round(wheelPos("L") / (2 * Math.PI) * TICKS)}  R ${Math.round(wheelPos("R") / (2 * Math.PI) * TICKS)}  knop ${(btn.sw1 ? 1 : 0) | (btn.sw2 ? 2 : 0)}`;
+  if ($("fieldsOn").checked && sensVals.gas != null) {
+    if (on("gas")) t += `\ngas        ${sensVals.gas.toFixed(0)} ppm`;
+    if (on("temp")) t += `\ntemp       ${sensVals.temp.toFixed(1)} °C`;
+    if (on("hum")) t += `\nvochtigh.  ${(sensVals.hum * 100).toFixed(0)} %`;
+    if (on("lux")) t += `\nlicht      ${sensVals.lux.toFixed(0)} lux`;
+  }
   return t;
 }
 function sensorsStep() {
@@ -1117,7 +1135,11 @@ function sensorsStep() {
 }
 // velden zichtbaar (standaard uit: studenten moeten meten)
 const fieldG = new THREE.Group(); fieldG.visible = false; scene.add(fieldG);
-const FIELD_COL = { gas: 0x6fdc8c, heat: 0xff7043, light: 0xffe066 };
+const FIELD_COL = { gas: 0x6fdc8c, heat: 0xff7043, humidity: 0x4fc3f7, light: 0xffe066 };
+function updateFieldLegend() {   // enkel de soorten die in deze wereld voorkomen, en enkel als de bronnen zichtbaar zijn
+  const kinds = new Set((sim.worldInfo.fields || []).map(f => f.kind));
+  document.querySelectorAll(".legField").forEach(el => { el.hidden = !(fieldG.visible && kinds.has(el.dataset.kind)); });
+}
 function buildFieldMeshes() {
   fieldG.clear();
   for (const f of sim.worldInfo.fields || []) {
@@ -1127,8 +1149,13 @@ function buildFieldMeshes() {
   }
   const n = (sim.worldInfo.fields || []).length;
   $("fieldMsg").textContent = n ? `${n} bron(nen) in deze wereld.` : "Geen bronnen in deze wereld: vaste basiswaarden.";
+  updateFieldLegend();
 }
-$("fieldsShow").onchange = () => { fieldG.visible = $("fieldsShow").checked; };
+document.querySelectorAll(".hudOpt").forEach(cb => {   // keuze per browser onthouden
+  try { const v = localStorage.getItem("tb3sim.hud." + cb.dataset.k); if (v !== null) cb.checked = v === "1"; } catch {}
+  cb.onchange = () => { try { localStorage.setItem("tb3sim.hud." + cb.dataset.k, cb.checked ? "1" : "0"); } catch {} };
+});
+$("fieldsShow").onchange = () => { fieldG.visible = $("fieldsShow").checked; updateFieldLegend(); };
 buildFieldMeshes();
 
 /* ================= invoer ================= */

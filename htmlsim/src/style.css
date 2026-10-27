@@ -140,3 +140,5 @@ button:disabled{opacity:.45;cursor:default}
 .testov .ovlog .warn{color:#ff8a73}
 
 .pad.testing{display:none}
+.hudsel{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center}
+.hudsel .hint{flex-basis:100%}
