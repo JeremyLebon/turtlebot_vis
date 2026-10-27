@@ -75,6 +75,22 @@
         },
         "/local_costmap/costmap": {
           "visible": false
+        },
+        "/studio_script/odom_pose": {
+          "visible": true,
+          "type": "arrow",
+          "arrowScale": [
+            0.25,
+            0.05,
+            0.05
+          ],
+          "color": "#ff9500ff"
+        },
+        "/studio_script/odom_path": {
+          "visible": true,
+          "type": "line",
+          "lineWidth": 0.02,
+          "color": "#ff9500ff"
         }
       },
       "publish": {
@@ -111,10 +127,47 @@
         "field": "angular-z",
         "value": -0.5
       }
+    },
+    "Gauge!battery": {
+      "path": "/studio_script/battery.percentage",
+      "minValue": 0,
+      "maxValue": 100,
+      "colorMode": "colormap",
+      "colorMap": "red-yellow-green",
+      "reverse": false,
+      "lichtblickPanelTitle": "Batterij %"
+    },
+    "Indicator!battery": {
+      "path": "/studio_script/battery.low",
+      "style": "background",
+      "fallbackColor": "#34c759",
+      "fallbackLabel": "Batterij OK",
+      "rules": [
+        {
+          "operator": "=",
+          "rawValue": "true",
+          "color": "#ff3b30",
+          "label": "Batterij laag (< 11,2 V of < 50 %)"
+        }
+      ],
+      "lichtblickPanelTitle": "Batterij"
     }
   },
   "globalVariables": {},
-  "userNodes": {},
+  "userNodes": {
+    "tb-odom-pose": {
+      "name": "odom_pose",
+      "sourceCode": "import { Input } from \"./types\";\nimport { PoseInFrame } from \"@foxglove/schemas\";\nexport const inputs = [\"/odom\"];\nexport const output = \"/studio_script/odom_pose\";\nexport default function script(event: Input<\"/odom\">): PoseInFrame {\n  const m = event.message;\n  const st = m.header.stamp as { sec: number; nanosec?: number; nsec?: number };\n  return { timestamp: { sec: st.sec, nsec: st.nanosec ?? st.nsec ?? 0 }, frame_id: m.header.frame_id, pose: m.pose.pose };\n}\n"
+    },
+    "tb-odom-path": {
+      "name": "odom_path",
+      "sourceCode": "import { Input } from \"./types\";\nimport { PosesInFrame, Pose } from \"@foxglove/schemas\";\nexport const inputs = [\"/odom\"];\nexport const output = \"/studio_script/odom_path\";\nconst MIN_STEP = 0.02, MAX_POINTS = 5000;\nconst poses: Pose[] = [];\nexport default function script(event: Input<\"/odom\">): PosesInFrame | undefined {\n  const m = event.message, p = m.pose.pose, last = poses[poses.length - 1];\n  if (last && Math.hypot(p.position.x - last.position.x, p.position.y - last.position.y) < MIN_STEP) return undefined;\n  poses.push(p); if (poses.length > MAX_POINTS) poses.shift();\n  const st = m.header.stamp as { sec: number; nanosec?: number; nsec?: number };\n  return { timestamp: { sec: st.sec, nsec: st.nanosec ?? st.nsec ?? 0 }, frame_id: m.header.frame_id, poses };\n}\n"
+    },
+    "tb-battery": {
+      "name": "battery",
+      "sourceCode": "import { Input } from \"./types\";\nexport const inputs = [\"/battery_state\"];\nexport const output = \"/studio_script/battery\";\ntype Output = { voltage: number; percentage: number; low: boolean };\nexport default function script(event: Input<\"/battery_state\">): Output {\n  const m = event.message;\n  const pct = m.percentage <= 1 ? m.percentage * 100 : m.percentage; // 0..1 of 0..100\n  return { voltage: Math.round(m.voltage * 100) / 100, percentage: Math.round(pct), low: m.voltage < 11.2 || pct < 50 };\n}\n"
+    }
+  },
   "playbackConfig": {
     "speed": 1
   },
@@ -124,8 +177,18 @@
     "second": {
       "direction": "column",
       "first": "Image!camera",
-      "second": "Teleop!drive",
-      "splitPercentage": 60
+      "second": {
+        "direction": "column",
+        "first": {
+          "direction": "row",
+          "first": "Gauge!battery",
+          "second": "Indicator!battery",
+          "splitPercentage": 50
+        },
+        "second": "Teleop!drive",
+        "splitPercentage": 35
+      },
+      "splitPercentage": 45
     },
     "splitPercentage": 68
   }

@@ -97,8 +97,9 @@ robot() {
     robot_reachable "$nr" || echo "LET OP: robot $nr is (nog) niet bereikbaar op $(robot_host "$nr"):7447."
     robot_write_env "$nr"
     _robot_refresh
-    # foxglove_bridge (Lichtblick) herstarten met de nieuwe robot.
+    # foxglove_bridge (Lichtblick) en de ros2-daemon herstarten met de nieuwe robot.
     pkill -f "foxglove_bridge_launch.xml" 2>/dev/null
+    ros2 daemon stop >/dev/null 2>&1
     return 0
 }
 
@@ -132,7 +133,8 @@ _robot_refresh() {
     cur=$(cat "$ROBOT_ENV" 2>/dev/null)
     [ -z "$cur" ] || [ "$cur" = "$_robot_seen" ] && return
     source "$ROBOT_ENV"
-    [ -n "$_robot_seen" ] && echo "Robotkeuze gewijzigd:"
+    # andere robot: de ros2-daemon kent nog de oude (lege `ros2 topic list`)
+    [ -n "$_robot_seen" ] && { echo "Robotkeuze gewijzigd:"; ros2 daemon stop >/dev/null 2>&1; }
     _robot_seen=$cur
     _robot_banner
 }

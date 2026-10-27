@@ -20,6 +20,11 @@
 LOG=/tmp/vis_services
 mkdir -p "$LOG"
 
+# Een ros2-daemon (poort 11511 + ROS_DOMAIN_ID, gedeeld via network_mode: host)
+# onthoudt de omgeving van bij zijn start: dan blijft `ros2 topic list` leeg.
+# Stoppen; het volgende ros2-commando start een verse.
+(source /opt/ros/${ROS_DISTRO:-jazzy}/setup.bash && ros2 daemon stop) >/dev/null 2>&1
+
 # Zoals python3 -m http.server, maar met Cache-Control: no-cache: na een nieuwe
 # image moet de browser de nieuwe index.html laden (layout-reset, Lichtblick-update).
 python3 - "${LICHTBLICK_PORT:-8080}" > "$LOG/lichtblick.log" 2>&1 <<'PY' &
