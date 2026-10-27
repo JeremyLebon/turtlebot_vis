@@ -44,7 +44,7 @@ wss.on('connection', ws => {
         log('obstacle_alarm', 20, `front ${sec([...r.slice(0, k), ...r.slice(-k)])} m | left ${sec(r.slice(q - k, q + k))} m | behind ${sec(r.slice(2 * q - k, 2 * q + k))} m | right ${sec(r.slice(3 * q - k, 3 * q + k))} m | closest at ${ang.toFixed(0)}°`);
       }
     }
-    if (m.topic === '/sim/battery_state') {
+    if (m.topic === '/battery_state') {
       const v = m.msg.voltage, p = m.msg.percentage;
       log('battery_warning', 20, `voltage ${v.toFixed(2)} V, percentage ${(p * 100).toFixed(0)} %`);
       if (BAD ? p * 100 < 50 * 100 : (v < 11.2 || p < 0.5)) log('battery_warning', 30, 'battery low!');

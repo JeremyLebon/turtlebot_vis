@@ -22,7 +22,7 @@ Je eigen nodes draai je in de container (`./connect.sh`), zoals bij de echte rob
 3. In de pagina op **Verbinden** klikken. `/cmd_vel` staat standaard op **automatisch**: de simulator herkent via rosapi
    of je script `Twist` (Humble, labo-robot) of `TwistStamped` (Jazzy) publiceert.
 4. **Klaar voor de echte robot?** controleert wat op de labo-robot (Humble, Zenoh) anders is: type van `/cmd_vel`,
-   nodes die simulator-topics lezen (`/ground_truth`, `/sim/battery_state`, `/student_id`) en gebruik van `/clock`.
+   nodes die simulator-topics lezen (`/ground_truth`, `/student_id`) en gebruik van `/clock`.
 
 Een gepubliceerde versie (artifact, `dist/artifact.html`) werkt ook, maar dan blokkeert de browser de verbinding naar
 `localhost`: rijden, werelden, URDF laden en opnemen kunnen, ROS-koppeling niet.
@@ -37,7 +37,7 @@ Een gepubliceerde versie (artifact, `dist/artifact.html`) werkt ook, maar dan bl
 | ROS | `/clock` (sim-tijd), `/tf`, `/tf_static`, `/ground_truth`, `/student_id`; leest `/cmd_vel`, `/joint_commands`, `/rosout`, `/map`, costmaps, `/plan`, `/local_plan`, `/robot_description` |
 | Nav2/SLAM | kaart en costmaps op de vloer via `map → odom`, Startpositie (`/initialpose`) en Doel (`/goal_pose`) aanklikken |
 | Werelden | TurtleBot3-wereld, Fabriekshal (16 × 12 m), Lege kamer; eigen werelden als JSON (zie `worlds/`) |
-| Labo-robot | `/cmd_vel`-type automatisch herkend (Twist/TwistStamped) met melding bij een verkeerd type; batterij-topic kiesbaar (`/sim/battery_state` of `/battery_state`); controle "Klaar voor de echte robot?" |
+| Labo-robot | `/cmd_vel`-type automatisch herkend (Twist/TwistStamped) met melding bij een verkeerd type; batterij op `/battery_state` zoals de labo-robot; controle "Klaar voor de echte robot?" |
 | Opdrachten | automatische tests voor taak 1 (obstakelalarm + 4 sectoren), taak 2 (batterij), taak 3 (90° + vierkant); proefrapport met controlecode, opname met testpaneel |
 | Identificatie | student + code (SHA-256 over naam/nr/wereld/datum), watermerk op vloer en camerabeeld |
 

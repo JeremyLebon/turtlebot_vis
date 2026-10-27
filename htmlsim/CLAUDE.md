@@ -42,7 +42,7 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
 - **Werelden:** data-gedreven (`loadWorld(def)`), elementen `wall/box/cyl/rack/conveyor/pallet/movable/mark`.
   Dozen 35 cm hoog: lidar van de Burger zit op 18 cm, lagere objecten scheert de scan voorbij.
 - **Opdrachten (tasks.js):** log van de studentnode via `/rosout` (rcl_interfaces/Log), match op berichttekst
-  (niet de nodenaam: "battery_warning" bevat "warn"). Taak 2 publiceert zelf `/sim/battery_state` en controleert via
+  (niet de nodenaam: "battery_warning" bevat "warn"). Taak 2 publiceert zelf `/battery_state` (het paneel pauzeert dan) en controleert via
   `/rosapi/publishers` dat er geen andere publisher is. Taak 3 meet met de grondwaarheid; vierkant: hoeken = stukken met
   yaw-verandering, zijden = afstand tussen draaipunten (robuust voor haperende commando's).
 - **/cmd_vel-type (tasks.js, onderaan):** rosbridge abonneert een topic met één type; een ander type komt in ROS 2
@@ -52,8 +52,8 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
   Poll elke 0,7 s (wandtijd). Handmatig type: melding als het herkende type afwijkt of er na 4 s niets binnenkomt.
   Zonder rosapi: na 3 mislukte calls TwistStamped. `cmdState.lastMsg` wordt gezet in `ws.onmessage`.
 - **Labo-robot:** de echte robots draaien Jazzy over Zenoh (`/cmd_vel` = TwistStamped, batterij op `/battery_state`); tot de overschakeling nog Humble (Twist).
-  Taak 2 gebruikt `batTopic()` (select `#batTopic`, standaard `/sim/battery_state` zoals in de GitBook-opdracht).
-  `compatCheck()` meldt nodes die `/ground_truth`, `/sim/battery_state`, `/student_id` of `/clock` lezen.
+  Taak 2 gebruikt `batTopic()` = `/battery_state` (28-10: `/sim/battery_state` en `homework/simulation_sensors.py` zijn weg).
+  `compatCheck()` meldt nodes die `/ground_truth`, `/student_id` of `/clock` lezen.
 - **Rapport:** `{rapport, inhoud, controle}`; `controle = sha256(SALT + "|" + inhoud)[:16]`, `inhoud` is de exacte
   JSON-string (zodat Python dezelfde bytes hasht). Opname-SHA-256 staat in het rapport. SALT `tb3-lite-sim/vives`
   staat ook in `tools/controleer_rapporten.py`; beide samen aanpassen. SHA-256 heeft een JS-terugval voor
@@ -63,8 +63,8 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
   `advertise_service` (piep met WebAudio). Onder 11,0 V: `currentCmd()` geeft 0 (motoren uit) en piepen. Tijdens Taak 2 met
   batterij-topic `/battery_state` publiceert de simulator die niet zelf. Geen `NaN` in berichten: JSON maakt er `null` van en
   rosbridge weigert het bericht.
-- **Velden in de wereld:** `fields: [{kind: gas|heat|light, x, y, strength, sigma}]` in de wereld-JSON (ook in `WORLDS` in core.js);
-  som van Gauss-bellen + basiswaarde (400 ppm, 20 °C, 150 lux) + ruis op `/sim/gas_value`, `/sim/temperature`, `/sim/illuminance`
+- **Velden in de wereld:** `fields: [{kind: gas|heat|humidity|light, x, y, strength, sigma}]` in de wereld-JSON (ook in `WORLDS` in core.js);
+  som van Gauss-bellen + basiswaarde (400 ppm, 20 °C, 150 lux) + ruis op `/sim/gas_value`, `/sim/temperature`, `/sim/humidity`, `/sim/illuminance`
   (1 Hz, plaats = grondwaarheid). Bronnen in 3D standaard verborgen.
 - **Geen toestelherkenning:** toestel-ID en browser-/computervingerafdruk zijn eruit (GDPR, 23-10); niet terugzetten.
 - **turtlebot-vis:** `build.py --local` → `dist/index.html` met three.js en Rapier uit `./vendor` (Dockerfile van turtlebot-vis), geserveerd op `http://localhost:8080/sim/`; daar verbindt de pagina vanzelf (`robot htmlsim` start rosbridge).

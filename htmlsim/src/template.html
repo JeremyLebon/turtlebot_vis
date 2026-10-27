@@ -91,7 +91,7 @@
           <div class="row"><button class="ghost" id="batSwap">Batterij wisselen</button><button class="ghost" id="sw1">SW1</button><button class="ghost" id="sw2">SW2</button></div>
           <p class="hint">Publiceert <code>/battery_state</code> en <code>/sensor_state</code> (encoders, knoppen SW1/SW2 ingedrukt houden) en beantwoordt de service <code>/sound</code> met een piep. Onder 11,0 V vallen de motoren uit, zoals op de echte robot.</p>
           <p class="msg" id="sensMsg"></p>
-          <label class="chk"><input type="checkbox" id="fieldsOn" checked> Omgevingssensoren publiceren (<code>/sim/gas_value</code>, <code>/sim/temperature</code>, <code>/sim/illuminance</code>)</label>
+          <label class="chk"><input type="checkbox" id="fieldsOn" checked> Omgevingssensoren publiceren (<code>/sim/gas_value</code>, <code>/sim/temperature</code>, <code>/sim/humidity</code>, <code>/sim/illuminance</code>)</label>
           <label class="chk"><input type="checkbox" id="fieldsShow"> Bronnen tonen in 3D</label>
           <p class="msg" id="fieldMsg"></p>
         </section>
@@ -169,12 +169,6 @@
         </select>
       </div>
       <p class="msg" id="cmdInfo">Type wordt herkend zodra je script op /cmd_vel publiceert.</p>
-      <div class="row">
-        <select id="batTopic" aria-label="Topic van de batterij">
-          <option value="/sim/battery_state" selected>batterij: /sim/battery_state (opdracht)</option>
-          <option value="/battery_state">batterij: /battery_state (echte TurtleBot3)</option>
-        </select>
-      </div>
       <label class="chk"><input type="checkbox" id="pubModelTF" checked> tf van het robotmodel publiceren</label>
       <p class="hint">Zet uit als je <code>robot_state_publisher</code> draait. Die maakt dan zelf de frames uit de URDF en <code>/joint_states</code>.</p>
     </section>
@@ -750,7 +744,7 @@ const OUT = {
   "/ground_truth": "nav_msgs/msg/Odometry", "/goal_pose": "geometry_msgs/msg/PoseStamped", "/initialpose": "geometry_msgs/msg/PoseWithCovarianceStamped",
   "/student_id": "std_msgs/msg/String",
   "/sensor_state": "turtlebot3_msgs/msg/SensorState", "/battery_state": "sensor_msgs/msg/BatteryState",
-  "/sim/gas_value": "std_msgs/msg/Float32", "/sim/temperature": "sensor_msgs/msg/Temperature", "/sim/illuminance": "sensor_msgs/msg/Illuminance",
+  "/sim/gas_value": "std_msgs/msg/Float32", "/sim/temperature": "sensor_msgs/msg/Temperature", "/sim/humidity": "sensor_msgs/msg/RelativeHumidity", "/sim/illuminance": "sensor_msgs/msg/Illuminance",
 };
 const IN = {   // topic: [type, throttle ms]
   "/cmd_vel": ["", 0], "/joint_commands": ["sensor_msgs/msg/JointState", 0], "/map": ["nav_msgs/msg/OccupancyGrid", 1000],
@@ -1005,8 +999,9 @@ function renderTopics() {
 /* ================= sensoren zoals de echte TurtleBot3 (A) en velden in de wereld (C) ================= */
 // A: /sensor_state (encoders uit de wielhoeken, knoppen SW1/SW2), /battery_state (3S-LiPo, zakt met de
 // gereden afstand), service /sound (piep in de browser). Onder 11,0 V vallen de motoren uit en piept de
-// robot, zoals de OpenCR. C: /sim/gas_value, /sim/temperature, /sim/illuminance volgens `fields` in de
-// wereld-JSON ({kind: gas|heat|light, x, y, strength, sigma}), afhankelijk van de plaats van de robot.
+// robot, zoals de OpenCR. C: /sim/gas_value, /sim/temperature, /sim/humidity, /sim/illuminance volgens
+// `fields` in de wereld-JSON ({kind: gas|heat|humidity|light, x, y, strength, sigma}), afhankelijk van de
+// plaats van de robot. Vervangt homework/simulation_sensors.py (28-10).
 const TICKS = 4096;
 const bat = { q: 1, dist: 0, lastL: null, lastR: null, dead: false, beepAt: 0 };
 const btn = { sw1: false, sw2: false };
@@ -1084,7 +1079,7 @@ function sensorsStep() {
     left_encoder: Math.round(wheelPos("L") / (2 * Math.PI) * TICKS) | 0, right_encoder: Math.round(wheelPos("R") / (2 * Math.PI) * TICKS) | 0, battery: volt });
   if (t >= nextS.bat) {
     nextS.bat = t + 1;
-    const taskOwns = activeRun && activeRun.id === "t2" && batTopic() === "/battery_state";   // Taak 2 publiceert dan zelf
+    const taskOwns = activeRun && activeRun.def.id === "t2";   // Taak 2 publiceert dan zelf testwaarden
     if (!taskOwns) pub("/battery_state", { header: { stamp: st, frame_id: "battery" }, voltage: volt, temperature: 25, current: -0.5,
       design_capacity: 1.8, percentage: +bat.q.toFixed(3), power_supply_status: 2, power_supply_health: 1,
       power_supply_technology: 3, present: true, cell_voltage: [], cell_temperature: [], location: "", serial_number: "" });
@@ -1095,6 +1090,7 @@ function sensorsStep() {
     const p = sim.truthPose();
     pub("/sim/gas_value", { data: +(400 + fieldValue("gas", p.x, p.y) + 8 * gauss()).toFixed(1) });
     pub("/sim/temperature", { header: { stamp: st, frame_id: "base_link" }, temperature: +(20 + fieldValue("heat", p.x, p.y) + 0.2 * gauss()).toFixed(2), variance: 0.04 });
+    pub("/sim/humidity", { header: { stamp: st, frame_id: "base_link" }, relative_humidity: +Math.min(1, Math.max(0, 0.45 + fieldValue("humidity", p.x, p.y) + 0.01 * gauss())).toFixed(3), variance: 0.0001 });
     pub("/sim/illuminance", { header: { stamp: st, frame_id: "base_link" }, illuminance: +(150 + fieldValue("light", p.x, p.y) + 5 * gauss()).toFixed(1), variance: 25 });
   }
 }

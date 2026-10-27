@@ -332,7 +332,7 @@ const TASKS = {
   },
   t2: {
     label: "Taak 2 · Batterijwaarschuwing",
-    get how() { return "Stop simulation_sensors.py; de simulator publiceert nu zelf " + batTopic() + ", met waarden net boven en onder de drempels (11,2 V en 50 %). Start je script en klik op Test starten. Gebruik self.get_logger().info() en .warn() i.p.v. print(): enkel die zijn zichtbaar via /rosout. Duurt ongeveer 15 s."; },
+    get how() { return "Tijdens de test publiceert de simulator zelf " + batTopic() + " met waarden net boven en onder de drempels (11,2 V en 50 %). Start je script en klik op Test starten. Gebruik self.get_logger().info() en .warn() i.p.v. print(): enkel die zijn zichtbaar via /rosout. Duurt ongeveer 15 s."; },
     checks: [
       { id: "pub", label: "Geen andere publisher op het batterij-topic" }, { id: "print", label: "Spanning en percentage van elk bericht gelogd" },
       { id: "volt", label: "Waarschuwing onder 11,2 V (ook net eronder: 11,15 V)" }, { id: "pct", label: "Waarschuwing onder 50 % (ook net eronder: 49 %)" },
@@ -343,7 +343,7 @@ const TASKS = {
       const BT = batTopic(); run.state.bt = BT;
       const info = await callService("/rosapi/publishers", { topic: BT });
       const others = (info?.publishers || []).filter(n => !/rosbridge/.test(n));
-      run.check("pub", !others.length, info ? (others.length ? "nog actief: " + others.join(", ") + ". Stop simulation_sensors.py" : "") : "rosapi niet bereikbaar, niet gecontroleerd");
+      run.check("pub", !others.length, info ? (others.length ? "nog actief: " + others.join(", ") + ". Stop je eigen publisher op " + BT : "") : "rosapi niet bereikbaar, niet gecontroleerd");
       if (others.length) { finishRun("andere publisher actief"); return; }
       send({ op: "advertise", topic: BT, type: "sensor_msgs/msg/BatteryState" });
       run.state.adv = true;
@@ -372,7 +372,7 @@ const TASKS = {
       const wrong = none.filter(x => x.warned);
       run.check("none", !wrong.length, wrong.map(x => "onterecht bij " + show(x)).join("; ") + (wrong.some(x => x.p >= 0.9) ? " — percentage is 0–1, niet 0–100" : ""));
     },
-    cleanup(run) { if (run.state.adv) send({ op: "unadvertise", topic: run.state.bt || batTopic() }); },
+    cleanup(run) { if (run.state.adv && !OUT[run.state.bt]) send({ op: "unadvertise", topic: run.state.bt }); },   // /battery_state blijft voor het sensorpaneel
   },
   t3: {
     label: "Taak 3 · Exact 90° draaien",
@@ -543,7 +543,7 @@ const CMD_TYPES = { "geometry_msgs/msg/Twist": "Twist", "geometry_msgs/msg/Twist
 const cmdState = { subscribed: "", detected: "", pubs: [], lastMsg: 0, since: 0, timer: null, busy: false, rosapi: true, fails: 0 };
 const normType = t => { const m = String(t || "").match(/^([\w]+)\/(?:msg\/)?([\w]+)$/); return m ? `${m[1]}/msg/${m[2]}` : ""; };
 const shortType = t => CMD_TYPES[t] || t || "?";
-const batTopic = () => $("batTopic").value;
+const batTopic = () => "/battery_state";   // zelfde topic als de labo-robot (28-10: /sim/battery_state is weg)
 const otherNodes = list => (list || []).filter(n => !/rosbridge|rosapi/.test(n));
 function cmdHint() {
   const sub = cmdState.subscribed;
@@ -612,7 +612,7 @@ function cmdStop() { if (cmdState.timer) clearInterval(cmdState.timer); cmdState
 $("cmdType").onchange = () => { if (live()) { unsubscribeCmd(); cmdStart(); } else showCmdInfo($("cmdType").value === "auto" ? "Type wordt herkend zodra je script op /cmd_vel publiceert." : `Luistert als ${shortType($("cmdType").value)} na het verbinden.`); };
 
 /* ---- "Klaar voor de echte robot?": wat werkt in de simulator maar niet op de labo-robot (Jazzy, Zenoh) ---- */
-const SIM_ONLY = { "/ground_truth": "bestaat alleen in de simulator (echte pose)", "/sim/battery_state": "op de echte TurtleBot3 heet dit /battery_state", "/student_id": "bestaat alleen in de simulator" };
+const SIM_ONLY = { "/ground_truth": "bestaat alleen in de simulator (echte pose)", "/student_id": "bestaat alleen in de simulator" };
 async function compatCheck() {
   const out = $("compatOut"); out.hidden = false;
   const items = [];
@@ -635,9 +635,7 @@ async function compatCheck() {
   }
   const ck = await callService("/rosapi/subscribers", { topic: "/clock" }), ckSubs = otherNodes(ck?.subscribers).filter(n => !SYSTEM_NODES.test(n.replace(/^\//, "")));
   if (ckSubs.length) add("", `${ckSubs.join(", ")} gebruikt simulatietijd (/clock)`, "Op de echte robot use_sim_time op false zetten.");
-  if (batTopic() === "/sim/battery_state") add("", "Batterij-topic staat op /sim/battery_state", "Op de echte TurtleBot3 is het /battery_state. Maak de topicnaam een parameter in je script.");
   if (!items.some(x => x.includes('data-s="fail"'))) add("ok", "Geen problemen gevonden voor de labo-robot", "Gecontroleerd: type van /cmd_vel en simulator-topics die je nodes lezen.");
   render();
 }
 $("compatBtn").onclick = compatCheck;
-$("batTopic").onchange = () => { if (typeof taskHow === "function") taskHow(); };
