@@ -58,6 +58,14 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
   JSON-string (zodat Python dezelfde bytes hasht). Opname-SHA-256 staat in het rapport. SALT `tb3-lite-sim/vives`
   staat ook in `tools/controleer_rapporten.py`; beide samen aanpassen. SHA-256 heeft een JS-terugval voor
   pagina's buiten een secure context.
+- **Sensoren zoals de echte TB3 (template, na `/*__TASKS__*/`):** `/sensor_state` 10 Hz (encoders = wielhoek × 4096/2π, knoppen SW1/SW2),
+  `/battery_state` 1 Hz (3S-LiPo-curve `LIPO`, zakt met de gereden afstand of met de hand), service `/sound` via
+  `advertise_service` (piep met WebAudio). Onder 11,0 V: `currentCmd()` geeft 0 (motoren uit) en piepen. Tijdens Taak 2 met
+  batterij-topic `/battery_state` publiceert de simulator die niet zelf. Geen `NaN` in berichten: JSON maakt er `null` van en
+  rosbridge weigert het bericht.
+- **Velden in de wereld:** `fields: [{kind: gas|heat|light, x, y, strength, sigma}]` in de wereld-JSON (ook in `WORLDS` in core.js);
+  som van Gauss-bellen + basiswaarde (400 ppm, 20 °C, 150 lux) + ruis op `/sim/gas_value`, `/sim/temperature`, `/sim/illuminance`
+  (1 Hz, plaats = grondwaarheid). Bronnen in 3D standaard verborgen.
 - **Geen toestelherkenning:** toestel-ID en browser-/computervingerafdruk zijn eruit (GDPR, 23-10); niet terugzetten.
 - **turtlebot-vis:** `build.py --local` → `dist/index.html` met three.js en Rapier uit `./vendor` (Dockerfile van turtlebot-vis), geserveerd op `http://localhost:8080/sim/`; daar verbindt de pagina vanzelf (`robot htmlsim` start rosbridge).
 - **Opname:** samengesteld canvas (WebGL + HUD + camera + testpaneel + balk) via `captureStream`, of `getDisplayMedia`

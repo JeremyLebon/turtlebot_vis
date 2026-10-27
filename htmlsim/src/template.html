@@ -80,6 +80,23 @@
       <ul class="checks" id="compatOut" hidden></ul>
       </section>
       <details>
+        <summary>Sensoren (zoals de echte TurtleBot3)</summary>
+        <section>
+          <div class="grid2"><label for="batMode">Batterij</label><select id="batMode">
+            <option value="dist" selected>zakt met de gereden afstand</option>
+            <option value="slider">met de hand (schuifregelaar)</option></select></div>
+          <div class="grid2" id="batFullRow"><label for="batFull">Vol → leeg na (m)</label><input type="number" id="batFull" min="1" step="10" value="300"></div>
+          <div class="slider" id="batSliderRow" hidden><label for="batSlider">Lading (%)</label><output></output><input type="range" id="batSlider" min="0" max="100" step="1" value="100"></div>
+          <p class="msg" id="batRead">–</p>
+          <div class="row"><button class="ghost" id="batSwap">Batterij wisselen</button><button class="ghost" id="sw1">SW1</button><button class="ghost" id="sw2">SW2</button></div>
+          <p class="hint">Publiceert <code>/battery_state</code> en <code>/sensor_state</code> (encoders, knoppen SW1/SW2 ingedrukt houden) en beantwoordt de service <code>/sound</code> met een piep. Onder 11,0 V vallen de motoren uit, zoals op de echte robot.</p>
+          <p class="msg" id="sensMsg"></p>
+          <label class="chk"><input type="checkbox" id="fieldsOn" checked> Omgevingssensoren publiceren (<code>/sim/gas_value</code>, <code>/sim/temperature</code>, <code>/sim/illuminance</code>)</label>
+          <label class="chk"><input type="checkbox" id="fieldsShow"> Bronnen tonen in 3D</label>
+          <p class="msg" id="fieldMsg"></p>
+        </section>
+      </details>
+      <details>
         <summary>Kaartlagen (Nav2 en SLAM)</summary>
         <section>
         <div class="layers">
@@ -732,6 +749,8 @@ const OUT = {
   "/camera/camera_info": "sensor_msgs/msg/CameraInfo", "/points": "sensor_msgs/msg/PointCloud2",
   "/ground_truth": "nav_msgs/msg/Odometry", "/goal_pose": "geometry_msgs/msg/PoseStamped", "/initialpose": "geometry_msgs/msg/PoseWithCovarianceStamped",
   "/student_id": "std_msgs/msg/String",
+  "/sensor_state": "turtlebot3_msgs/msg/SensorState", "/battery_state": "sensor_msgs/msg/BatteryState",
+  "/sim/gas_value": "std_msgs/msg/Float32", "/sim/temperature": "sensor_msgs/msg/Temperature", "/sim/illuminance": "sensor_msgs/msg/Illuminance",
 };
 const IN = {   // topic: [type, throttle ms]
   "/cmd_vel": ["", 0], "/joint_commands": ["sensor_msgs/msg/JointState", 0], "/map": ["nav_msgs/msg/OccupancyGrid", 1000],
@@ -771,6 +790,7 @@ function connect() {
   ws.onopen = () => {
     setStatus("on", "Verbonden met " + url);
     advertiseAll();
+    send({ op: "advertise_service", service: "/sound", type: "turtlebot3_msgs/srv/Sound" });
     for (const [t, [type, thr]] of Object.entries(IN)) if (t !== "/robot_description" && t !== "/cmd_vel") send({ op: "subscribe", topic: t, type, throttle_rate: thr, queue_length: 1 });
     cmdStart();
     send({ op: "subscribe", topic: "/tf", type: OUT["/tf"], queue_length: 5 });
@@ -781,6 +801,7 @@ function connect() {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.op === "status" && m.level === "error") { setStatus("err", "rosbridge: " + m.msg); return; }
     if (m.op === "service_response") { onServiceResponse(m); return; }
+    if (m.op === "call_service" && m.service === "/sound") { onSoundCall(m); return; }
     if (m.op !== "publish") return;
     const t = m.topic, msg = m.msg;
     if (stats[t + " "]) stats[t + " "].n++;
@@ -846,6 +867,7 @@ function odomWorld() {
   return { x: odomOrigin.x + c * o.x - s * o.y, y: odomOrigin.y + s * o.x + c * o.y, th: odomOrigin.th + o.th };
 }
 function currentCmd() {
+  if (bat.dead) { cmdSrc = "batterij leeg (< 11,0 V): motoren uit"; return { v: 0, w: 0 }; }
   if (keyCmd) { cmdSrc = "toetsenbord"; return keyCmd; }
   if (padCmd) { cmdSrc = "knoppen in beeld"; return padCmd; }
   if (rosCmd.t >= 0 && sim.simTime - rosCmd.t < 0.5) { cmdSrc = "/cmd_vel"; return rosCmd; }   // time-out in sim-tijd
@@ -856,6 +878,7 @@ const mobile = () => cfg.leftWheel && cfg.rightWheel && !cfg.fixedBase;
 function simStep() {
   sim.step(currentCmd());
   const t = sim.simTime, r = sim.robot;
+  sensorsStep();
   if (t >= next.clock) { next.clock += 1 / RATES.clock; pub("/clock", { clock: stamp() }); }
   if (t >= next.odom) {
     next.odom += 1 / RATES.odom;
@@ -979,6 +1002,118 @@ function renderTopics() {
 
 /*__TASKS__*/
 
+/* ================= sensoren zoals de echte TurtleBot3 (A) en velden in de wereld (C) ================= */
+// A: /sensor_state (encoders uit de wielhoeken, knoppen SW1/SW2), /battery_state (3S-LiPo, zakt met de
+// gereden afstand), service /sound (piep in de browser). Onder 11,0 V vallen de motoren uit en piept de
+// robot, zoals de OpenCR. C: /sim/gas_value, /sim/temperature, /sim/illuminance volgens `fields` in de
+// wereld-JSON ({kind: gas|heat|light, x, y, strength, sigma}), afhankelijk van de plaats van de robot.
+const TICKS = 4096;
+const bat = { q: 1, dist: 0, lastL: null, lastR: null, dead: false, beepAt: 0 };
+const btn = { sw1: false, sw2: false };
+const LIPO = [[0, 10.8], [0.05, 11.1], [0.1, 11.3], [0.2, 11.5], [0.4, 11.7], [0.6, 11.85], [0.8, 12.1], [0.9, 12.3], [1, 12.6]];
+function lipoVolt(q) {
+  for (let i = 1; i < LIPO.length; i++) if (q <= LIPO[i][0]) {
+    const [q0, v0] = LIPO[i - 1], [q1, v1] = LIPO[i]; return v0 + (v1 - v0) * (q - q0) / (q1 - q0);
+  }
+  return 12.6;
+}
+const batVolt = () => +(lipoVolt(bat.q)).toFixed(2);
+const wheelPos = side => { const j = sim.robot.byName?.[side === "L" ? cfg.leftWheel : cfg.rightWheel]; return j ? j.pos : 0; };
+let audioCtx = null;
+function beep(freqs) {   // [[Hz, s], ...]
+  try {
+    audioCtx ??= new (window.AudioContext || window.webkitAudioContext)();
+    let t = audioCtx.currentTime + 0.02;
+    for (const [f, d] of freqs) {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.frequency.value = f; o.connect(g); g.connect(audioCtx.destination);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.2, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.start(t); o.stop(t + d + 0.02); t += d + 0.06;
+    }
+  } catch {}
+}
+// turtlebot3_msgs/srv/Sound: 0 OFF, 1 ON, 2 LOW_BATTERY, 3 ERROR, 4 BUTTON1, 5 BUTTON2
+const SOUNDS = { 0: [[880, .1], [660, .1], [440, .2]], 1: [[440, .1], [660, .1], [880, .2]], 2: [[440, .3], [440, .3]],
+  3: [[220, .15], [220, .15], [220, .15]], 4: [[1000, .1]], 5: [[1200, .1], [1200, .1]] };
+function onSoundCall(m) {
+  const v = m.args?.value ?? 0, ok = v in SOUNDS;
+  if (ok) beep(SOUNDS[v]);
+  $("sensMsg").textContent = `/sound: waarde ${v}` + (ok ? "" : " (onbekend, enkel 0-5)");
+  send({ op: "service_response", id: m.id, service: "/sound", values: { success: ok, message: ok ? "" : "unknown sound" }, result: true });
+}
+function batteryStep(dt) {
+  const L = wheelPos("L"), R = wheelPos("R");
+  if (bat.lastL != null) {
+    const d = (Math.abs(L - bat.lastL) + Math.abs(R - bat.lastR)) / 2 * (cfg.wheelRadius || 0.033);
+    if (d < 0.5) bat.dist += d;
+    if ($("batMode").value === "dist") {
+      const full = Math.max(1, +$("batFull").value || 300);
+      bat.q = Math.max(0, bat.q - d / full - dt * 0.2 / 3600);   // + kleine ruststroom (20 %/u)
+    }
+  }
+  bat.lastL = L; bat.lastR = R;
+  if ($("batMode").value === "slider") bat.q = +$("batSlider").value / 100;
+  const dead = batVolt() < 11.0;
+  if (dead && sim.simTime > bat.beepAt) { beep(SOUNDS[2]); bat.beepAt = sim.simTime + 5; }
+  bat.dead = dead;
+}
+$("batMode").onchange = () => { $("batSliderRow").hidden = $("batMode").value !== "slider"; $("batFullRow").hidden = $("batMode").value !== "dist"; };
+$("batSlider").oninput = () => { $("batSliderRow").querySelector("output").textContent = $("batSlider").value + " %"; };
+$("batSwap").onclick = () => { bat.q = 1; $("batSlider").value = 100; };
+for (const [id, k] of [["sw1", "sw1"], ["sw2", "sw2"]]) {
+  const b = $(id);
+  b.onpointerdown = () => { btn[k] = true; }; b.onpointerup = b.onpointerleave = () => { btn[k] = false; };
+}
+function fieldValue(kind, x, y) {
+  let v = 0;
+  for (const f of sim.worldInfo.fields || []) if (f.kind === kind) {
+    const d2 = (x - f.x) ** 2 + (y - f.y) ** 2, s = f.sigma || 1;
+    v += (f.strength || 0) * Math.exp(-d2 / (2 * s * s));
+  }
+  return v;
+}
+const nextS = { state: 0, bat: 0, field: 0 };
+function sensorsStep() {
+  const t = sim.simTime;
+  if (t < nextS.state) return;
+  const dt = 0.1; nextS.state = t + dt;
+  batteryStep(dt);
+  const st = stamp(), volt = batVolt();
+  if (mobile()) pub("/sensor_state", { header: { stamp: st, frame_id: "" }, bumper: 0, cliff: 0, sonar: 0, illumination: 0, led: 0,
+    button: (btn.sw1 ? 1 : 0) | (btn.sw2 ? 2 : 0), torque: !bat.dead,
+    left_encoder: Math.round(wheelPos("L") / (2 * Math.PI) * TICKS) | 0, right_encoder: Math.round(wheelPos("R") / (2 * Math.PI) * TICKS) | 0, battery: volt });
+  if (t >= nextS.bat) {
+    nextS.bat = t + 1;
+    const taskOwns = activeRun && activeRun.id === "t2" && batTopic() === "/battery_state";   // Taak 2 publiceert dan zelf
+    if (!taskOwns) pub("/battery_state", { header: { stamp: st, frame_id: "battery" }, voltage: volt, temperature: 25, current: -0.5,
+      design_capacity: 1.8, percentage: +bat.q.toFixed(3), power_supply_status: 2, power_supply_health: 1,
+      power_supply_technology: 3, present: true, cell_voltage: [], cell_temperature: [], location: "", serial_number: "" });
+    $("batRead").textContent = `${volt.toFixed(2)} V · ${Math.round(bat.q * 100)} % · ${bat.dist.toFixed(1)} m gereden` + (bat.dead ? " · LEEG: motoren uit" : "");
+  }
+  if ($("fieldsOn").checked && t >= nextS.field) {
+    nextS.field = t + 1;
+    const p = sim.truthPose();
+    pub("/sim/gas_value", { data: +(400 + fieldValue("gas", p.x, p.y) + 8 * gauss()).toFixed(1) });
+    pub("/sim/temperature", { header: { stamp: st, frame_id: "base_link" }, temperature: +(20 + fieldValue("heat", p.x, p.y) + 0.2 * gauss()).toFixed(2), variance: 0.04 });
+    pub("/sim/illuminance", { header: { stamp: st, frame_id: "base_link" }, illuminance: +(150 + fieldValue("light", p.x, p.y) + 5 * gauss()).toFixed(1), variance: 25 });
+  }
+}
+// velden zichtbaar (standaard uit: studenten moeten meten)
+const fieldG = new THREE.Group(); fieldG.visible = false; scene.add(fieldG);
+const FIELD_COL = { gas: 0x6fdc8c, heat: 0xff7043, light: 0xffe066 };
+function buildFieldMeshes() {
+  fieldG.clear();
+  for (const f of sim.worldInfo.fields || []) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(2 * (f.sigma || 1), 24, 16),
+      new THREE.MeshBasicMaterial({ color: FIELD_COL[f.kind] || 0xffffff, transparent: true, opacity: 0.12, depthWrite: false }));
+    m.position.set(f.x, f.y, 0); m.scale.z = 0.25; fieldG.add(m);
+  }
+  const n = (sim.worldInfo.fields || []).length;
+  $("fieldMsg").textContent = n ? `${n} bron(nen) in deze wereld.` : "Geen bronnen in deze wereld: vaste basiswaarden.";
+}
+$("fieldsShow").onchange = () => { fieldG.visible = $("fieldsShow").checked; };
+buildFieldMeshes();
+
 /* ================= invoer ================= */
 function resetOdom() { const p = sim.truthPose(); odomOrigin = { x: p.x, y: p.y, th: p.th }; sim.resetOdom(); clearTrails(); }
 let mode = "orbit";
@@ -1068,7 +1203,7 @@ $("resetOdom").onclick = resetOdom;
 $("respawn").onclick = () => rebuild();
 function switchWorld(def, label) {
   try {
-    useWorld(def); buildWorldMeshes(); rebuild();
+    useWorld(def); buildWorldMeshes(); rebuild(); buildFieldMeshes();
     if (student.name) setStudent(student.name, student.nr);              // code hangt af van de wereld
     for (const k in grids) { scene.remove(grids[k].mesh); delete grids[k]; }   // oude kaart hoort niet bij de nieuwe wereld
     mapOdom = null; $("navMsg").textContent = "Nieuwe wereld: herstart slam_toolbox voor een nieuwe kaart.";

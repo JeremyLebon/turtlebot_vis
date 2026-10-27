@@ -338,5 +338,42 @@
    "sz": 0.3,
    "color": "#c79a5b"
   }
+ ],
+ "fields": [
+  {
+   "kind": "gas",
+   "x": 2.6,
+   "y": -3.8,
+   "strength": 1200,
+   "sigma": 1.4
+  },
+  {
+   "kind": "heat",
+   "x": 5.6,
+   "y": -3.3,
+   "strength": 35,
+   "sigma": 0.9
+  },
+  {
+   "kind": "light",
+   "x": -5.3,
+   "y": 0,
+   "strength": 600,
+   "sigma": 2.2
+  },
+  {
+   "kind": "light",
+   "x": 0,
+   "y": 0,
+   "strength": 600,
+   "sigma": 2.2
+  },
+  {
+   "kind": "light",
+   "x": 5.3,
+   "y": 0,
+   "strength": 600,
+   "sigma": 2.2
+  }
  ]
 }

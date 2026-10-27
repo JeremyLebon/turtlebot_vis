@@ -137,5 +137,28 @@
    "y": 0.55,
    "yaw": 34
   }
+ ],
+ "fields": [
+  {
+   "kind": "gas",
+   "x": 0.55,
+   "y": -0.55,
+   "strength": 900,
+   "sigma": 0.5
+  },
+  {
+   "kind": "heat",
+   "x": -1.1,
+   "y": 0.55,
+   "strength": 25,
+   "sigma": 0.4
+  },
+  {
+   "kind": "light",
+   "x": 0.0,
+   "y": 1.65,
+   "strength": 500,
+   "sigma": 0.8
+  }
  ]
 }
