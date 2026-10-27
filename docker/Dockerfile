@@ -65,7 +65,7 @@ RUN sed -i 's#<head>#<head><script>if(!new URLSearchParams(location.search).has(
 # oorsprong als vroeger - de oude teleop publiceerde Twist op /cmd_vel_web en
 # blokkeerde zo de webpagina's van de robot. Zonder bewaarde layout neemt
 # Lichtblick de standaardlayout hierboven. Nieuwe reset nodig: TB_LAYOUT verhogen.
-ARG TB_LAYOUT=jazzy-2
+ARG TB_LAYOUT=jazzy-3
 RUN python3 -c "p='/opt/lichtblick/index.html'; s=open(p).read(); \
     js='<script>try{if(localStorage.getItem(\"tbLayout\")!==\"${TB_LAYOUT}\"){indexedDB.deleteDatabase(\"lichtblick-layouts\");localStorage.removeItem(\"studio.layout\");localStorage.setItem(\"tbLayout\",\"${TB_LAYOUT}\")}}catch(e){}</script>'; \
     assert '<head>' in s; open(p,'w').write(s.replace('<head>', '<head>'+js, 1))" \

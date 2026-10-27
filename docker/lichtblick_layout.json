@@ -140,14 +140,20 @@
     "Indicator!battery": {
       "path": "/studio_script/battery.low",
       "style": "background",
-      "fallbackColor": "#34c759",
-      "fallbackLabel": "Batterij OK",
+      "fallbackColor": "#8e8e93",
+      "fallbackLabel": "Geen /battery_state",
       "rules": [
         {
           "operator": "=",
           "rawValue": "true",
           "color": "#ff3b30",
           "label": "Batterij laag (< 11,2 V of < 50 %)"
+        },
+        {
+          "operator": "=",
+          "rawValue": "false",
+          "color": "#34c759",
+          "label": "Batterij OK"
         }
       ],
       "lichtblickPanelTitle": "Batterij"
