@@ -99,7 +99,7 @@ robot() {
     _robot_refresh
     # foxglove_bridge (Lichtblick) en de ros2-daemon herstarten met de nieuwe robot.
     pkill -f "foxglove_bridge_launch.xml" 2>/dev/null
-    ros2 daemon stop >/dev/null 2>&1
+    [ "${TB_DAEMON_RESET:-0}" = 1 ] && ros2 daemon stop >/dev/null 2>&1   # tijdelijk uit (WSL: ~70 s)
     return 0
 }
 
@@ -134,7 +134,7 @@ _robot_refresh() {
     [ -z "$cur" ] || [ "$cur" = "$_robot_seen" ] && return
     source "$ROBOT_ENV"
     # andere robot: de ros2-daemon kent nog de oude (lege `ros2 topic list`)
-    [ -n "$_robot_seen" ] && { echo "Robotkeuze gewijzigd:"; ros2 daemon stop >/dev/null 2>&1; }
+    [ -n "$_robot_seen" ] && { echo "Robotkeuze gewijzigd:"; [ "${TB_DAEMON_RESET:-0}" = 1 ] && ros2 daemon stop >/dev/null 2>&1; }
     _robot_seen=$cur
     _robot_banner
 }
