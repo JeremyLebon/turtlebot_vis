@@ -2,6 +2,9 @@ ros2_ws/*
 !ros2_ws/src/
 ros2_ws/src/*
 !ros2_ws/src/.gitkeep
+!ros2_ws/.vscode/
+ros2_ws/.vscode/*
+!ros2_ws/.vscode/settings.json
 htmlsim/dist/
 htmlsim/node_modules/
 __pycache__/
