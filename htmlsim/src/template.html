@@ -54,18 +54,67 @@
   </section>
 
   <aside class="panel">
+    <nav class="tabs" role="tablist" aria-label="Zijbalk">
+      <button role="tab" id="tabBtn-sim" aria-controls="tab-sim" aria-selected="true">Simulatie</button>
+      <button role="tab" id="tabBtn-task" aria-controls="tab-task" aria-selected="false">Opdrachten</button>
+      <button role="tab" id="tabBtn-cfg" aria-controls="tab-cfg" aria-selected="false" title="Instellingen (verbinding, robot, sensoren)">Instellingen</button>
+    </nav>
+
+    <div class="tabpane" id="tab-sim" role="tabpanel" aria-labelledby="tabBtn-sim">
+      <section>
+        <div class="grid2"><label for="worldSel">Wereld</label><select id="worldSel">
+          <option value="turtlebot3">TurtleBot3-wereld (6 × 6 m)</option>
+          <option value="factory">Fabriekshal (16 × 12 m)</option>
+          <option value="empty">Lege kamer (5 × 5 m)</option>
+          <option value="custom" hidden>Eigen wereld</option></select></div>
+        <div class="row">
+          <button class="ghost" id="pause">Pauzeren</button>
+          <button class="ghost" id="resetOdom">Odometrie op nul</button>
+          <button class="ghost" id="respawn">Robot terugzetten</button>
+        </div>
+        <label class="chk"><input type="checkbox" id="follow" checked> Camera volgt robot</label>
+        <p class="hint">Rijden: knoppen in beeld, of <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> en pijltjes (klik eerst in de 3D-weergave), <kbd>spatie</kbd> stopt. Lokaal rijden heeft voorrang op <code>/cmd_vel</code>.</p>
+      </section>
+      <section>
+      <div class="row"><button class="ghost" id="compatBtn">Klaar voor de echte robot?</button></div>
+      <ul class="checks" id="compatOut" hidden></ul>
+      </section>
+      <details>
+        <summary>Kaartlagen (Nav2 en SLAM)</summary>
+        <section>
+        <div class="layers">
+          <label class="chk"><input type="checkbox" id="lyMap" checked><span class="sw" style="background:var(--fg)"></span>/map</label>
+          <label class="chk"><input type="checkbox" id="lyGlobal" checked><span class="sw" style="background:var(--cost)"></span>global costmap</label>
+          <label class="chk"><input type="checkbox" id="lyLocal" checked><span class="sw" style="background:var(--lethal)"></span>local costmap</label>
+          <label class="chk"><input type="checkbox" id="lyPlan" checked><span class="sw" style="background:var(--plan)"></span>paden</label>
+        </div>
+        <p class="hint">Kies onderaan <b>Startpositie</b> of <b>Doel</b>, klik op de vloer en sleep voor de richting. Dat publiceert <code>/initialpose</code> en <code>/goal_pose</code> in frame <code>map</code>. Kaarten worden op hun plaats getekend via <code>map → odom</code> uit <code>/tf</code>.</p>
+        <div class="row"><button class="ghost" id="refetchMap">Kaart opnieuw ophalen</button></div>
+        <p class="msg" id="navMsg">Nog geen kaart ontvangen.</p>
+        </section>
+      </details>
+      <details>
+        <summary>Topics</summary>
+        <section>
+            <table id="topics"><tbody></tbody></table>
+        </section>
+      </details>
+    </div>
+
+    <div class="tabpane" id="tab-task" role="tabpanel" aria-labelledby="tabBtn-task" hidden>
     <section class="student">
       <h2>Student</h2>
       <div class="grid2">
         <label for="stuName">Naam</label><input type="text" id="stuName" autocomplete="name" placeholder="Voornaam Achternaam">
         <label for="stuNr">Studentnr.</label><input type="text" id="stuNr" placeholder="r0123456">
       </div>
-      <div class="row"><button class="act" id="stuSet">Vastleggen</button><span class="code" id="stuCode">–</span></div>
+      <div class="who"><span id="stuWho"></span><span class="code" id="stuCode2"></span><button class="ghost" id="stuEdit">Wijzigen</button></div>
+      <div class="row setrow"><button class="act" id="stuSet">Vastleggen</button><span class="code" id="stuCode">–</span></div>
       <p class="hint" id="stuHint">Naam en code verschijnen op de vloer, in het camerabeeld, in de HUD en op <code>/student_id</code>.</p>
     </section>
-    <details open id="taskSec">
-      <summary>Opdrachten</summary>
-      <section>
+      <div id="taskSec">
+        <section>
+          <h2>Test</h2>
         <div class="grid2">
           <label for="taskSel">Taak</label><select id="taskSel">
             <option value="t1">1 · Obstakelalarm</option>
@@ -85,8 +134,10 @@
         <div class="row" id="taskOut" hidden><button class="act" id="dlReport">Rapport downloaden</button><button class="ghost" id="dlVideo">Opname downloaden</button></div>
         <p class="hint">Lever het rapport (.json) en de opname samen in. De opname hoort bij het rapport via haar SHA-256 in het rapport.</p>
       </section>
-    </details>
+      </div>
+    </div>
 
+    <div class="tabpane" id="tab-cfg" role="tabpanel" aria-labelledby="tabBtn-cfg" hidden>
     <section>
       <h2>Verbinding</h2>
       <div class="row">
@@ -107,18 +158,10 @@
           <option value="/battery_state">batterij: /battery_state (echte TurtleBot3)</option>
         </select>
       </div>
-      <div class="row"><button class="ghost" id="compatBtn">Klaar voor de echte robot?</button></div>
-      <ul class="checks" id="compatOut" hidden></ul>
       <label class="chk"><input type="checkbox" id="pubModelTF" checked> tf van het robotmodel publiceren</label>
       <p class="hint">Zet uit als je <code>robot_state_publisher</code> draait. Die maakt dan zelf de frames uit de URDF en <code>/joint_states</code>.</p>
     </section>
-
-    <section>
-      <h2>Topics</h2>
-      <table id="topics"><tbody></tbody></table>
-    </section>
-
-    <details open>
+    <details>
       <summary>Robot</summary>
       <section>
         <div class="file">
@@ -140,7 +183,6 @@
         <p class="msg" id="robotMsg">Ingebouwde Burger geladen (primitieve vormen, met camera en 3D-lidar).</p>
       </section>
     </details>
-
     <details>
       <summary>Robotconfiguratie</summary>
       <section>
@@ -162,7 +204,6 @@
         <p class="hint">Sensoren zitten op het gekozen frame: de lidar scant in het xy-vlak van dat frame, de camera kijkt langs +x. Automatisch herkend op naam.</p>
       </section>
     </details>
-
     <details id="jointSec" hidden open>
       <summary>Joints</summary>
       <section>
@@ -170,25 +211,9 @@
         <p class="hint">Ook via ROS: <code>sensor_msgs/JointState</code> op <code>/joint_commands</code> (naam + positie).</p>
       </section>
     </details>
-
-    <details open>
-      <summary>Nav2 en SLAM</summary>
-      <section>
-        <div class="layers">
-          <label class="chk"><input type="checkbox" id="lyMap" checked><span class="sw" style="background:var(--fg)"></span>/map</label>
-          <label class="chk"><input type="checkbox" id="lyGlobal" checked><span class="sw" style="background:var(--cost)"></span>global costmap</label>
-          <label class="chk"><input type="checkbox" id="lyLocal" checked><span class="sw" style="background:var(--lethal)"></span>local costmap</label>
-          <label class="chk"><input type="checkbox" id="lyPlan" checked><span class="sw" style="background:var(--plan)"></span>paden</label>
-        </div>
-        <p class="hint">Kies onderaan <b>Startpositie</b> of <b>Doel</b>, klik op de vloer en sleep voor de richting. Dat publiceert <code>/initialpose</code> en <code>/goal_pose</code> in frame <code>map</code>. Kaarten worden op hun plaats getekend via <code>map → odom</code> uit <code>/tf</code>.</p>
-        <div class="row"><button class="ghost" id="refetchMap">Kaart opnieuw ophalen</button></div>
-        <p class="msg" id="navMsg">Nog geen kaart ontvangen.</p>
-      </section>
-    </details>
-
-    <details>
-      <summary>Simulatie</summary>
-      <section>
+      <details>
+        <summary>Sensoren en odometrie</summary>
+        <section>
         <div class="grid2"><label for="odomSrc">Odometrie</label><select id="odomSrc">
           <option value="truth" selected>perfect (zoals Gazebo)</option>
           <option value="wheels">wielencoders (met slip)</option></select></div>
@@ -208,19 +233,13 @@
           <label for="l3max">3D max (m)</label><input type="number" id="l3max" min="0.5" max="200" step="0.5" value="15">
         </div>
         <p class="msg" id="lidarMsg"></p>
-        <label class="chk"><input type="checkbox" id="follow" checked> Camera volgt robot</label>
         <label class="chk"><input type="checkbox" id="camOn" checked> Robotcamera publiceren (5 Hz, JPEG)</label>
         <label class="chk"><input type="checkbox" id="l3On"> 3D-lidar (16 lagen, ±15°, 5 Hz)</label>
-        <div class="row">
-          <button class="ghost" id="pause">Pauzeren</button>
-          <button class="ghost" id="resetOdom">Odometrie op nul</button>
-          <button class="ghost" id="respawn">Robot terugzetten</button>
-        </div>
-        <div class="grid2"><label for="worldSel">Wereld</label><select id="worldSel">
-          <option value="turtlebot3">TurtleBot3-wereld (6 × 6 m)</option>
-          <option value="factory">Fabriekshal (16 × 12 m)</option>
-          <option value="empty">Lege kamer (5 × 5 m)</option>
-          <option value="custom" hidden>Eigen wereld</option></select></div>
+        </section>
+      </details>
+      <details>
+        <summary>Eigen wereld</summary>
+        <section>
         <div class="row">
           <label class="ghost" for="worldFile" style="cursor:pointer">Wereld laden (.json)</label>
           <input type="file" id="worldFile" accept=".json,application/json" hidden>
@@ -232,10 +251,8 @@
           <code>rack</code> x y [bays depth h yaw], <code>conveyor</code> x y l [w h yaw], <code>pallet</code> x y [load],
           <code>movable</code> x y [sx sy sz mass], <code>mark</code> x y sx sy [yaw]; elk met optioneel <code>color</code>.
           Verder <code>floor</code> [sx, sy] en <code>spawn</code> [x, y, θ].</p>
-        <p class="hint">Rijden: knoppen in beeld, of <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> en pijltjes (klik eerst in de 3D-weergave), <kbd>spatie</kbd> stopt. Lokaal rijden heeft voorrang op <code>/cmd_vel</code>.</p>
-      </section>
-    </details>
-
+        </section>
+      </details>
     <details>
       <summary>Starten in je container</summary>
       <section>
@@ -267,7 +284,25 @@ ros2 topic list             # zie je /scan en /odom?</pre>
         <div class="row"><button class="ghost" id="copy">Kopiëren</button><span class="hint" id="copyMsg"></span></div>
       </section>
     </details>
+    </div>
   </aside>
+<script>
+// Tabs van de zijbalk (laatste keuze onthouden)
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.panel [role="tab"]'));
+  function show(id) {
+    tabs.forEach(function (t) {
+      var on = t.getAttribute("aria-controls") === id;
+      t.setAttribute("aria-selected", on ? "true" : "false");
+      document.getElementById(t.getAttribute("aria-controls")).hidden = !on;
+    });
+    try { localStorage.setItem("tb3sim.tab", id); } catch (e) {}
+  }
+  tabs.forEach(function (t) { t.addEventListener("click", function () { show(t.getAttribute("aria-controls")); }); });
+  window.tb3ShowTab = show;
+  try { var last = localStorage.getItem("tb3sim.tab"); if (last && document.getElementById(last)) show(last); } catch (e) {}
+})();
+</script>
 </main>
 
 <script type="module">
@@ -380,6 +415,8 @@ async function setStudent(name, nr) {
   student.name = name.trim().replace(/\s+/g, " ").slice(0, 48); student.nr = nr.trim().slice(0, 20); student.date = today();
   student.code = student.name ? await studentCode(student.name, student.nr, sim.worldInfo.name, student.date) : "";
   $("stuCode").textContent = student.code || "–";
+  $("stuWho").textContent = student.name + (student.nr ? " · " + student.nr : ""); $("stuCode2").textContent = student.code;
+  $("stuSet").closest(".student").classList.toggle("set", !!student.name);
   $("stuHint").textContent = student.name ? `Code geldt voor ${sim.worldInfo.name}, ${student.date}.` : "Vul je naam in en klik Vastleggen.";
   try { localStorage.setItem("tb3sim.student", JSON.stringify({ name: student.name, nr: student.nr })); } catch {}
   drawFloorTexture(); publishStudent();
@@ -1084,6 +1121,7 @@ $("copy").onclick = () => {
 new ResizeObserver(() => { const rc = stage.getBoundingClientRect(); renderer.setSize(rc.width, rc.height, false); camera.aspect = rc.width / Math.max(1, rc.height); camera.updateProjectionMatrix(); }).observe(stage);
 
 loadBuiltin();
+$("stuEdit").addEventListener("click", () => { $("stuSet").closest(".student").classList.remove("set"); $("stuName").focus(); });
 try { const s = JSON.parse(localStorage.getItem("tb3sim.student") || "null"); if (s && s.name) { $("stuName").value = s.name; $("stuNr").value = s.nr || ""; setStudent(s.name, s.nr || ""); } } catch {}
 $("loading").remove();
 renderTopics();

@@ -81,6 +81,13 @@ pre{margin:0;font:12px/1.55 var(--f-mono);background:var(--bg);border:1px solid 
 }
 
 .panel details{border-bottom:1px solid var(--line)}
+.panel .tabs{display:flex;position:sticky;top:0;z-index:2;background:var(--surface);border-bottom:1px solid var(--line)}
+.panel .tabs button{flex:1;font:600 12px var(--f-mono);text-transform:uppercase;letter-spacing:.08em;background:none;border:0;border-bottom:3px solid transparent;border-radius:0;color:var(--muted);padding:13px 6px 10px;cursor:pointer}
+.panel .tabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--robot)}
+.panel .tabs button:focus-visible{outline:2px solid var(--robot);outline-offset:-2px}
+.student .who{display:none;gap:10px;align-items:center;flex-wrap:wrap}
+.student.set .who{display:flex}
+.student.set .grid2,.student.set .setrow,.student.set #stuHint{display:none}
 .panel details > summary{list-style:none;cursor:pointer;padding:14px 16px;font:600 12px var(--f-mono);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);display:flex;justify-content:space-between}
 .panel details > summary::-webkit-details-marker{display:none}
 .panel details > summary::after{content:"+";font-size:14px}
