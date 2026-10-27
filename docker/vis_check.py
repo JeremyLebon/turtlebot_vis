@@ -76,6 +76,9 @@ def ros_checks(sim, html=False):
     if html and "clock" not in got:
         line(WARN, "Simulator", "nog geen /clock - open http://localhost:8080/sim/ in de browser (verbindt vanzelf)")
         return
+    if sim and "clock" not in got:
+        line(WARN, "Gazebo", "draait nog niet (geen /clock) - start: ros2 launch turtlebot3_gazebo turtlebot3_world.launch.py")
+        return
     if not topics:
         line(BAD, "Topics", "geen enkel topic zichtbaar (ROS_DOMAIN_ID=%s klopt?)" % os.environ.get("ROS_DOMAIN_ID"))
         return
