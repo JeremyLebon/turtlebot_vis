@@ -65,11 +65,12 @@ RUN sed -i 's#<head>#<head><script>if(!new URLSearchParams(location.search).has(
 # oorsprong als vroeger - de oude teleop publiceerde Twist op /cmd_vel_web en
 # blokkeerde zo de webpagina's van de robot. Zonder bewaarde layout neemt
 # Lichtblick de standaardlayout hierboven. Nieuwe reset nodig: TB_LAYOUT verhogen.
-ARG TB_LAYOUT=jazzy-3
+ARG TB_LAYOUT=jazzy-4
+COPY docker/layout_reset.js /tmp/layout_reset.js
 RUN python3 -c "p='/opt/lichtblick/index.html'; s=open(p).read(); \
-    js='<script>try{if(localStorage.getItem(\"tbLayout\")!==\"${TB_LAYOUT}\"){indexedDB.deleteDatabase(\"lichtblick-layouts\");localStorage.removeItem(\"studio.layout\");localStorage.setItem(\"tbLayout\",\"${TB_LAYOUT}\")}}catch(e){}</script>'; \
+    js='<script>'+open('/tmp/layout_reset.js').read().replace('__TB_LAYOUT__', '${TB_LAYOUT}')+'</script>'; \
     assert '<head>' in s; open(p,'w').write(s.replace('<head>', '<head>'+js, 1))" \
-    && grep -q 'tbLayout' /opt/lichtblick/index.html
+    && grep -q 'tbLayout' /opt/lichtblick/index.html && rm /tmp/layout_reset.js
 # HTML-simulator TB3 Lite Sim 3D (htmlsim/, `robot htmlsim`): http://localhost:8080/sim/,
 # zonder internet - three.js en Rapier uit de npm-registry, enkel wat hij gebruikt.
 ARG THREE_VERSION=0.160.0
