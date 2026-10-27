@@ -299,7 +299,7 @@ const TASKS = {
     cleanup: cleanupObstacle,
   },
   t1x: {
-    label: "Taak 1 · Uitbreiding vier sectoren",
+    label: "Taak 1 · Extra vier sectoren",
     how: "Start je uitgebreide obstacle_alarm.py (die per scan de vier sectoren en de hoek van het dichtste obstakel logt met get_logger().info). De paal komt achtereenvolgens vóór, links, achter en rechts. Duurt ongeveer 15 s.",
     checks: [
       { id: "front", label: "Vóór (0,50 m) juist gemeld" }, { id: "left", label: "Links (0,70 m) juist gemeld" },
@@ -385,7 +385,7 @@ const TASKS = {
     async run(run) { await runMotion(run, false); },
   },
   t3x: {
-    label: "Taak 3 · Uitbreiding vierkant",
+    label: "Taak 3 · Extra vierkant",
     how: "Klik op Test starten en start daarna je vierkant-script (zijden van 0,5 m, terug naar de start). De simulator meet zijden, hoeken en de eindafwijking met de echte positie.",
     checks: [
       { id: "ros", label: "Bediend via /cmd_vel (geen handbediening)" }, { id: "sides", label: "Vier zijden van 0,50 m ± 3 cm" },
