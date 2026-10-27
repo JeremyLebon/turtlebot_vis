@@ -247,6 +247,7 @@ function createSim(R) {
     const pr = { body, r, h }; probes.push(pr); return pr;
   }
   function moveProbe(pr, x, y) { pr.body.setTranslation({ x, y, z: pr.h / 2 }, true); }
+  function removeBox(m) { const i = movables.indexOf(m); if (i >= 0) movables.splice(i, 1); world.removeRigidBody(m.body); }
   function removeProbe(pr) { const i = probes.indexOf(pr); if (i >= 0) probes.splice(i, 1); world.removeRigidBody(pr.body); }
   const worldSample = () => loadWorld(WORLDS.turtlebot3);
   const worldEmpty = () => loadWorld(WORLDS.empty);
@@ -498,7 +499,7 @@ function createSim(R) {
 
   return { R, DT, LIDAR, L3, world, statics, movables, odom, imu, params,
     get robot() { return robot; }, get simTime() { return simTime; }, get cmdTarget() { return cmdTarget; },
-    worldSample, worldEmpty, loadWorld, exportWorld, markings, probes, addProbe, moveProbe, removeProbe, get worldInfo() { return worldInfo; }, addBox, buildRobot, removeRobot, resetOdom, step, scan, scan3d, linkWorld, bodyT, jointTF, truthPose };
+    worldSample, worldEmpty, loadWorld, exportWorld, markings, probes, addProbe, moveProbe, removeProbe, get worldInfo() { return worldInfo; }, addBox, removeBox, buildRobot, removeRobot, resetOdom, step, scan, scan3d, linkWorld, bodyT, jointTF, truthPose };
 }
 
 /* ===== Ingebouwde TurtleBot3 Burger (afmetingen van turtlebot3_description, primitieve vormen) ===== */
