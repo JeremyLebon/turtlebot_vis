@@ -66,9 +66,13 @@ def ros_checks(sim, html=False):
     want = {"clock"} if sim else {"launch", "sys"}
     end = time.time() + 6.0          # /system_info: every 2 s
     topics = []
+    start = time.time()
     while time.time() < end and not (want <= set(got) and len(topics) > 5):
         rclpy.spin_once(node, timeout_sec=0.2)
         topics = node.get_topic_names_and_types()
+        # simulatie: na 1,5 s nog niemand die /clock publiceert = simulator draait niet
+        if sim and time.time() - start > 1.5 and node.count_publishers("/clock") == 0:
+            break
     names = {t for t, _ in topics}
     node.destroy_node()
     rclpy.shutdown()
