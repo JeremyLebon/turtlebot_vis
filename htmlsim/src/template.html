@@ -99,6 +99,13 @@
           <label class="chk"><input type="checkbox" id="fieldsOn" checked> Omgevingssensoren publiceren</label>
           <p class="hint"><code>/sim/gas_value</code> · <code>/sim/temperature</code> · <code>/sim/humidity</code> · <code>/sim/illuminance</code>: hangen af van de plaats van de robot.</p>
           <label class="chk"><input type="checkbox" id="fieldsShow"> Bronnen tonen in 3D</label>
+          <div class="grid2"><label for="fieldMap">Kaart op de vloer</label><select id="fieldMap">
+            <option value="" selected>uit</option>
+            <option value="gas">gas</option>
+            <option value="heat">temperatuur</option>
+            <option value="humidity">vochtigheid</option>
+            <option value="light">licht</option></select></div>
+          <p class="msg" id="fieldMapMsg"></p>
           <div class="hudsel" role="group" aria-label="Meetwaarden in de HUD (linksboven)">
             <span class="hint">In de HUD (linksboven):</span>
             <label class="chk"><input type="checkbox" class="hudOpt" data-k="bat" checked> batterij</label>
@@ -1150,11 +1157,38 @@ function buildFieldMeshes() {
   const n = (sim.worldInfo.fields || []).length;
   $("fieldMsg").textContent = n ? `${n} bron(nen) in deze wereld.` : "Geen bronnen in deze wereld: vaste basiswaarden.";
   updateFieldLegend();
+  buildFieldMap();
 }
 document.querySelectorAll(".hudOpt").forEach(cb => {   // keuze per browser onthouden
   try { const v = localStorage.getItem("tb3sim.hud." + cb.dataset.k); if (v !== null) cb.checked = v === "1"; } catch {}
   cb.onchange = () => { try { localStorage.setItem("tb3sim.hud." + cb.dataset.k, cb.checked ? "1" : "0"); } catch {} };
 });
+// kleurenkaart van een veld op de vloer (werkelijke verdeling, zonder ruis), 10 cm per cel
+let fieldMapMesh = null;
+const FIELD_UNIT = { gas: [400, "ppm"], heat: [20, "°C"], humidity: [45, "%"], light: [150, "lux"] };
+function buildFieldMap() {
+  if (fieldMapMesh) { scene.remove(fieldMapMesh); fieldMapMesh.material.map.dispose(); fieldMapMesh.geometry.dispose(); fieldMapMesh = null; }
+  const kind = $("fieldMap").value; $("fieldMapMsg").textContent = "";
+  if (!kind) return;
+  const [fx, fy] = sim.worldInfo.floor, res = 0.1, w = Math.ceil(fx / res), h = Math.ceil(fy / res);
+  const vals = new Float32Array(w * h); let max = 0;
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    const v = fieldValue(kind, -fx / 2 + (i + 0.5) * res, -fy / 2 + (j + 0.5) * res); vals[j * w + i] = v; if (v > max) max = v;
+  }
+  if (max <= 0) { $("fieldMapMsg").textContent = "Geen bron van deze soort in deze wereld."; return; }
+  const c = new THREE.Color(FIELD_COL[kind]), px = new Uint8Array(w * h * 4);
+  for (let k = 0; k < w * h; k++) {
+    const f = vals[k] / max;                       // 0..1 t.o.v. het maximum
+    px[4 * k] = 255 * c.r; px[4 * k + 1] = 255 * c.g; px[4 * k + 2] = 255 * c.b; px[4 * k + 3] = f < 0.03 ? 0 : 40 + 180 * f;
+  }
+  const tex = new THREE.DataTexture(px, w, h, THREE.RGBAFormat); tex.magFilter = THREE.LinearFilter; tex.needsUpdate = true;
+  fieldMapMesh = new THREE.Mesh(new THREE.PlaneGeometry(fx, fy), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false,
+    polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
+  fieldMapMesh.position.z = 0.004; fieldMapMesh.renderOrder = 1; scene.add(fieldMapMesh);
+  const [base, unit] = FIELD_UNIT[kind], scale = kind === "humidity" ? 100 : 1;
+  $("fieldMapMsg").textContent = `Basis ${base} ${unit}, donkerste plek +${(max * scale).toFixed(kind === "heat" ? 1 : 0)} ${unit}. Werkelijke verdeling, zonder ruis.`;
+}
+$("fieldMap").onchange = buildFieldMap;
 $("fieldsShow").onchange = () => { fieldG.visible = $("fieldsShow").checked; updateFieldLegend(); };
 buildFieldMeshes();
 
