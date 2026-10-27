@@ -106,6 +106,14 @@
             <option value="humidity">vochtigheid</option>
             <option value="light">licht</option></select></div>
           <p class="msg" id="fieldMapMsg"></p>
+          <div class="grid2"><label for="measMap">Gemeten spoor</label><select id="measMap">
+            <option value="" selected>uit</option>
+            <option value="gas">gas</option>
+            <option value="temp">temperatuur</option>
+            <option value="hum">vochtigheid</option>
+            <option value="lux">licht</option></select></div>
+          <div class="row"><button class="ghost" id="measClear">Spoor wissen</button></div>
+          <p class="msg" id="measMsg">Rij rond: elke meting (1× per seconde) wordt een bolletje in de kleur van de waarde, blauw = laag, rood = hoog.</p>
           <div class="hudsel" role="group" aria-label="Meetwaarden in de HUD (linksboven)">
             <span class="hint">In de HUD (linksboven):</span>
             <label class="chk"><input type="checkbox" class="hudOpt" data-k="bat" checked> batterij</label>
@@ -1135,6 +1143,7 @@ function sensorsStep() {
     sensVals.hum = Math.min(1, Math.max(0, 0.45 + fieldValue("humidity", p.x, p.y) + 0.01 * gauss()));
     sensVals.lux = 150 + fieldValue("light", p.x, p.y) + 5 * gauss();
     pub("/sim/gas_value", { data: +sensVals.gas.toFixed(1) });
+    addMeasurement();
     pub("/sim/temperature", { header: { stamp: st, frame_id: "base_link" }, temperature: +sensVals.temp.toFixed(2), variance: 0.04 });
     pub("/sim/humidity", { header: { stamp: st, frame_id: "base_link" }, relative_humidity: +sensVals.hum.toFixed(3), variance: 0.0001 });
     pub("/sim/illuminance", { header: { stamp: st, frame_id: "base_link" }, illuminance: +sensVals.lux.toFixed(1), variance: 25 });
@@ -1189,6 +1198,44 @@ function buildFieldMap() {
   $("fieldMapMsg").textContent = `Basis ${base} ${unit}, donkerste plek +${(max * scale).toFixed(kind === "heat" ? 1 : 0)} ${unit}. Werkelijke verdeling, zonder ruis.`;
 }
 $("fieldMap").onchange = buildFieldMap;
+
+// gemeten spoor: elke meting een punt op de plek van de robot, gekleurd van laag (blauw) naar hoog (rood)
+const MEAS_MAX = 4000, measPts = [];   // [x, y, {gas, temp, hum, lux}]
+const measGeo = new THREE.BufferGeometry();
+measGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(MEAS_MAX * 3), 3));
+measGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(MEAS_MAX * 3), 3));
+measGeo.setDrawRange(0, 0);
+const measCloud = new THREE.Points(measGeo, new THREE.PointsMaterial({ size: 0.14, vertexColors: true, sizeAttenuation: true, depthWrite: false }));
+measCloud.frustumCulled = false; measCloud.renderOrder = 5; scene.add(measCloud);
+const MEAS_UNIT = { gas: ["ppm", 0, 1], temp: ["°C", 1, 1], hum: ["%", 0, 100], lux: ["lux", 0, 1] };
+function rampColor(f) {   // 0 blauw → groen → geel → 1 rood
+  const stops = [[0, 0.15, 0.35, 0.9], [0.35, 0.1, 0.8, 0.4], [0.7, 1, 0.85, 0.1], [1, 0.95, 0.2, 0.15]];
+  for (let i = 1; i < stops.length; i++) if (f <= stops[i][0]) {
+    const a = stops[i - 1], b = stops[i], t = (f - a[0]) / (b[0] - a[0]);
+    return [a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t];
+  }
+  return stops[3].slice(1);
+}
+function redrawMeas() {
+  const k = $("measMap").value; measCloud.visible = !!k;
+  if (!k) return;
+  const vals = measPts.map(p => p[2][k]); const lo = Math.min(...vals), hi = Math.max(...vals);
+  const pos = measGeo.attributes.position.array, col = measGeo.attributes.color.array;
+  measPts.forEach(([x, y, v], i) => {
+    pos[3 * i] = x; pos[3 * i + 1] = y; pos[3 * i + 2] = 0.03;
+    const [r, g, b] = rampColor(hi > lo ? (v[k] - lo) / (hi - lo) : 0.5); col[3 * i] = r; col[3 * i + 1] = g; col[3 * i + 2] = b;
+  });
+  measGeo.setDrawRange(0, measPts.length); measGeo.attributes.position.needsUpdate = measGeo.attributes.color.needsUpdate = true;
+  const [u, d, sc] = MEAS_UNIT[k];
+  $("measMsg").textContent = measPts.length ? `${measPts.length} metingen · blauw ${(lo * sc).toFixed(d)} ${u} → rood ${(hi * sc).toFixed(d)} ${u}` : "Nog geen metingen: rij rond (Omgevingssensoren publiceren moet aan staan).";
+}
+function addMeasurement() {
+  const p = sim.truthPose();
+  measPts.push([p.x, p.y, { ...sensVals }]); if (measPts.length > MEAS_MAX) measPts.shift();
+  if ($("measMap").value) redrawMeas();
+}
+$("measMap").onchange = redrawMeas;
+$("measClear").onclick = () => { measPts.length = 0; measGeo.setDrawRange(0, 0); redrawMeas(); };
 $("fieldsShow").onchange = () => { fieldG.visible = $("fieldsShow").checked; updateFieldLegend(); };
 buildFieldMeshes();
 
@@ -1285,7 +1332,7 @@ $("resetOdom").onclick = resetOdom;
 $("respawn").onclick = () => rebuild();
 function switchWorld(def, label) {
   try {
-    useWorld(def); buildWorldMeshes(); rebuild(); buildFieldMeshes();
+    useWorld(def); buildWorldMeshes(); rebuild(); buildFieldMeshes(); $("measClear").click();   // oud spoor hoort niet bij de nieuwe wereld
     if (student.name) setStudent(student.name, student.nr);              // code hangt af van de wereld
     for (const k in grids) { scene.remove(grids[k].mesh); delete grids[k]; }   // oude kaart hoort niet bij de nieuwe wereld
     mapOdom = null; $("navMsg").textContent = "Nieuwe wereld: herstart slam_toolbox voor een nieuwe kaart.";
