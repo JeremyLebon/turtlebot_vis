@@ -142,3 +142,5 @@ button:disabled{opacity:.45;cursor:default}
 .pad.testing{display:none}
 .hudsel{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center}
 .hudsel .hint{flex-basis:100%}
+.panel h3.sub{margin:6px 0 0}
+.joypad button.held{background:var(--robot);color:var(--bg)}

@@ -66,6 +66,11 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
 - **Velden in de wereld:** `fields: [{kind: gas|heat|humidity|light, x, y, strength, sigma}]` in de wereld-JSON (ook in `WORLDS` in core.js);
   som van Gauss-bellen + basiswaarde (400 ppm, 20 °C, 150 lux) + ruis op `/sim/gas_value`, `/sim/temperature`, `/sim/humidity`, `/sim/illuminance`
   (1 Hz, plaats = grondwaarheid). Bronnen in 3D standaard verborgen.
+- **Gamepad → `/joy`:** knoppen in de pagina of een echte gamepad (Gamepad-API, standaard-indeling) naar de indeling van
+  joy_node met de F710 (XInput): 8 assen (links/op = +, triggers rust 1.0), 11 knoppen (A=0 … RB=5), 20 Hz sim-tijd.
+  Met LB rijdt de robot met de sticks (zoals teleop_twist_joy, RB = turbo); voorrang na toetsenbord/knoppen in beeld.
+  `setPointerCapture` na het registreren van de knop en in try (gooit bij nagebootste klikken).
+- **LDS-02-preset:** `LIDAR.nRange = [220, 230]`: elke scan een willekeurig aantal punten, zoals de echte lidar.
 - **Geen toestelherkenning:** toestel-ID en browser-/computervingerafdruk zijn eruit (GDPR, 23-10); niet terugzetten.
 - **turtlebot-vis:** `build.py --local` → `dist/index.html` met three.js en Rapier uit `./vendor` (Dockerfile van turtlebot-vis), geserveerd op `http://localhost:8080/sim/`; daar verbindt de pagina vanzelf (`robot htmlsim` start rosbridge).
 - **Opname:** samengesteld canvas (WebGL + HUD + camera + testpaneel + balk) via `captureStream`, of `getDisplayMedia`

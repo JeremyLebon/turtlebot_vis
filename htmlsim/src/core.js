@@ -140,7 +140,7 @@ function analyzeModel(model) {
 function createSim(R) {
   const DT = 1 / 200;
   const G_WORLD = (0x0001 << 16) | 0xffff, G_ROBOT = (0x0002 << 16) | 0x0001, G_RAY = (0xffff << 16) | 0x0001;
-  const LIDAR = { n: 360, rmin: 0.12, rmax: 3.5 };
+  const LIDAR = { n: 360, rmin: 0.12, rmax: 3.5, nRange: null };   // nRange [a, b]: elke scan a..b punten (zoals de LDS-02)
   const L3 = { rings: 16, vfov: 30, hres: 2, rmax: 15, rmin: 0.2 };
   const world = new R.World({ x: 0, y: 0, z: -9.81 });
   world.timestep = DT;
@@ -466,6 +466,7 @@ function createSim(R) {
 
   function castFrom(o, d, rmax) { const h = world.castRay(new R.Ray(o, d), rmax, true, undefined, G_RAY); return h ? (h.timeOfImpact ?? h.toi) : 0; }
   function scan(link) {
+    if (LIDAR.nRange) LIDAR.n = LIDAR.nRange[0] + Math.floor(Math.random() * (LIDAR.nRange[1] - LIDAR.nRange[0] + 1));
     const T = linkWorld(link), inc = 2 * Math.PI / LIDAR.n, ranges = new Array(LIDAR.n), pts = [];
     for (let k = 0; k < LIDAR.n; k++) {
       const d = qrot(T.q, V(Math.cos(k * inc), Math.sin(k * inc), 0));
