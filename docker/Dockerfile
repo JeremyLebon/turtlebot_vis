@@ -33,6 +33,18 @@ RUN echo 'export TURTLEBOT3_MODEL=burger' >> /root/.bashrc
 # Werkmap /root/ros2_ws (bind mount uit docker-compose.yaml): na een
 # `colcon build` daar wordt de overlay in elke nieuwe shell gesourcet.
 RUN echo '[ -f /root/ros2_ws/install/setup.bash ] && source /root/ros2_ws/install/setup.bash' >> /root/.bashrc
+# VS Code (Dev Containers, attach): de ROS-omgeving staat enkel in .bashrc. Pylance krijgt het pad naar
+# rclpy, de debugger (Run/F5) een env-bestand: basis-ROS hier, de gekozen robot voegt robot_select.sh toe.
+RUN bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && env | grep -E '^(PATH|PYTHONPATH|LD_LIBRARY_PATH|AMENT_PREFIX_PATH|CMAKE_PREFIX_PATH|ROS_[A-Z_]*|GZ_[A-Z_]*)='" > /root/.ros_base.env \
+    && printf "TURTLEBOT3_MODEL=burger\nRMW_IMPLEMENTATION=rmw_zenoh_cpp\n" >> /root/.ros_base.env && cp /root/.ros_base.env /root/.ros.env \
+    && mkdir -p /root/.vscode-server/data/Machine \
+    && printf '%s\n' '{' \
+      '  "python.defaultInterpreterPath": "/usr/bin/python3",' \
+      '  "python.analysis.extraPaths": ["/opt/ros/'"${ROS_DISTRO}"'/lib/python3.12/site-packages"],' \
+      '  "python.autoComplete.extraPaths": ["/opt/ros/'"${ROS_DISTRO}"'/lib/python3.12/site-packages"],' \
+      '  "python.envFile": "/root/.ros.env",' \
+      '  "terminal.integrated.defaultProfile.linux": "bash"' \
+      '}' > /root/.vscode-server/data/Machine/settings.json
 # Lichtblick (open-source web-versie van Foxglove Studio) + foxglove_bridge:
 # alternatief voor rviz2 in de browser, zonder WSLg/OpenGL. Gestart door
 # vis_start.sh (entrypoint): http://localhost:8080, bridge op ws://localhost:8765.

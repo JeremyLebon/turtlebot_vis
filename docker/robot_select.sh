@@ -72,6 +72,8 @@ robot_write_env() {
 export ROS_DOMAIN_ID=$domain
 export ZENOH_CONFIG_OVERRIDE='mode=\"client\";connect/endpoints=[\"tcp/$(robot_host "$1"):7447\"]'"
     [ "$(cat "$ROBOT_ENV" 2>/dev/null)" = "$new" ] || echo "$new" > "$ROBOT_ENV"
+    # zelfde keuze voor VS Code (Run/F5 leest geen .bashrc): env-bestand zonder 'export'
+    [ -f /root/.ros_base.env ] && { cat /root/.ros_base.env; echo "$new" | sed 's/^export //'; } > /root/.ros.env 2>/dev/null
 }
 
 # --- enkel voor interactieve shells ---------------------------------------
