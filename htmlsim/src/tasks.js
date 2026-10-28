@@ -220,6 +220,10 @@ function renderChecks() {
   const r = activeRun || lastResult?.run; if (!r) { $("taskChecks").innerHTML = ""; return; }
   $("taskChecks").innerHTML = r.checks.map(c => `<li data-s="${c.s}"><span>${c.label}${c.optional ? " <em>(info)</em>" : ""}</span>${c.detail ? `<small>${escapeHtml(c.detail)}</small>` : ""}</li>`).join("");
 }
+// Bestandsnaam: studentnummer + naam zoals ingevuld ("r0123456_Jan_Peeters"),
+// zonder accenten en leestekens, zodat rapporten op Toledo per student herkenbaar zijn.
+const fileTag = () => [student.nr, student.name].filter(Boolean).join(" ")
+  .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\W+/g, "_").replace(/^_|_$/g, "") || "student";
 const escapeHtml = s => String(s).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
 const sleepSim = (run, s) => new Promise(res => { const t = sim.simTime + s; const f = () => (activeRun !== run ? res(false) : sim.simTime >= t ? res(true) : setTimeout(f, 30)); f(); });
 
@@ -510,7 +514,7 @@ async function finishRun(reason) {
   if (recorder.mr && recorder.label === run.def.label) await new Promise(r => setTimeout(r, 2000));   // eindbeeld mee in de opname
   const video = recorder.mr && recorder.label === run.def.label ? await stopRecording() : null;
   const stampName = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
-  const base = `rapport_${(student.nr || student.name).replace(/\W+/g, "_")}_${run.def.id}_${stampName}`;
+  const base = `rapport_${fileTag()}_${run.def.id}_${stampName}`;
   const body = {
     formaat: "tb3-lite-sim-rapport/1", simulator: SIM_VERSION, taak: { id: run.def.id, naam: run.def.label },
     student: { naam: student.name, nr: student.nr, code: student.code, datum: student.date }, wereld: sim.worldInfo.name,
@@ -535,7 +539,7 @@ $("taskStop").onclick = () => finishRun("gestopt");
 $("dlReport").onclick = () => lastResult && saveBlob(new Blob([JSON.stringify(lastResult.report, null, 1)], { type: "application/json" }), lastResult.base + ".json");
 $("dlVideo").onclick = () => lastResult?.video && saveBlob(lastResult.video.blob, lastResult.report.rapport.opname.bestand);
 $("recToggle").onclick = async () => {
-  if (recorder.mr) { const v = await stopRecording(); if (v) saveBlob(v.blob, `opname_${(student.nr || student.name || "student").replace(/\W+/g, "_")}_${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}.${v.mime.includes("mp4") ? "mp4" : "webm"}`); }
+  if (recorder.mr) { const v = await stopRecording(); if (v) saveBlob(v.blob, `opname_${fileTag()}_${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}.${v.mime.includes("mp4") ? "mp4" : "webm"}`); }
   else startRecording($("recSrc").value === "none" ? "sim" : $("recSrc").value, "vrije opname");
 };
 $("invalidAs").onchange = () => { invalidMode = $("invalidAs").value; };
