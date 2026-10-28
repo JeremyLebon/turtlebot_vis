@@ -1,0 +1,5 @@
+# niet in de image: testafhankelijkheden en -uitvoer van de HTML-simulator
+htmlsim/node_modules/
+htmlsim/tests/e2e_out/
+htmlsim/dist/
+**/__pycache__/

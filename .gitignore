@@ -8,3 +8,4 @@ ros2_ws/.vscode/*
 htmlsim/dist/
 htmlsim/node_modules/
 __pycache__/
+htmlsim/tests/e2e_out/
