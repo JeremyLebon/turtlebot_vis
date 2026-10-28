@@ -42,7 +42,8 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
 - **Werelden:** data-gedreven (`loadWorld(def)`), elementen `wall/box/cyl/rack/conveyor/pallet/movable/mark`.
   Dozen 35 cm hoog: lidar van de Burger zit op 18 cm, lagere objecten scheert de scan voorbij.
 - **Opdrachten (tasks.js):** log van de studentnode via `/rosout` (rcl_interfaces/Log), match op berichttekst
-  (niet de nodenaam: "battery_warning" bevat "warn"). Taak 2 publiceert zelf `/battery_state` (het paneel pauzeert dan) en controleert via
+  (niet de nodenaam: "battery_warning" bevat "warn"). Taak 1 kijkt naar **links** (`T1_SECTOR` = 90° ± 15°, sinds 28-10;
+  de voorsector staat uitgewerkt in het labo) en koppelt zich enkel aan een node die over obstakels logt (`acceptNode`). Taak 2 publiceert zelf `/battery_state` (het paneel pauzeert dan) en controleert via
   `/rosapi/publishers` dat er geen andere publisher is. Taak 3 meet met de grondwaarheid; vierkant: hoeken = stukken met
   yaw-verandering, zijden = afstand tussen draaipunten (robuust voor haperende commando's).
 - **/cmd_vel-type (tasks.js, onderaan):** rosbridge abonneert een topic met één type; een ander type komt in ROS 2

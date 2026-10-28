@@ -19,14 +19,18 @@ function onRosout(m) {
 
 /* ---- scanconventie: ongeldig als 0.0 (echte LDS) of inf (Gazebo) ---- */
 let invalidMode = "inf";
-const recentScans = [];                                    // [t, frontMin, ranges]
-function frontMin(ranges, deg15 = 15) {
-  const n = ranges.length, k = Math.round(n * deg15 / 360);
-  const v = [...ranges.slice(0, k), ...ranges.slice(n - k)].filter(r => r > 0.12 && isFinite(r));
-  return v.length ? Math.min(...v) : Infinity;
+const recentScans = [];                                    // [t, sectorMin(T1_SECTOR), ranges]
+// Taak 1 kijkt naar links (90° ± 15°), niet naar voren: de voorsector staat al
+// uitgewerkt in het labo (Read in the scan topic), links moeten ze zelf vinden.
+const T1_SECTOR = 90;
+function sectorMin(ranges, centerDeg = 0, halfDeg = 15) {
+  const n = ranges.length, k = Math.round(n * halfDeg / 360), c = Math.round(n * centerDeg / 360), v = [];
+  for (let i = c - k; i < c + k; i++) v.push(ranges[((i % n) + n) % n]);
+  const ok = v.filter(r => r > 0.12 && isFinite(r));
+  return ok.length ? Math.min(...ok) : Infinity;
 }
 function publishScanMsg(msg) {
-  recentScans.push([sim.simTime, frontMin(msg.ranges), msg.ranges]); if (recentScans.length > 40) recentScans.shift();
+  recentScans.push([sim.simTime, sectorMin(msg.ranges, T1_SECTOR), msg.ranges]); if (recentScans.length > 40) recentScans.shift();
   if (!live()) return;
   const mode = activeRun?.invalidOverride || invalidMode;
   if (mode === "inf") {
@@ -141,7 +145,7 @@ const sectorG = new THREE.Group(); sectorG.visible = false; scene.add(sectorG);
     sectorG.add(new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0xc89a10 })));
   }
 }
-function showSectorHelpers(on) { sectorG.visible = on; }
+function showSectorHelpers(on, centerDeg = 0) { sectorG.visible = on; sectorG.userData.center = centerDeg * Math.PI / 180; }
 function frameCameraFor(id) {
   const p = sim.truthPose(), c = Math.cos(p.th), s2 = Math.sin(p.th), at = (fx, fy, z, tx, ty) => {
     camera.position.set(p.x + c * fx - s2 * fy, p.y + s2 * fx + c * fy, z); controls.target.set(p.x + c * tx - s2 * ty, p.y + s2 * tx + c * ty, 0.05);
@@ -164,7 +168,7 @@ const SYM = { ok: "✓", fail: "✗", run: "…", wait: "○" };
 function testOverlayFrame() {
   const o = overlayData(), el = $("testOv");
   if (sectorG.visible && cfg.lidar) {
-    const T = sim.linkWorld(cfg.lidar); sectorG.position.set(T.p.x, T.p.y, 0); sectorG.rotation.z = yawOf(T.q);
+    const T = sim.linkWorld(cfg.lidar); sectorG.position.set(T.p.x, T.p.y, 0); sectorG.rotation.z = yawOf(T.q) + (sectorG.userData.center || 0);
     sectorG.userData.ring.material.color.set(o && o.flash ? 0xe5372b : 0xf2c230);
   }
   if (!o) { el.hidden = true; return; }
@@ -232,20 +236,20 @@ function placeProbe(pr, d, angDeg) {                     // d = afstand lidar �
 
 /* ---- taak 1 en uitbreiding ---- */
 const T1_STEPS = [
-  { id: "s1", d: 1.00, a: 0, label: "Paal op 1,00 m vóór: geen alarm", warn: 0, inv: "zero" },
-  { id: "s2", d: 0.25, a: 0, label: "Paal op 0,25 m vóór: één waarschuwing, met de juiste afstand", warn: 1, dist: true, inv: "zero" },
-  { id: "s3", d: 0.60, a: 0, label: "Paal terug naar 0,60 m: één keer \"free again\"", warn: 0, info: true, inv: "zero" },
-  { id: "s4", d: 0.20, a: 0, label: "Opnieuw op 0,20 m: weer één waarschuwing", warn: 1, inv: "inf" },
-  { id: "s5", d: 0.25, a: 90, label: "Paal links (90°): vrij, geen alarm", warn: 0, info: true, inv: "inf" },
-  { id: "s6", d: 0.25, a: 10, label: "Schuin vóór (10°, binnen ±15°): alarm", warn: 1, inv: "inf" },
-  { id: "s7", d: 0.25, a: 35, label: "Buiten de voorsector ±15° (35°): vrij, geen alarm", warn: 0, info: true, inv: "inf" },
+  { id: "s1", d: 1.00, a: 90, label: "Paal op 1,00 m links: geen alarm", warn: 0, inv: "zero" },
+  { id: "s2", d: 0.25, a: 90, label: "Paal op 0,25 m links: één waarschuwing, met de juiste afstand", warn: 1, dist: true, inv: "zero" },
+  { id: "s3", d: 0.60, a: 90, label: "Paal terug naar 0,60 m: één keer \"free again\"", warn: 0, info: true, inv: "zero" },
+  { id: "s4", d: 0.20, a: 90, label: "Opnieuw op 0,20 m links: weer één waarschuwing", warn: 1, inv: "inf" },
+  { id: "s5", d: 0.25, a: 0, label: "Paal vóór (0°): vrij, geen alarm (niet de voorsector uit het labo)", warn: 0, info: true, inv: "inf" },
+  { id: "s6", d: 0.25, a: 100, label: "Schuin links-achter (100°, binnen 90° ± 15°): alarm", warn: 1, inv: "inf" },
+  { id: "s7", d: 0.25, a: 125, label: "Buiten de linkersector (125°): vrij, geen alarm", warn: 0, info: true, inv: "inf" },
 ];
-async function runObstacle(run, steps, evalStep) {
+async function runObstacle(run, steps, evalStep, sectorDeg = 0) {
   prepareEmptyArena();
   run.state.savedRmax = sim.LIDAR.rmax; sim.LIDAR.rmax = 2.0;   // muren op 2,5 m vallen buiten bereik → ongeldige metingen in elke scan
   const pr = run.state.probe = sim.addProbe(20, 20); addProbeMesh(pr);
   run.ev("stap", "bereik tijdelijk 2,0 m, zodat elke scan ongeldige waarden bevat");
-  showSectorHelpers(true);
+  showSectorHelpers(true, sectorDeg);
   run.invalidOverride = "zero";
   if (!(await sleepSim(run, 2.0))) return;
   for (const st of steps) {
@@ -267,7 +271,10 @@ function cleanupObstacle(run) {
 const TASKS = {
   t1: {
     label: "Taak 1 · Obstakelalarm",
-    how: "Voorsector: ±15° rond de voorkant (n uit angle_increment). Start obstacle_alarm.py in je container en klik dan op Test starten. De robot staat stil in de lege kamer; een paaltje (Ø 8 cm, als een stoelpoot) wordt op vaste plaatsen gezet. Het lidarbereik gaat tijdelijk naar 2 m, zodat elke scan ongeldige waarden bevat (eerst 0.0, daarna inf). Duurt ongeveer 25 s.",
+    // enkel een node die over obstakels logt: draait het script van taak 2 nog,
+    // dan zou de simulator zich anders aan battery_warning koppelen
+    acceptNode: e => /obstacle|obstakel|free|vrij|alarm/i.test(e.msg),
+    how: "Linkersector: 90° ± 15° (links van de robot, indexen uit angle_increment). Start obstacle_alarm.py in je container en klik dan op Test starten. De robot staat stil in de lege kamer; een paaltje (Ø 8 cm, als een stoelpoot) wordt op vaste plaatsen gezet. Het lidarbereik gaat tijdelijk naar 2 m, zodat elke scan ongeldige waarden bevat (eerst 0.0, daarna inf). Duurt ongeveer 25 s.",
     checks: [...T1_STEPS.map(s => ({ id: s.id, label: s.label })), { id: "edge", label: "Melding één keer per obstakel (flankdetectie)" }, { id: "filt", label: "Ongeldige metingen (0.0 en inf) gefilterd" }],
     async run(run) {
       run.state.repeat = false; run.state.filt = true;
@@ -291,7 +298,7 @@ const TASKS = {
           }
         }
         r.check(st.id, ok, det);
-      });
+      }, T1_SECTOR);
       run.check("edge", !run.state.repeat, run.state.repeat ? "melding herhaalt bij elke scan: onthoud de vorige toestand in self.alarm" : "");
       run.check("filt", run.state.filt && run.checks.find(c => c.id === "s1").s === "ok",
         run.state.filt ? "" : "min() nam een ongeldige waarde mee: filter op isfinite en > 0.12 m");

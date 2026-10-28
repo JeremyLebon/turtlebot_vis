@@ -30,8 +30,10 @@ wss.on('connection', ws => {
     if (m.op !== 'publish') return;
     if (m.topic === '/scan' && (st.task === 't1' || st.task === 't1x')) {
       const r = m.msg.ranges, n = r.length, ok = x => Number.isFinite(x) && x > 0.12;
-      const front = [...r.slice(0, 15), ...r.slice(-15)].filter(BAD ? (x => Number.isFinite(x)) : ok);
-      const d = front.length ? Math.min(...front) : Infinity;
+      // taak 1: linkersector 90° ± 15° (indexen uit angle_increment)
+      const kk = Math.round((15 * Math.PI / 180) / m.msg.angle_increment), cc = Math.round((Math.PI / 2) / m.msg.angle_increment);
+      const left = r.slice(cc - kk, cc + kk).filter(BAD ? (x => Number.isFinite(x)) : ok);
+      const d = left.length ? Math.min(...left) : Infinity;
       if (st.task === 't1') {
         if (BAD) { if (d < 0.3) log('obstacle_alarm', 30, `obstacle at ${d.toFixed(2)} m!`); }            // geen flank, geen filter
         else if (d < 0.3 && !st.alarm) { st.alarm = true; log('obstacle_alarm', 30, `obstacle at ${d.toFixed(2)} m!`); }
@@ -44,7 +46,8 @@ wss.on('connection', ws => {
         log('obstacle_alarm', 20, `front ${sec([...r.slice(0, k), ...r.slice(-k)])} m | left ${sec(r.slice(q - k, q + k))} m | behind ${sec(r.slice(2 * q - k, 2 * q + k))} m | right ${sec(r.slice(3 * q - k, 3 * q + k))} m | closest at ${ang.toFixed(0)}°`);
       }
     }
-    if (m.topic === '/battery_state') {
+    // enkel tijdens taak 2: de simulator publiceert /battery_state altijd (28-10)
+    if (m.topic === '/battery_state' && st.task === 't2') {
       const v = m.msg.voltage, p = m.msg.percentage;
       log('battery_warning', 20, `voltage ${v.toFixed(2)} V, percentage ${(p * 100).toFixed(0)} %`);
       if (BAD ? p * 100 < 50 * 100 : (v < 11.2 || p < 0.5)) log('battery_warning', 30, 'battery low!');
@@ -85,6 +88,8 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     if (m) { const f = path.join(NM, m[1], m[2]); if (fs.existsSync(f)) return r.respond({ contentType: 'application/javascript', body: fs.readFileSync(f) }); }
     r.abort(); });
   await page.goto('http://sim.local/', { waitUntil: 'domcontentloaded' }); await wait(3500);
+  // zijbalk in tabbladen (28-10): verborgen knoppen zijn niet klikbaar, toon alle tabbladen
+  await page.evaluate(() => document.querySelectorAll('.tabpane').forEach(p => { p.hidden = false; }));
   await page.type('#stuName', process.env.STU || 'Jan Peeters'); await page.type('#stuNr', process.env.NR || 'r0123456'); await page.click('#stuSet');
   await page.click('#connect'); await wait(1500);
   console.log('cmdInfo na verbinden:', await page.$eval('#cmdInfo', e => e.textContent), '| abonnement:', subCmdType);
