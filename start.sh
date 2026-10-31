@@ -25,6 +25,9 @@ for arg in "$@"; do
     esac
 done
 
+# Onder WSL: geheugenlimiet in %USERPROFILE%\.wslconfig? (anders voorstel)
+./wsl_check.sh || true
+
 if $PULL; then docker compose pull; fi
 docker compose up -d
 

@@ -615,11 +615,21 @@ function silentCheck(pubs, mode) {
   else if (quiet && cmdState.lastMsg < cmdState.since) showCmdInfo(`${shortType(t)} van ${who}${lab}. Nog geen berichten: publiceert je script misschien een ander type?`);
   else showCmdInfo(`${mode === "auto" ? "Herkend" : "Luistert als"}: ${shortType(t)} van ${who}${lab}.`, t === "geometry_msgs/msg/Twist" ? "ok" : "");
 }
+// Elke /rosapi/publishers-oproep maakt in rosbridge een service-client aan en ruimt hem weer op:
+// de ROS-graaf verandert, foxglove_bridge logt "publishing connection graph" en stuurt Lichtblick
+// een update. Dus niet sneller pollen dan nodig (31-10: elke 700 ms gaf ~2 graafwijzigingen/s).
+function cmdDelay() {
+  if (cmdState.subscribed && performance.now() - cmdState.lastMsg < 2000) return 5000;   // script rijdt: enkel nog nagaan
+  if (!cmdState.pubs.length) return 1500;                                                 // wacht op een script
+  return 700;                                                                             // net herkend of type twijfelachtig
+}
 function cmdStart() {
   cmdStop(); cmdState.fails = 0; cmdState.detected = ""; cmdState.lastMsg = 0;
-  cmdProbe(); cmdState.timer = setInterval(cmdProbe, 700);
+  const gen = cmdState.gen = (cmdState.gen || 0) + 1;   // een oude lus (oproep nog bezig bij herstart) stopt vanzelf
+  const loop = async () => { await cmdProbe(); if (cmdState.gen === gen && cmdState.timer) cmdState.timer = setTimeout(loop, cmdDelay()); };
+  cmdState.timer = setTimeout(loop, 0);
 }
-function cmdStop() { if (cmdState.timer) clearInterval(cmdState.timer); cmdState.timer = null; cmdState.subscribed = ""; cmdState.pubs = []; }
+function cmdStop() { if (cmdState.timer) clearTimeout(cmdState.timer); cmdState.timer = null; cmdState.gen = (cmdState.gen || 0) + 1; cmdState.subscribed = ""; cmdState.pubs = []; }
 $("cmdType").onchange = () => { if (live()) { unsubscribeCmd(); cmdStart(); } else showCmdInfo($("cmdType").value === "auto" ? "Type wordt herkend zodra je script op /cmd_vel publiceert." : `Luistert als ${shortType($("cmdType").value)} na het verbinden.`); };
 
 /* ---- "Klaar voor de echte robot?": wat werkt in de simulator maar niet op de labo-robot (Jazzy, Zenoh) ---- */
