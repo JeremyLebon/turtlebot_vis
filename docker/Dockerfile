@@ -112,7 +112,10 @@ COPY docker/vis_check.py /root/vis_check.py
 # `diagnose`: geheugen en schrijven per onderdeel (VS Code, Pylance, bridges, eigen nodes); het
 # log (~/ros2_ws/.diagnose/geheugen.log) start vanzelf in vis_start.sh. Zie vis_diagnose.py.
 COPY docker/vis_diagnose.py /root/vis_diagnose.py
-RUN chmod +x /root/vis_diagnose.py && ln -s /root/vis_diagnose.py /usr/local/bin/diagnose
+COPY docker/geheugen.html /opt/lichtblick/geheugen.html
+RUN chmod +x /root/vis_diagnose.py && ln -s /root/vis_diagnose.py /usr/local/bin/diagnose \
+    && printf '#!/bin/sh\nexec python3 /root/vis_diagnose.py --vrijmaken\n' > /usr/local/bin/vrijmaken \
+    && chmod +x /usr/local/bin/vrijmaken
 RUN printf '%s\n' 'source /root/robot_select.sh' \
       '[ -s "$ROBOT_ENV" ] || { nr=$(robot_detect) && [ -n "$nr" ] && robot_write_env "$nr"; }' \
       '_robot_refresh' \

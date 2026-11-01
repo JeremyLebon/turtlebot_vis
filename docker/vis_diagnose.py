@@ -4,6 +4,8 @@
     diagnose          live overzicht, elke 2 s (Ctrl+C stopt)
     diagnose --log    één regel per 30 s naar ~/ros2_ws/.diagnose/geheugen.log
                       (start vanzelf met de container, zie vis_start.sh)
+    vrijmaken         bestandscache van WSL teruggeven aan Windows (= diagnose --vrijmaken);
+                      ook met de knop op http://localhost:8080/geheugen.html
 
 Zoals `docker stats`, maar per onderdeel: VS Code, Pylance, de bridges, de
 simulatie en je eigen nodes. De container ziet ook het geheugen van heel WSL
@@ -101,6 +103,29 @@ def snapshot(prev_io, dt):
     return procs, groups, io
 
 
+def summary():
+    """Voor de webpagina (/api/geheugen): WSL, container en de onderdelen."""
+    m, (anon, _) = meminfo(), cgroup()
+    used = m["MemTotal"] - m["MemAvailable"]
+    _, groups, _ = snapshot({}, 0)
+    return {"wsl_totaal": round(m["MemTotal"]), "programmas": round(used),
+            "cache": round(m["MemTotal"] - m["MemFree"] - used), "swap": round(m["SwapTotal"] - m["SwapFree"]),
+            "container": round(anon or 0), "oom_kills": oom_kills(),
+            "onderdelen": {g: round(v[0]) for g, v in sorted(groups.items(), key=lambda x: -x[1][0]) if v[0] >= 1}}
+
+
+def free_cache():
+    """Bestandscache van de WSL-kernel weggooien: Windows krijgt dat geheugen meteen terug
+    (vmmemWSL zakt). Kan omdat de container privileged draait. Gevolg: bestanden die nog in
+    de cache zaten, worden de volgende keer opnieuw van de schijf gelezen (even trager)."""
+    before = summary()["cache"]
+    os.sync()
+    with open("/proc/sys/vm/drop_caches", "w") as f:
+        f.write("3\n")
+    after = summary()["cache"]
+    return {"cache_voor": before, "cache_na": after, "vrijgemaakt": max(0, before - after)}
+
+
 def live():
     prev_io, t0 = {}, None
     try:
@@ -117,7 +142,7 @@ def live():
             out.append("  WSL          %.1f GB programma's + %.1f GB cache = %.1f GB van %.1f GB (vmmemWSL in Taakbeheer)%s" % (
                 used / 1024, cache / 1024, (used + cache) / 1024, m["MemTotal"] / 1024,
                 "   \033[33m<- bijna vol\033[0m" if warn else ""))
-            out.append("               swap %.0f MB. Cache teruggeven aan Windows: sudo sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches' (in WSL)" % swap)
+            out.append("               swap %.0f MB. Cache teruggeven aan Windows: vrijmaken (of de knop op http://localhost:8080/geheugen.html)" % swap)
             if anon is not None:
                 out.append("  Container    %4.0f MB programma's, %.0f MB bestandscache" % (anon, cache))
             k = oom_kills()
@@ -170,6 +195,13 @@ def log(interval=int(os.environ.get("DIAG_INTERVAL", 30))):
 if __name__ == "__main__":
     if "--log" in sys.argv:
         log()
+    elif "--vrijmaken" in sys.argv:
+        try:
+            r = free_cache()
+            print("Cache van WSL: %d MB -> %d MB, %d MB teruggegeven aan Windows (vmmemWSL in Taakbeheer zakt)."
+                  % (r["cache_voor"], r["cache_na"], r["vrijgemaakt"]))
+        except OSError as exc:
+            sys.exit("Lukt niet (%s). Container niet privileged? In WSL: sudo sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches'" % exc)
     elif "-h" in sys.argv or "--help" in sys.argv:
         print(__doc__)
     else:

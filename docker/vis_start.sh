@@ -33,11 +33,31 @@ python3 /root/vis_diagnose.py --log > /dev/null 2>&1 &
 # Zoals python3 -m http.server, maar met Cache-Control: no-cache: na een nieuwe
 # image moet de browser de nieuwe index.html laden (layout-reset, Lichtblick-update).
 python3 - "${LICHTBLICK_PORT:-8080}" > "$LOG/lichtblick.log" 2>&1 <<'PY' &
-import functools, http.server, sys
+import functools, http.server, json, sys
+sys.path.insert(0, "/root")
+import vis_diagnose   # /geheugen.html: GET /api/geheugen, POST /api/vrijmaken
 class NoCache(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header("Cache-Control", "no-cache")
         super().end_headers()
+    def _json(self, fn):
+        try:
+            body, code = json.dumps(fn()).encode(), 200
+        except Exception as exc:
+            body, code = json.dumps({"fout": str(exc)}).encode(), 500
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+    def do_GET(self):
+        if self.path == "/api/geheugen":
+            return self._json(vis_diagnose.summary)
+        super().do_GET()
+    def do_POST(self):
+        if self.path == "/api/vrijmaken":
+            return self._json(vis_diagnose.free_cache)
+        self.send_error(404)
 http.server.ThreadingHTTPServer(("0.0.0.0", int(sys.argv[1])),
     functools.partial(NoCache, directory="/opt/lichtblick")).serve_forever()
 PY
