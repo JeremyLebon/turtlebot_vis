@@ -20,6 +20,7 @@
 <body>
 <header class="bar">
   <div class="brand"><span class="name">TB3 Lite Sim 3D</span><span class="sub" id="robotName">Burger · Rapier-fysica · rosbridge v2</span></div>
+  <button class="ghost" id="memLink" type="button" hidden title="Geheugen van WSL en de container, met de knop Cache vrijmaken (opent in een nieuw tabblad, de simulatie loopt door)">Geheugen</button>
   <button class="ghost" id="dlProject" hidden title="Broncode, build-script, tests en docentscript voor Claude Code">Project downloaden (.zip)</button>
   <div class="status"><span id="dot" class="dot"></span><span id="statusText">Niet verbonden, lokaal rijden met toetsen</span></div>
 </header>
@@ -1031,6 +1032,28 @@ function tick(now) {
     document.querySelectorAll("#jointBox input").forEach((inp, i) => { const o = sim.robot.byName[inp.dataset.j]; const out = $("jo" + i); if (o && out) out.textContent = `${o.pos.toFixed(3)} → ${o.target.toFixed(3)}`; });
   }
   render(); requestAnimationFrame(tick);
+}
+// Link naar /geheugen.html, enkel in turtlebot-vis (/sim/), niet als artifact. Eigen tabblad via
+// window.open, zodat de knop Terug daar het tabblad sluit en de simulatie niet herstart.
+if (location.pathname.startsWith("/sim")) {
+  $("memLink").hidden = false;
+  $("memLink").addEventListener("click", () => { const w = window.open("/geheugen.html", "tbgeheugen"); w?.focus(); });
+  // In de knop: geheugen van WSL (programma's, zonder cache) en schijf van heel WSL, elke 5 s.
+  // Oranje vanaf 75 %, 50 MB/s schrijven of een afgesloten programma (sinds WSL-start), rood vanaf 90 % of swap.
+  const memPoll = async () => {
+    try {
+      const d = await (await fetch("/api/geheugen?kort", { cache: "no-store" })).json();
+      const pct = d.programmas / d.wsl_totaal, gb = mb => (mb / 1024).toFixed(1).replace(".", ",");
+      const disk = d.schrijven == null ? "" : ` · schijf ${Math.round(d.lezen + d.schrijven)} MB/s`;
+      $("memLink").textContent = `RAM ${gb(d.programmas)}/${gb(d.wsl_totaal)} GB${disk}`;
+      const bad = pct > 0.9 || d.swap > 200, warn = pct > 0.75 || d.schrijven > 50 || d.oom_kills > 0;
+      $("memLink").classList.toggle("memBad", bad); $("memLink").classList.toggle("memWarn", warn && !bad);
+      $("memLink").title = `WSL: ${gb(d.programmas)} GB in gebruik door programma's van ${gb(d.wsl_totaal)} GB` +
+        (d.swap ? `, swap ${d.swap} MB` : "") + (d.oom_kills ? `, ${d.oom_kills}× programma afgesloten` : "") +
+        (d.schrijven == null ? "" : `. Schijf: ${d.lezen} MB/s lezen, ${d.schrijven} MB/s schrijven`) + ". Klik: details en Cache vrijmaken.";
+    } catch (e) { /* oudere image zonder /api/geheugen: knop blijft "Geheugen" */ }
+  };
+  memPoll(); setInterval(memPoll, 5000);
 }
 // Topictabel: enkel bij openen en met de knop Vernieuwen, niet elke seconde (1-11, lichter in de browser)
 $("topicsSec").addEventListener("toggle", e => { if (e.target.open) renderTopics(); });

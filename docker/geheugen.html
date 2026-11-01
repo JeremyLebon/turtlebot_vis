@@ -31,11 +31,13 @@ button:focus-visible { outline: 3px solid var(--cache); outline-offset: 2px; }
 .warn { color: var(--warn); }
 .ok { color: var(--ok); }
 .muted { color: var(--muted); font-size: .9rem; }
+.top { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+button.back { background: transparent; color: var(--fg); border: 1px solid var(--line); font-weight: 500; font-size: .9rem; padding: 6px 12px; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Geheugen van WSL</h1>
+  <div class="top"><h1>Geheugen van WSL</h1><button class="back" id="back" type="button">← Terug naar de simulator</button></div>
   <section class="panel">
     <div class="big" id="sum">Laden...</div>
     <div class="bar" aria-hidden="true"><span id="bProg" style="background:var(--prog)"></span><span id="bCache" style="background:var(--cache)"></span></div>
@@ -59,7 +61,8 @@ async function load() {
     const d = await (await fetch("/api/geheugen")).json();
     if (d.fout) throw new Error(d.fout);
     const t = d.wsl_totaal;
-    $("sum").textContent = `${gb(d.programmas)} programma's + ${gb(d.cache)} cache = ${gb(d.programmas + d.cache)} van ${gb(t)}`;
+    $("sum").textContent = `${gb(d.programmas)} programma's + ${gb(d.cache)} cache = ${gb(d.programmas + d.cache)} van ${gb(t)}`
+      + (d.schrijven != null ? ` · schijf: ${d.lezen} MB/s lezen, ${d.schrijven} MB/s schrijven` : "");
     $("bProg").style.width = (100 * d.programmas / t) + "%";
     $("bCache").style.width = (100 * d.cache / t) + "%";
     const w = [];
@@ -78,6 +81,11 @@ $("free").addEventListener("click", async () => {
     $("msg").innerHTML = `<span class="ok">${r.vrijgemaakt} MB teruggegeven aan Windows</span> (cache ${r.cache_voor} → ${r.cache_na} MB).`;
   } catch (e) { $("msg").innerHTML = `<span class="warn">Lukt niet: ${e.message}</span>`; }
   $("free").disabled = false; load();
+});
+// Geopend vanuit de simulator (window.open): tabblad sluiten, de simulator loopt nog. Anders: naar /sim/.
+$("back").addEventListener("click", () => {
+  if (window.opener && !window.opener.closed) { window.opener.focus(); window.close(); }
+  else location.href = "/sim/";
 });
 load(); setInterval(load, 5000);
 </script>

@@ -53,6 +53,8 @@ class NoCache(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/api/geheugen":
             return self._json(vis_diagnose.summary)
+        if self.path == "/api/geheugen?kort":
+            return self._json(vis_diagnose.short)
         super().do_GET()
     def do_POST(self):
         if self.path == "/api/vrijmaken":

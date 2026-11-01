@@ -103,6 +103,37 @@ def snapshot(prev_io, dt):
     return procs, groups, io
 
 
+_disk_prev = None
+
+
+def disk_rate():
+    """Lezen en schrijven van heel WSL (alle schijven, MB/s) sinds de vorige oproep.
+    Onder WSL zijn dat de virtuele schijven (sdX): Docker, swap, je bestanden.
+    De pagefile van Windows zelf ziet WSL niet."""
+    global _disk_prev
+    rd = wr = 0
+    for line in open("/proc/diskstats"):
+        f = line.split()
+        if re.fullmatch(r"sd[a-z]+|vd[a-z]+|nvme\d+n\d+", f[2]):
+            rd += int(f[5]) * 512
+            wr += int(f[9]) * 512
+    now, prev = (time.time(), rd, wr), _disk_prev
+    _disk_prev = now
+    if not prev or now[0] - prev[0] < 0.5:
+        return None, None
+    dt = now[0] - prev[0]
+    return (rd - prev[1]) / 1048576 / dt, (wr - prev[2]) / 1048576 / dt
+
+
+def short():
+    """Voor de simulator (/api/geheugen?kort): enkel WSL-geheugen en schijf, zonder processen."""
+    m = meminfo()
+    rd, wr = disk_rate()
+    return {"wsl_totaal": round(m["MemTotal"]), "programmas": round(m["MemTotal"] - m["MemAvailable"]),
+            "swap": round(m["SwapTotal"] - m["SwapFree"]), "oom_kills": oom_kills(),
+            "lezen": None if rd is None else round(rd, 1), "schrijven": None if wr is None else round(wr, 1)}
+
+
 def summary():
     """Voor de webpagina (/api/geheugen): WSL, container en de onderdelen."""
     m, (anon, _) = meminfo(), cgroup()
@@ -110,7 +141,7 @@ def summary():
     _, groups, _ = snapshot({}, 0)
     return {"wsl_totaal": round(m["MemTotal"]), "programmas": round(used),
             "cache": round(m["MemTotal"] - m["MemFree"] - used), "swap": round(m["SwapTotal"] - m["SwapFree"]),
-            "container": round(anon or 0), "oom_kills": oom_kills(),
+            "container": round(anon or 0), "oom_kills": oom_kills(), **{k: v for k, v in short().items() if k in ("lezen", "schrijven")},
             "onderdelen": {g: round(v[0]) for g, v in sorted(groups.items(), key=lambda x: -x[1][0]) if v[0] >= 1}}
 
 
