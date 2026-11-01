@@ -113,9 +113,11 @@ def live():
             swap = m["SwapTotal"] - m["SwapFree"]
             out = ["\033[H\033[J" + "Diagnose  %s   (Ctrl+C stopt)" % time.strftime("%H:%M:%S"), ""]
             warn = used > 0.85 * m["MemTotal"] or swap > 200
-            out.append("  WSL          %4.1f van %.1f GB in gebruik, %.1f GB vrij, swap %.0f MB%s" % (
-                used / 1024, m["MemTotal"] / 1024, m["MemAvailable"] / 1024, swap,
+            cache = m["MemTotal"] - m["MemFree"] - used    # bestandscache: vrij te maken, Windows ziet het wel
+            out.append("  WSL          %.1f GB programma's + %.1f GB cache = %.1f GB van %.1f GB (vmmemWSL in Taakbeheer)%s" % (
+                used / 1024, cache / 1024, (used + cache) / 1024, m["MemTotal"] / 1024,
                 "   \033[33m<- bijna vol\033[0m" if warn else ""))
+            out.append("               swap %.0f MB. Cache teruggeven aan Windows: sudo sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches' (in WSL)" % swap)
             if anon is not None:
                 out.append("  Container    %4.0f MB programma's, %.0f MB bestandscache" % (anon, cache))
             k = oom_kills()
