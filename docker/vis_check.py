@@ -10,7 +10,9 @@ topics van een Jazzy-robot (en omgekeerd) wel, maar krijgt geen berichten.
 """
 import json
 import os
+import re
 import socket
+import subprocess
 import sys
 import time
 import urllib.request
@@ -41,6 +43,40 @@ def http_ok(url, timeout=4.0):
             return r.status == 200
     except OSError:
         return False
+
+
+def memory_check():
+    """Geheugen van WSL (de container ziet dat van de hele VM) en afgesloten programma's.
+
+    Zit WSL vol, dan sluit Linux het grootste programma af (`Killed` in de
+    terminal). Dat staat in de kernellog (dmesg, de container is privileged);
+    /proc/vmstat telt het ook zonder rechten.
+    """
+    try:
+        mem = {k: int(v.split()[0]) for k, v in (l.split(":", 1) for l in open("/proc/meminfo"))}
+        total, free = mem["MemTotal"] / 1048576, mem["MemAvailable"] / 1048576
+    except (OSError, KeyError, ValueError):
+        return
+    try:
+        kills = int(next(l.split()[1] for l in open("/proc/vmstat") if l.startswith("oom_kill ")))
+    except (OSError, StopIteration, ValueError):
+        kills = 0
+    if not kills:
+        line(OK if free >= 0.5 else WARN, "Geheugen", "WSL %.1f GB, %.1f GB vrij%s" % (
+            total, free, "" if free >= 0.5 else " - weinig over: sluit programma's, of wsl --shutdown"))
+        return
+    killed = []
+    try:
+        uptime = time.clock_gettime(time.CLOCK_MONOTONIC)   # klok van dmesg (zonder slaapstand)
+        log = subprocess.run(["dmesg"], capture_output=True, text=True, timeout=5).stdout
+        for m in re.finditer(r"\[\s*([\d.]+)\].*Killed process \d+ \(([^)]*)\).*?anon-rss:(\d+)kB", log):
+            killed.append("%s (%.1f GB, %.0f min geleden)" % (
+                m.group(2), int(m.group(3)) / 1048576, (uptime - float(m.group(1))) / 60))
+    except (OSError, subprocess.SubprocessError):
+        pass
+    line(WARN, "Geheugen", "WSL %.1f GB, %.1f GB vrij - %d keer een programma afgesloten wegens geheugentekort%s"
+         % (total, free, kills, ": " + ", ".join(killed[-3:]) if killed else ""))
+    print("  %-16s Groeit je eigen node (bv. een lijst die nooit leegt)? Zie de GitBook, Setup laptop." % "")
 
 
 def ros_checks(sim, html=False):
@@ -161,6 +197,7 @@ def main():
     built = os.path.exists("/root/ros2_ws/install/setup.bash")
     line(OK if os.path.isdir("/root/ros2_ws") else WARN, "ros2_ws",
          "/root/ros2_ws" + (" (gebouwd)" if built else " (nog niet gebouwd: colcon build)"))
+    memory_check()
     print("  Alles in orde." if not problems else "  %d probleem/problemen - zie hierboven. Opnieuw: check" % problems)
     return 1 if problems else 0
 
