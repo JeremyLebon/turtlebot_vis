@@ -4,7 +4,8 @@
 # Zonder %USERPROFILE%\.wslconfig mag WSL de helft van het RAM nemen en houdt
 # het de bestandscache vast (vmmemWSL): na een `--pull` van de image (~5 GB)
 # blijft er te weinig over voor Windows, dat dan begint te swappen (laptop
-# traag, schijf op 100 %). Gemeten 31-10: de container zelf gebruikt ~0,8 GB.
+# traag, schijf op 100 %). Gemeten 31-10/1-11: container ~0,3-0,5 GB, en daarnaast
+# in Windows de browser (Lichtblick + simulator) ~1 GB: 3 GB voor WSL volstaat bij 8 GB RAM.
 #
 # Bestaat .wslconfig niet: voorstel met een limiet volgens het RAM, en na een
 # "j" aanmaken. Een bestaand bestand wordt nooit aangepast, enkel een tip.
@@ -30,7 +31,7 @@ fi
 RAM_GB=$(cd /mnt/c 2>/dev/null; powershell.exe -NoProfile -Command \
     '[math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB)' 2>/dev/null | tr -d '\r')
 [[ $RAM_GB =~ ^[0-9]+$ ]] || RAM_GB=$(( $(awk '/^MemTotal/{print $2}' /proc/meminfo) * 2 / 1048576 ))
-if   [ "$RAM_GB" -le 8 ];  then MEM=4GB
+if   [ "$RAM_GB" -le 8 ];  then MEM=3GB
 elif [ "$RAM_GB" -le 16 ]; then MEM=6GB
 else                            MEM=8GB
 fi
