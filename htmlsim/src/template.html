@@ -148,10 +148,11 @@
         <p class="msg" id="navMsg">Nog geen kaart ontvangen.</p>
         </section>
       </details>
-      <details>
+      <details id="topicsSec">
         <summary>Topics</summary>
         <section>
             <table id="topics"><tbody></tbody></table>
+            <button id="topicsRefresh" title="Topics en frequenties opnieuw lezen">Vernieuwen</button>
         </section>
       </details>
     </div>
@@ -1026,11 +1027,14 @@ function tick(now) {
   while (acc >= sim.DT) { acc -= sim.DT; if (!paused) simStep(); }
   if (now >= next.stat) {
     for (const k in stats) { stats[k].hz = stats[k].n; stats[k].n = 0; }
-    next.stat = now + 1000; renderTopics();
+    next.stat = now + 1000;
     document.querySelectorAll("#jointBox input").forEach((inp, i) => { const o = sim.robot.byName[inp.dataset.j]; const out = $("jo" + i); if (o && out) out.textContent = `${o.pos.toFixed(3)} → ${o.target.toFixed(3)}`; });
   }
   render(); requestAnimationFrame(tick);
 }
+// Topictabel: enkel bij openen en met de knop Vernieuwen, niet elke seconde (1-11, lichter in de browser)
+$("topicsSec").addEventListener("toggle", e => { if (e.target.open) renderTopics(); });
+$("topicsRefresh").addEventListener("click", renderTopics);
 function renderTopics() {
   $("topics").tBodies[0].innerHTML = Object.entries(stats)
     .filter(([k, s]) => live() ? (s.hz > 0 || ["/clock ", "/cmd_vel "].includes(k) || k === "/clock" || k === "/cmd_vel ") : ["/clock", "/scan", "/odom", "/tf", "/cmd_vel "].includes(k))
