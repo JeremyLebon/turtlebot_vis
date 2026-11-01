@@ -76,7 +76,7 @@ def memory_check():
         pass
     line(WARN, "Geheugen", "WSL %.1f GB, %.1f GB vrij - %d keer een programma afgesloten wegens geheugentekort%s"
          % (total, free, kills, ": " + ", ".join(killed[-3:]) if killed else ""))
-    print("  %-16s Groeit je eigen node (bv. een lijst die nooit leegt)? Zie de GitBook, Setup laptop." % "")
+    print("  %-16s Live per onderdeel: diagnose. Groeit je eigen node (bv. een lijst die nooit leegt)? Zie de GitBook, Setup laptop." % "")
 
 
 def ros_checks(sim, html=False):

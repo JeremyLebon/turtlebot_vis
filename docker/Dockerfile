@@ -109,6 +109,10 @@ COPY docker/sim_teleop_relay.py /root/sim_teleop_relay.py
 # neemt de keuze over en toont welke robot. Zie robot_select.sh.
 COPY docker/robot_select.sh /root/robot_select.sh
 COPY docker/vis_check.py /root/vis_check.py
+# `diagnose`: geheugen en schrijven per onderdeel (VS Code, Pylance, bridges, eigen nodes); het
+# log (~/ros2_ws/.diagnose/geheugen.log) start vanzelf in vis_start.sh. Zie vis_diagnose.py.
+COPY docker/vis_diagnose.py /root/vis_diagnose.py
+RUN chmod +x /root/vis_diagnose.py && ln -s /root/vis_diagnose.py /usr/local/bin/diagnose
 RUN printf '%s\n' 'source /root/robot_select.sh' \
       '[ -s "$ROBOT_ENV" ] || { nr=$(robot_detect) && [ -n "$nr" ] && robot_write_env "$nr"; }' \
       '_robot_refresh' \

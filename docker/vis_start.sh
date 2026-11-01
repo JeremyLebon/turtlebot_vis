@@ -26,6 +26,10 @@ mkdir -p "$LOG"
 # (27-10: `ros2 daemon stop` hing ~70 s in WSL); aan met TB_DAEMON_RESET=1.
 [ "${TB_DAEMON_RESET:-0}" = 1 ] && (source /opt/ros/${ROS_DISTRO:-jazzy}/setup.bash && ros2 daemon stop) >/dev/null 2>&1
 
+# Geheugenlog voor `diagnose` (elke 30 s één regel in ~/ros2_ws/.diagnose): blijft
+# bewaard als WSL vastloopt, terug te lezen na wsl --shutdown.
+python3 /root/vis_diagnose.py --log > /dev/null 2>&1 &
+
 # Zoals python3 -m http.server, maar met Cache-Control: no-cache: na een nieuwe
 # image moet de browser de nieuwe index.html laden (layout-reset, Lichtblick-update).
 python3 - "${LICHTBLICK_PORT:-8080}" > "$LOG/lichtblick.log" 2>&1 <<'PY' &
