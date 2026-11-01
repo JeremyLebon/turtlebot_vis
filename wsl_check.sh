@@ -24,6 +24,12 @@ if [ -f "$CFG" ]; then
         echo "Tip: $WINPROFILE\\.wslconfig heeft geen 'memory=' of 'autoMemoryReclaim='."
         echo "     Zonder die regels kan WSL te veel geheugen vasthouden (laptop traag). Zie de GitBook, Setup laptop."
     fi
+    # Mirrored (vorig jaar voor DDS-multicast) is met Zenoh niet meer nodig; deelt de poorten
+    # met Windows (8080/8765/9090/7447 al bezet -> Lichtblick of bridge start niet)
+    if grep -qiE '^\s*networkingMode\s*=\s*mirrored' "$CFG"; then
+        echo "Tip: $WINPROFILE\\.wslconfig gebruikt networkingMode=mirrored. Dat is niet meer nodig."
+        echo "     Problemen met Lichtblick of de robot? Verwijder die regel, dan in PowerShell: wsl --shutdown"
+    fi
     exit 0
 fi
 
