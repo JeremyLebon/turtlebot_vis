@@ -65,6 +65,19 @@ http.server.ThreadingHTTPServer(("0.0.0.0", int(sys.argv[1])),
 PY
 
 (
+    # Bridges en de teleop-relay stoppen. Niet via ros2 launch of kill -INT:
+    # achtergrondtaken van een script negeren SIGINT (SigIgn), ook de nodes die
+    # launch start. Dan bleven ze draaien: bij elke `robot htmlsim` een rosbridge
+    # extra (5 x ~0,5 GB op een studentenlaptop) en een wees-foxglove_bridge die
+    # poort 8765 bezet hield (de nieuwe crashte, Lichtblick bleef in de oude modus).
+    # TERM aan alle processen, KILL voor wie na 2 s nog leeft.
+    BRIDGE_PROCS="sim_teleop_relay\.py|launch rosbridge_server|rosbridge_websocket --ros-args|rosapi_node --ros-args|foxglove_bridge"
+    stop_bridges() {
+        pkill -TERM -f "$BRIDGE_PROCS" 2>/dev/null || return 0
+        for _ in 1 2 3 4; do pgrep -f "$BRIDGE_PROCS" >/dev/null || return 0; sleep 0.5; done
+        pkill -KILL -f "$BRIDGE_PROCS" 2>/dev/null; true
+    }
+
     source /opt/ros/${ROS_DISTRO}/setup.bash
     # turtlebot3_description (apt): de bridge levert de meshes
     # (package://...) van het robotmodel aan Lichtblick.
@@ -88,18 +101,17 @@ PY
         done
         robot_write_env "$NR"
         source "$ROBOT_ENV"
-        SIM=false RELAY= ROSBRIDGE=
+        SIM=false
+        stop_bridges    # restjes van een vorige ronde: één bridge per poort
         if [ "$NR" = sim ] || [ "$NR" = htmlsim ]; then
             SIM=true
             echo "$(date +%T) $NR - foxglove_bridge start (simulatietijd)"
             python3 /root/sim_teleop_relay.py >> "$LOG/sim_teleop_relay.log" 2>&1 &
-            RELAY=$!
             if [ "$NR" = htmlsim ]; then
                 # HTML-simulator (http://localhost:8080/sim/) praat via rosbridge
                 echo "$(date +%T) rosbridge start op ws://localhost:9090"
                 ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9090 \
                     >> "$LOG/rosbridge.log" 2>&1 &
-                ROSBRIDGE=$!
             fi
         else
             echo "$(date +%T) TurtleBot $NR (10.0.$NR.10) - foxglove_bridge start"
@@ -122,8 +134,7 @@ PY
             fi
         done
         wait $BRIDGE
-        [ -n "$RELAY" ] && kill $RELAY 2>/dev/null
-        [ -n "$ROSBRIDGE" ] && kill -INT $ROSBRIDGE 2>/dev/null
+        stop_bridges
         sleep 2
     done
 ) > "$LOG/foxglove_bridge.log" 2>&1 &

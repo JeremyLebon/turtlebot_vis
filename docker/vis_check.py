@@ -45,6 +45,22 @@ def http_ok(url, timeout=4.0):
         return False
 
 
+def bridge_count():
+    """Aantal bridge-processen per soort (cmdline in /proc). Meer dan één is een
+    restje van een vorige modus: houdt geheugen of de poort bezet."""
+    kinds = {"rosbridge": "rosbridge_websocket --ros-args", "rosapi": "rosapi_node --ros-args",
+             "foxglove_bridge": "lib/foxglove_bridge/foxglove_bridge"}
+    n = dict.fromkeys(kinds, 0)
+    for pid in filter(str.isdigit, os.listdir("/proc")):
+        try:
+            cmd = open("/proc/%s/cmdline" % pid, "rb").read().replace(b"\0", b" ").decode(errors="replace")
+        except OSError:
+            continue
+        for k, pat in kinds.items():
+            n[k] += pat in cmd
+    return n
+
+
 def memory_check():
     """Geheugen van WSL (de container ziet dat van de hele VM) en afgesloten programma's.
 
@@ -190,6 +206,13 @@ def main():
     bridge = port_open("127.0.0.1", 8765) is not None
     line(OK if bridge else WARN, "Bridge",
          "foxglove_bridge ws://localhost:8765" + ("" if bridge else " - start pas als de robot bereikbaar is"))
+    counts = bridge_count()
+    extra = {k: v for k, v in counts.items() if v > 1}
+    text = ", ".join("%s %d" % kv for kv in counts.items() if kv[1]) or "geen"
+    if extra:
+        text += " - meer dan één: restjes van een vorige modus, opruimen met: robot %s" % (
+            "htmlsim" if html else "sim" if sim else nr or "")
+    line(WARN if extra else OK, "Bridges", text.rstrip())
     display = os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
     line(OK if display and (os.path.exists("/tmp/.X11-unix") or os.path.exists("/mnt/wslg")) else WARN,
          "Display", "rviz2/rqt kunnen vensters openen" if display else
