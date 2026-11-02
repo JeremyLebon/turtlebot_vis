@@ -19,7 +19,7 @@
 </head>
 <body>
 <header class="bar">
-  <div class="brand"><span class="name">TurtleBot Sim</span><span class="ver" title="Versie en datum van de laatste update van de simulator">v__VERSIE__ · __DATUM__</span><span class="sub" id="robotName">Burger · Rapier-fysica · rosbridge v2</span></div>
+  <div class="brand"><span class="name">TurtleBot Sim</span><span class="ver" title="Versie en datum van de laatste update van de simulator">v__VERSIE__ · __DATUM__</span></div>
   <button class="ghost" id="memLink" type="button" hidden title="Geheugen van WSL en de container, met de knop Cache vrijmaken (opent in een nieuw tabblad, de simulatie loopt door)">Geheugen</button>
   <button class="ghost" id="dlProject" hidden title="Broncode, build-script, tests en docentscript voor Claude Code">Project downloaden (.zip)</button>
   <div class="status"><span id="dot" class="dot"></span><span id="statusText">Niet verbonden, lokaal rijden met toetsen</span></div>
@@ -737,7 +737,6 @@ function rebuild(x = START.x, y = START.y, th = START.th) {
   opticalFrame = optical ? optical.child : (cfg.camera ? cfg.camera + "_optical_frame" : ""); addOptical = !!cfg.camera && !optical;
   $("camLabel").textContent = `/camera/image_raw · ${CAM.w}×${CAM.h} · ${opticalFrame}`;
   $("pad").hidden = !(cfg.leftWheel && cfg.rightWheel) || cfg.fixedBase;
-  $("robotName").textContent = model.name + " · Rapier-fysica · rosbridge v2";
   if (live()) { advertiseAll(); setTimeout(publishStatic, 200); }
 }
 async function loadModelText(text, label) {
