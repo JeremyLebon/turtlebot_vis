@@ -8,6 +8,8 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
 - `python3 build.py` voegt `src/template.html` + `src/style.css` + `src/core.js` + `src/tasks.js` samen tot
   `dist/tb3-lite-sim-3d.html` (placeholders `/*__CSS__*/`, `/*__CORE__*/`, `/*__TASKS__*/`).
   `--artifact` geeft `dist/artifact.html` zonder doctype/head/body.
+- Titelbalk "TurtleBot Sim v<versie> · <datum>": versie uit `package.json` (ophogen bij een update voor de studenten),
+  datum = laatste commit in htmlsim/ (vandaag bij niet-gecommitte wijzigingen, builddatum in de Docker-build zonder git).
 - Na elke wijziging: `python3 build.py`, dan syntaxcheck van het module-script:
   `python3 -c "import re;s=open('dist/tb3-lite-sim-3d.html').read();open('/tmp/m.mjs','w').write(re.findall(r'<script type=\"module\">(.*?)</script>',s,re.S)[0])" && node --check /tmp/m.mjs`
 - `npm test` (tests/test_core.mjs): fysica in Node. Draai dit na elke wijziging in `src/core.js`.

@@ -24,8 +24,10 @@ body{background:var(--bg);color:var(--fg);font:15px/1.45 var(--f-body);display:f
 .bar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
   padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
   border-bottom:1px solid var(--line);background:var(--surface)}
-.brand{display:flex;align-items:baseline;gap:12px}
+.brand{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 12px}
 .name{font:700 22px/1 var(--f-display);letter-spacing:.01em}
+.name,.ver{white-space:nowrap}
+.ver{font:500 12px var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums}
 .sub{font:500 12px var(--f-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
 .status{display:flex;align-items:center;gap:8px;font:500 13px var(--f-mono)}
 .dot{width:10px;height:10px;border-radius:50%;background:var(--muted)}
