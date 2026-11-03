@@ -293,12 +293,14 @@ const TASKS = {
         }
         if (st.info) { ok = ok && frees.length >= 1; det += `, ${frees.length}× "free again"`; if (frees.length > 1) r.state.repeat = true; }
         if (st.dist && warns.length) {
-          const n = nums(warns[0].msg).filter(x => x > 0 && x < 5), mins = scanMinsBetween(t0, sim.simTime);
+          // elk getal in de melding mag de afstand zijn (ook als er een index of hoek bij staat);
+          // marge 5 cm rond de scanwaarden of de echte afstand: trage laptops loggen soms een scan later
+          const n = nums(warns[0].msg).filter(x => x > 0 && x < 5), mins = scanMinsBetween(t0 - 1, sim.simTime);
           if (!n.length) det += ", afstand niet in de melding";
           else {
-            const near = mins.some(m => Math.abs(m - n[0]) <= 0.03);
-            det += `, gemeld ${n[0]} m (scan gaf ${mins.length ? fmt(Math.min(...mins)) + "–" + fmt(Math.max(...mins)) : "?"} m)`;
-            ok = ok && near;
+            const hit = n.find(x => Math.abs(x - st.d) <= 0.05 || mins.some(m => Math.abs(m - x) <= 0.05));
+            det += `, gemeld ${hit ?? n[0]} m (paal op ${fmt(st.d)} m, kleinste scanwaarde ${mins.length ? fmt(Math.min(...mins)) : "?"} m)`;
+            ok = ok && hit !== undefined;
           }
         }
         r.check(st.id, ok, det);
