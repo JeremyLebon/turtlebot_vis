@@ -1,6 +1,6 @@
 /* ================= opdrachten: automatische tests, opname en proefrapport ================= */
 const SIM_VERSION = "2026-10-21";
-const SYSTEM_NODES = /^(rosbridge|rosapi|slam_toolbox|amcl|map_server|map_saver|planner_server|controller_server|bt_navigator|behavior_server|smoother_server|velocity_smoother|waypoint_follower|lifecycle_manager|collision_monitor|docking_server|route_server|robot_state_publisher|rviz|teleop|transform_listener|launch|_ros2cli|ros2cli|rqt|nav2|global_costmap|local_costmap)/;
+const SYSTEM_NODES = /^(rosbridge|rosapi|slam_toolbox|amcl|map_server|map_saver|planner_server|controller_server|bt_navigator|behavior_server|smoother_server|velocity_smoother|waypoint_follower|lifecycle_manager|collision_monitor|docking_server|route_server|robot_state_publisher|rviz|teleop|transform_listener|launch|_ros2cli|ros2cli|rqt|nav2|global_costmap|local_costmap|cartographer|occupancy_grid|twist_mux|cmd_vel_guard|launch_control|nav_web|system_info|sim_bringup)/;
 const NUM_RE = /-?\d+(?:[.,]\d+)?/g;
 const nums = s => (s.match(NUM_RE) || []).map(x => parseFloat(x.replace(",", ".")));
 const isWarnLine = e => e.level >= 30 || /warn|waarsch|alarm|\blow\b|laag|kritiek|critical/i.test(e.msg);

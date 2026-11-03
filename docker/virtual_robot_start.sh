@@ -1,5 +1,5 @@
 #!/bin/bash
-# Virtuele robot (`robot virtueel`): de software van de echte TurtleBot - statuspagina
+# Virtuele robot (`robot htmlsim`): de software van de echte TurtleBot - statuspagina
 # (http://localhost:8090), knoppen Bringup/SLAM/Navigatie, kaarten, zones, twist_mux en
 # cmd_vel_guard - op de laptop, met de HTML-simulator (http://localhost:8080/sim/) als
 # hardware. Back-up voor als de robots niet werken. De bestanden komen uit turtlebot_docker

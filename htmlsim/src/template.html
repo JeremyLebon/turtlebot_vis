@@ -21,6 +21,7 @@
 <header class="bar">
   <div class="brand"><span class="name">TurtleBot Sim</span><span class="ver" title="Versie en datum van de laatste update van de simulator">v__VERSIE__ · __DATUM__</span></div>
   <button class="ghost" id="memLink" type="button" hidden title="Geheugen van WSL en de container, met de knop Cache vrijmaken (opent in een nieuw tabblad, de simulatie loopt door)">Geheugen</button>
+  <button class="ghost" id="fenixLink" type="button" hidden title="Statuspagina van de virtuele robot: SLAM, kaarten, zones en Navigatie, zoals op de echte robot (nieuw tabblad, de simulatie loopt door)">Fenix-pagina</button>
   <button class="ghost" id="dlProject" hidden title="Broncode, build-script, tests en docentscript voor Claude Code">Project downloaden (.zip)</button>
   <div class="status"><span id="dot" class="dot"></span><span id="statusText">Niet verbonden, lokaal rijden met toetsen</span></div>
 </header>
@@ -911,8 +912,12 @@ function currentCmd() {
   if (keyCmd) { cmdSrc = "toetsenbord"; return keyCmd; }
   if (padCmd) { cmdSrc = "knoppen in beeld"; return padCmd; }
   if (joyCmd) { cmdSrc = "gamepad (LB)"; return joyCmd; }
-  if (virtualRobot()) {
+  // Tijdens een opdrachttest rechtstreeks op /cmd_vel, zoals altijd: de extra stap via twist_mux gaf
+  // ~1° meer doorschot bij taak 3 (0,3 rad/s: 92,5° = niet geslaagd, test 03-11)
+  if (virtualRobot() && !activeRun) {
     if (sim.simTime - outCmd.t < 0.5) { cmdSrc = "virtuele robot (/cmd_vel_out)"; return outCmd; }
+    // Twist (geen TwistStamped) gaat niet door twist_mux: zoals vroeger rechtstreeks, met de melding bij /cmd_vel-type
+    if (cmdState.subscribed === "geometry_msgs/msg/Twist" && rosCmd.t >= 0 && sim.simTime - rosCmd.t < 0.5) { cmdSrc = "/cmd_vel (Twist, niet via twist_mux)"; return rosCmd; }
     cmdSrc = "virtuele robot: geen commando"; return { v: 0, w: 0 };
   }
   if (rosCmd.t >= 0 && sim.simTime - rosCmd.t < 0.5) { cmdSrc = "/cmd_vel"; return rosCmd; }   // time-out in sim-tijd
@@ -1061,6 +1066,12 @@ if (location.pathname.startsWith("/sim")) {
     } catch (e) { /* oudere image zonder /api/geheugen: knop blijft "Geheugen" */ }
   };
   memPoll(); setInterval(memPoll, 5000);
+  // Statuspagina van de virtuele robot (turtlebot-vis, poort 8090): knop zodra ze antwoordt
+  const fenixUrl = "http://" + location.hostname + ":8090/nav.html";
+  $("fenixLink").addEventListener("click", () => { const w = window.open(fenixUrl, "tbfenix"); w?.focus(); });
+  const fenixPoll = () => fetch("http://" + location.hostname + ":8090/", { mode: "no-cors", cache: "no-store" })
+    .then(() => { $("fenixLink").hidden = false; }, () => { $("fenixLink").hidden = true; });
+  fenixPoll(); setInterval(fenixPoll, 10000);
 }
 // Topictabel: enkel bij openen en met de knop Vernieuwen, niet elke seconde (1-11, lichter in de browser)
 $("topicsSec").addEventListener("toggle", e => { if (e.target.open) renderTopics(); });

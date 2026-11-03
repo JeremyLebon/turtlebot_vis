@@ -88,10 +88,10 @@ PY
         # de bridge poort 8765 opent (Lichtblick: "connection failed"), dus
         # eerst wachten, met een duidelijke melding in het log.
         n=0
-        until NR=$(robot_detect 2>&1) && [[ $NR =~ ^([0-9]+|sim|htmlsim|virtueel)$ ]] \
-              && { [[ ! $NR =~ ^(sim|htmlsim|virtueel)$ ]] || sim_router_start; } && robot_reachable "$NR"; do
+        until NR=$(robot_detect 2>&1) && [[ $NR =~ ^([0-9]+|sim|htmlsim)$ ]] \
+              && { [[ ! $NR =~ ^(sim|htmlsim)$ ]] || sim_router_start; } && robot_reachable "$NR"; do
             if [ $((n % 10)) -eq 0 ]; then
-                if [[ $NR =~ ^([0-9]+|sim|htmlsim|virtueel)$ ]]; then
+                if [[ $NR =~ ^([0-9]+|sim|htmlsim)$ ]]; then
                     echo "$(date +%T) wacht op robot $NR: $(robot_host "$NR"):7447 niet bereikbaar (robot aan? laptop op TB-AP-$NR?)"
                 else
                     echo "$(date +%T) wacht op de robot: ${NR:-geen TurtleBot bereikbaar (laptop op de wifi TB-AP-<nr>? robot aan?)}"
@@ -103,18 +103,16 @@ PY
         source "$ROBOT_ENV"
         SIM=false
         stop_bridges    # restjes van een vorige ronde: één bridge per poort
-        # virtuele robot enkel in die modus (anders ~0,5 GB voor niets)
-        [ "$NR" = virtueel ] || /root/virtual_robot_start.sh stop
-        if [[ $NR =~ ^(sim|htmlsim|virtueel)$ ]]; then
+        # virtuele robot (software van de robot, ~0,3 GB) enkel bij de HTML-simulator
+        [ "$NR" = htmlsim ] || /root/virtual_robot_start.sh stop
+        if [ "$NR" = sim ] || [ "$NR" = htmlsim ]; then
             SIM=true
             echo "$(date +%T) $NR - foxglove_bridge start (simulatietijd)"
-            # Lichtblick-Teleop: in de virtuele robot doet cmd_vel_guard dat, zoals op de robot
-            [ "$NR" = virtueel ] || python3 /root/sim_teleop_relay.py >> "$LOG/sim_teleop_relay.log" 2>&1 &
-            if [ "$NR" = virtueel ]; then
-                echo "$(date +%T) virtuele robot start: statuspagina op http://localhost:${VR_PORT:-8090}"
+            # Lichtblick-Teleop: bij de HTML-simulator doet cmd_vel_guard dat, zoals op de robot
+            [ "$NR" = htmlsim ] || python3 /root/sim_teleop_relay.py >> "$LOG/sim_teleop_relay.log" 2>&1 &
+            if [ "$NR" = htmlsim ]; then
+                echo "$(date +%T) virtuele robot start: Fenix-pagina op http://localhost:${VR_PORT:-8090}"
                 /root/virtual_robot_start.sh start
-            fi
-            if [ "$NR" = htmlsim ] || [ "$NR" = virtueel ]; then
                 # HTML-simulator (http://localhost:8080/sim/) praat via rosbridge
                 echo "$(date +%T) rosbridge start op ws://localhost:9090"
                 ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9090 \

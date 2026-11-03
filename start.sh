@@ -4,8 +4,8 @@
 #   ./start.sh             starten, check, shell in de container
 #   ./start.sh --no-shell  enkel starten en check
 #   ./start.sh --pull      eerst de nieuwste image ophalen (internet nodig)
-#   ./start.sh --htmlsim   HTML-simulator: http://localhost:8080/sim/ (thuis, huiswerk)
-#   ./start.sh --virtueel  HTML-simulator + software van de robot (statuspagina http://localhost:8090)
+#   ./start.sh --htmlsim   HTML-simulator: http://localhost:8080/sim/ (thuis, huiswerk), met de
+#                          Fenix-pagina van de virtuele robot op http://localhost:8090
 #   ./start.sh --sim       Gazebo-simulatie in de container
 #
 # Met de laptop op de wifi van de robot (TB-AP-<nr>). Verlaat de shell met
@@ -20,7 +20,6 @@ for arg in "$@"; do
         --no-shell) OPEN_SHELL=false ;;
         --pull) PULL=true ;;
         --htmlsim) MODE=htmlsim ;;
-        --virtueel) MODE=virtueel ;;
         --sim) MODE=sim ;;
         -h|--help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "onbekende optie: $arg (zie ./start.sh --help)"; exit 1 ;;
@@ -40,7 +39,7 @@ TTY=-i; [ -t 0 ] && [ -t 1 ] && TTY=-it
 docker exec turtlebot-vis touch /tmp/vis_checked
 if [ -n "$MODE" ]; then
     docker exec turtlebot-vis bash -ic "robot $MODE" > /dev/null 2>&1 || true
-    if [ "$MODE" = htmlsim ] || [ "$MODE" = virtueel ]; then
+    if [ "$MODE" = htmlsim ]; then
         echo "HTML-simulator starten (rosbridge)..."
         docker exec turtlebot-vis bash -c 'for i in $(seq 1 40); do (exec 3<>/dev/tcp/127.0.0.1/9090) 2>/dev/null && exit 0; sleep 0.5; done' || true
     fi

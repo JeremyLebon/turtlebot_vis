@@ -171,8 +171,8 @@ def ros_checks(sim, html=False):
 
 def main():
     nr = os.environ.get("TB_NR")
-    html = nr in ("htmlsim", "virtueel")
-    sim = nr in ("sim", "htmlsim", "virtueel")
+    html = nr == "htmlsim"
+    sim = nr in ("sim", "htmlsim")
     print("Turtlebot-vis check (ROS 2 %s)" % os.environ.get("ROS_DISTRO", "?"))
 
     rmw = os.environ.get("RMW_IMPLEMENTATION", "")
@@ -196,10 +196,10 @@ def main():
                 rb = port_open("127.0.0.1", 9090) is not None
                 line(OK if rb else BAD, "rosbridge", "ws://localhost:9090" + ("" if rb else
                      " luistert niet - zie /tmp/vis_services/rosbridge.log (of: robot %s)" % nr))
-            if nr == "virtueel":
+            if html:
                 vr = http_ok("http://127.0.0.1:%s/" % os.environ.get("VR_PORT", "8090"))
-                line(OK if vr else BAD, "Virtuele robot", "statuspagina http://localhost:%s" % os.environ.get("VR_PORT", "8090")
-                     + ("" if vr else " antwoordt niet - zie /tmp/vis_services/vr_*.log (of: robot virtueel)"))
+                line(OK if vr else BAD, "Fenix-pagina", "virtuele robot http://localhost:%s" % os.environ.get("VR_PORT", "8090")
+                     + ("" if vr else " antwoordt niet - zie /tmp/vis_services/vr_*.log (of: robot htmlsim)"))
             try:
                 ros_checks(sim, html)
             except Exception as exc:     # never a traceback for the student

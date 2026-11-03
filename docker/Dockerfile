@@ -101,7 +101,7 @@ RUN cd /tmp/htmlsim && python3 build.py --local \
     && curl -fsSL https://registry.npmjs.org/@dimforge/rapier3d-compat/-/rapier3d-compat-${RAPIER_VERSION}.tgz | tar xz -C /tmp/npm \
     && cp /tmp/npm/package/rapier.es.js $D/vendor/rapier/ \
     && rm -rf /tmp/npm /tmp/htmlsim
-# Virtuele robot (`robot virtueel`): de software van de echte robot (statuspagina op
+# Virtuele robot (`robot htmlsim`): de software van de echte robot (statuspagina op
 # http://localhost:8090, knoppen, kaarten, zones) met de HTML-simulator als hardware -
 # back-up als de robots niet werken. Bestanden uit turtlebot_docker
 # (tools/sync_virtual_robot.sh), op dezelfde paden als op de robot. De TurtleBot3-fork

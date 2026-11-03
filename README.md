@@ -87,18 +87,15 @@ internet nodig. Terug naar de echte robot: `robot` in de container. Gazebo in
 de container: `./start.sh --sim`. Broncode en tests van de simulator:
 `htmlsim/` (zie `htmlsim/README.md`).
 
-### Virtuele robot (back-up voor de echte robot)
+### Virtuele robot en Fenix-pagina (back-up voor de echte robot)
 
-```bash
-./start.sh --virtueel
-```
-
-De HTML-simulator plus de software van de echte TurtleBot: de statuspagina
-op <http://localhost:8090> met Rijden, Mappen (SLAM met Cartographer, kaart
-opslaan, zones), Navigatie (Nav2, planners, routes), twist_mux en
-cmd_vel_guard. Zelfde knoppen en paden als op de robot; de simulator
-(<http://localhost:8080/sim/>) speelt de hardware. Kaarten en zones in
-`ros2_ws/virtuele_robot/`. Ongeveer 1 GB extra geheugen tijdens Navigatie.
+`./start.sh --htmlsim` start naast de simulator ook de software van de echte
+TurtleBot: de Fenix-pagina op <http://localhost:8090> (knop **Fenix-pagina**
+in de simulator) met Rijden, Mappen (SLAM met Cartographer, kaart opslaan,
+zones), Navigatie (Nav2, planners, routes), twist_mux en cmd_vel_guard.
+Zelfde knoppen en paden als op de robot; de simulator speelt de hardware en
+rijdt op `/cmd_vel_out`, zoals de motoren. Kaarten en zones in
+`ros2_ws/virtuele_robot/`. In rust ~0,3 GB, tijdens Navigatie ~1 GB.
 De robotbestanden komen uit turtlebot_docker: `tools/sync_virtual_robot.sh`,
 daarna de image opnieuw bouwen.
 

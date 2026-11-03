@@ -1,6 +1,6 @@
 #!/bin/bash
 # Neemt de robotsoftware (statuspagina, knoppen, zones) over uit turtlebot_docker
-# voor de virtuele robot (`robot virtueel`, zie docker/virtual_robot_start.sh).
+# voor de virtuele robot (`robot htmlsim`, zie docker/virtual_robot_start.sh).
 # Zelfde bestanden als op de echte robot; enkel FENIX_SIM=1 maakt het verschil
 # (bringup = de HTML-simulator, simulatietijd). Opnieuw draaien na een wijziging
 # aan de robot, dan de image opnieuw bouwen.
