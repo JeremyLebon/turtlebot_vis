@@ -75,6 +75,9 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
   `setPointerCapture` na het registreren van de knop en in try (gooit bij nagebootste klikken).
 - **LDS-02-preset:** `LIDAR.nRange = [220, 230]`: elke scan een willekeurig aantal punten, zoals de echte lidar.
 - **Geen toestelherkenning:** toestel-ID en browser-/computervingerafdruk zijn eruit (GDPR, 23-10); niet terugzetten.
+- **Virtuele robot (`robot virtueel`):** de simulator abonneert ook `/cmd_vel_out` (uitgang van twist_mux + cmd_vel_guard van de
+  robotsoftware in turtlebot-vis). Komt daar iets binnen (laatste 10 s), dan rijdt hij enkel daarop, zoals de motoren van de echte robot;
+  `/cmd_vel` gaat dan via twist_mux (prioriteiten, snelheidslimiet). De opdrachten blijven `/cmd_vel` meten.
 - **turtlebot-vis:** `build.py --local` → `dist/index.html` met three.js en Rapier uit `./vendor` (Dockerfile van turtlebot-vis), geserveerd op `http://localhost:8080/sim/`; daar verbindt de pagina vanzelf (`robot htmlsim` start rosbridge).
 - **Opname:** samengesteld canvas (WebGL + HUD + camera + testpaneel + balk) via `captureStream`, of `getDisplayMedia`
   voor het hele scherm. `drawComposite()` direct na `renderer.render` (anders leeg WebGL-beeld).

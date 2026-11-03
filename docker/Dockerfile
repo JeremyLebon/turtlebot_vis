@@ -101,6 +101,23 @@ RUN cd /tmp/htmlsim && python3 build.py --local \
     && curl -fsSL https://registry.npmjs.org/@dimforge/rapier3d-compat/-/rapier3d-compat-${RAPIER_VERSION}.tgz | tar xz -C /tmp/npm \
     && cp /tmp/npm/package/rapier.es.js $D/vendor/rapier/ \
     && rm -rf /tmp/npm /tmp/htmlsim
+# Virtuele robot (`robot virtueel`): de software van de echte robot (statuspagina op
+# http://localhost:8090, knoppen, kaarten, zones) met de HTML-simulator als hardware -
+# back-up als de robots niet werken. Bestanden uit turtlebot_docker
+# (tools/sync_virtual_robot.sh), op dezelfde paden als op de robot. De TurtleBot3-fork
+# van de robot (Nav2 zonder rviz2, Cartographer-instellingen) in /root/turtlebot3_ws;
+# enkel de virtuele robot sourcet die. Kaarten: ~/ros2_ws/virtuele_robot.
+RUN apt-get update && apt-get install -y --no-install-recommends ros-${ROS_DISTRO}-twist-mux \
+    && rm -rf /var/lib/apt/lists/*
+COPY docker/virtual_robot /tmp/virtual_robot
+RUN V=/tmp/virtual_robot && W=/root/turtlebot3_ws \
+    && install -m 755 $V/bin/* /usr/local/bin/ \
+    && mkdir -p $W/src $W/launch && cp $V/launch/* $W/launch/ && cp $V/*.yaml $W/ \
+    && cp -r $V/status_page $W/status_page && cp -r $V/turtlebot3 $W/src/ \
+    && bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && cd $W && colcon build --event-handlers console_direct- > /dev/null" \
+    && rm -rf $W/build $W/log /tmp/virtual_robot \
+    && ln -s /root/ros2_ws/virtuele_robot /root/turtlebot_state
+COPY --chmod=755 docker/virtual_robot_start.sh /root/virtual_robot_start.sh
 COPY docker/vis_start.sh /root/vis_start.sh
 # Lichtblick-Teleop (Twist) -> /cmd_vel (TwistStamped) in de simulatie; op
 # de echte robot doet cmd_vel_guard dat (zie sim_teleop_relay.py).

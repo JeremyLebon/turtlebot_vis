@@ -1,0 +1,1397 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Fenix · Info</title>
+<script src="roslib.min.js"></script>
+<script src="common.js?v=29"></script>
+<script src="qrcode.js"></script>
+<style>
+  :root {
+    --bg: #14161a;
+    --card: #1e2126;
+    --border: #2c3038;
+    --text: #e6e8eb;
+    --muted: #8a8f98;
+    --green: #2ecc71;
+    --yellow: #f1c40f;
+    --red: #e74c3c;
+    --accent: #4da3ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    padding: 24px;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  h1 { margin: 0; font-size: 1.4rem; }
+  .header-right { display: flex; gap: 8px; align-items: center; }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    background: var(--card);
+    border: 1px solid var(--border);
+  }
+  a.badge { color: var(--text); text-decoration: none; }
+  .info-table a, #swSetupLog a { color: var(--accent); }
+  a.badge:hover { border-color: var(--accent); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.ok { background: var(--green); }
+  .dot.warn { background: var(--yellow); }
+  .dot.bad { background: var(--red); }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+  }
+  .card h2 {
+    margin: 0 0 12px 0;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  .sub { color: var(--muted); font-size: 0.85rem; margin-top: 4px; }
+  /* QR codes: always dark on white, also in dark mode (scanners need contrast) */
+  /* ROS: topic inspector + TF tree, each with an on/off switch */
+  h2.sw-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  h2.sw-head .sw { text-transform: none; letter-spacing: 0; font-weight: 400; display: flex; align-items: center; gap: 6px; margin: 0; cursor: pointer; }
+  .topic-wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 12px; }
+  @media (max-width: 760px) { .topic-wrap { grid-template-columns: 1fr; } }
+  .topic-list { max-height: 380px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+  .topic-list button { display: block; width: 100%; text-align: left; background: none; border: 0;
+    border-bottom: 1px solid var(--border); color: var(--text); padding: 5px 8px; cursor: pointer; font: 0.82rem monospace; }
+  .topic-list button:hover { background: #ffffff0d; }
+  .topic-list button[aria-selected="true"] { background: #4ea1ff26; }
+  .topic-list button small { display: block; color: var(--muted); font-size: 0.72rem; }
+  .topic-detail { min-width: 0; }
+  .topic-detail table { width: 100%; font-size: 0.85rem; border-collapse: collapse; }
+  .topic-detail td { padding: 3px 0; vertical-align: top; overflow-wrap: anywhere; }
+  .topic-detail td:first-child { color: var(--muted); width: 32%; }
+  .topic-detail pre { background: #0d0f12; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px;
+    max-height: 300px; overflow: auto; font-size: 0.76rem; white-space: pre-wrap; word-break: break-word; margin: 8px 0 0; }
+  .tf-tree ul { list-style: none; margin: 0; padding-left: 18px; border-left: 1px dashed var(--border); }
+  .tf-tree > ul { padding-left: 0; border-left: 0; }
+  .tf-tree li { padding: 2px 0; font: 0.85rem monospace; }
+  .tf-tree .tf-meta { color: var(--muted); font-size: 0.75rem; margin-left: 8px; }
+  .tf-tree .tf-stale { color: var(--yellow); }
+  .upd-bar { width: 100%; max-width: 420px; height: 8px; margin-top: 6px; accent-color: var(--accent, #4ea1ff); }
+  .upd-bar[hidden] { display: none; }
+  .qr-row { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 10px; }
+  .qr { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .qr[hidden] { display: none; }
+  .qr > div { width: 160px; height: 160px; background: #fff; border-radius: 8px; padding: 6px; }
+  .qr svg { width: 100%; height: 100%; display: block; }
+  .qr figcaption { font: 0.78rem monospace; color: var(--muted); overflow-wrap: anywhere; max-width: 170px; text-align: center; }
+  .info-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+  .info-table td { padding: 3px 0; vertical-align: top; }
+  .info-table td:first-child { color: var(--muted); width: 45%; }
+  #configTable td:first-child { font-family: monospace; }
+  #configTable td:last-child { font-family: monospace; color: var(--text); }
+  .launch-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .launch-btn {
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .launch-btn:hover { border-color: var(--accent); }
+  .launch-btn:disabled { opacity: 0.5; cursor: default; }
+  .launch-btn.stop { background: var(--red); color: #2a0d0d; border-color: var(--red); }
+  .launch-btn.stop-one {
+    background: transparent; color: var(--red); border-color: var(--red);
+    padding: 8px 10px; font-size: 0.8rem;
+  }
+  .launch-btn .dot { display: inline-block; margin-right: 5px; vertical-align: middle; }
+  .card.wide { grid-column: 1 / -1; }
+  /* Status > Diensten (t79) */
+  .svc-table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+  .svc-table th { text-align: left; color: var(--muted); font-weight: 600; font-size: .74rem; text-transform: uppercase;
+                  letter-spacing: .04em; padding: 4px 8px 6px 0; border-bottom: 1px solid var(--border); }
+  .svc-table td { padding: 5px 8px 5px 0; border-bottom: 1px solid #2a2e35; vertical-align: middle; }
+  .svc-table tr.grp td { color: var(--muted); font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; padding-top: 10px; }
+  .svc-table .dot { display: inline-block; margin-right: 6px; vertical-align: middle; }
+  .svc-table td.act { white-space: nowrap; text-align: right; }
+  .svc-table button { background: #2a2e35; color: var(--text); border: 1px solid var(--border); border-radius: 6px;
+                      padding: 3px 8px; font-size: .78rem; cursor: pointer; margin-left: 4px; }
+  .svc-table button:hover { border-color: var(--accent); }
+  .svc-table button:disabled { opacity: .45; cursor: default; }
+  #svcLog { max-height: 340px; overflow: auto; }
+  @media (max-width: 700px) { .svc-table .opt { display: none; } }
+  pre.cmd {
+    background: #0d0f12; border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px; margin: 8px 0; font-size: 0.8rem; white-space: pre-wrap; word-break: break-all;
+  }
+  .log-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  .log-head select, .log-head input, #verSel {
+    background: #2a2e35; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px;
+  }
+  #logBox {
+    background: #0d0f12; border: 1px solid var(--border); border-radius: 8px;
+    height: 320px; overflow-y: auto; font-family: monospace; font-size: 0.78rem; padding: 6px 8px;
+  }
+  #logBox div { white-space: pre-wrap; word-break: break-word; padding: 1px 0; }
+  .lvl-DEBUG { color: var(--muted); }
+  .lvl-WARN { color: var(--yellow); }
+  .lvl-ERROR, .lvl-FATAL { color: var(--red); }
+  /* system.html = Status (#status) + ROS (#ros) + Beheer (#beheer, PIN): cards
+     per view; a plain .card (Software & diagnose) shows in Status and Beheer */
+  body.view-status .adm-card, body.view-status .ros-card { display: none; }
+  body.view-ros .card:not(.ros-card) { display: none; }
+  body.view-beheer .status-card, body.view-beheer .ros-card { display: none; }
+  .lock-card { display: none; max-width: 460px; margin: 30px auto; text-align: center; }
+  body.view-beheer:not(.fx-admin) .lock-card { display: block; }
+  body.view-beheer:not(.fx-admin) .grid { display: none; }
+  .lock-card input { background: #0d0f12; color: var(--text); border: 1px solid var(--border); border-radius: 8px;
+                     padding: 8px 10px; font-size: 1.1rem; width: 9em; text-align: center; letter-spacing: .2em; }
+  .check-list { list-style: none; margin: 0; padding: 0; }
+  .check-list li { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+  .check-list li:last-child { border-bottom: none; }
+  .check-list .name { flex: none; width: 40%; color: var(--muted); }
+  .check-list .dot { flex: none; transform: translateY(-1px); }
+  footer {
+    margin-top: 24px;
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+</style>
+</head>
+<body>
+
+<header id="appHeader"></header>
+
+<div class="card lock-card" id="lockCard">
+  <h2 style="text-transform:none;letter-spacing:0;font-size:1.05rem;color:var(--text)">Beheer - enkel voor de docent</h2>
+  <div class="sub" style="margin-bottom:14px">Software bijwerken en terugschakelen, robot-instellingen, camera,
+    launches. De PIN wordt op de robot gecontroleerd en is dezelfde voor alle robots.</div>
+  <form id="pinForm" class="launch-row" style="justify-content:center;align-items:center" autocomplete="off">
+    <input type="password" id="pinInput" inputmode="numeric" maxlength="8" aria-label="Docenten-PIN" placeholder="PIN">
+    <button class="launch-btn" type="submit">Ontgrendelen</button>
+  </form>
+  <div class="sub" id="pinMsg" style="margin-top:10px;min-height:1.2em"></div>
+  <div class="sub" id="pinNone" style="display:none;margin-top:10px;text-align:left">
+    Op deze robot is nog geen PIN ingesteld. Instellen via SSH op de robot:<br>
+    <code>docker exec -it turtlebot_&lt;nr&gt; fenix_admin.py set</code>
+  </div>
+</div>
+
+<div class="grid">
+
+  <div class="card status-card">
+    <h2>Systeem</h2>
+    <table class="info-table">
+      <tr><td>Hostname</td><td id="sysHostname">--</td></tr>
+      <tr><td>IP</td><td id="sysIp">--</td></tr>
+      <tr><td>MAC</td><td id="sysMac">--</td></tr>
+      <tr><td>CPU load (1m)</td><td id="sysCpu">--</td></tr>
+      <tr><td>CPU per core</td><td id="sysCpuCores">--</td></tr>
+      <tr><td>Geheugen</td><td id="sysMem">--</td></tr>
+      <tr><td>Netwerkload</td><td id="sysNet">--</td></tr>
+      <tr><td>Wifi-signaal</td><td id="sysWifi">--</td></tr>
+      <tr><td>Uptime</td><td id="sysUptime">--</td></tr>
+      <tr><td>Fenix-versie</td><td id="sysImage">--</td></tr>
+      <tr><td>Temperatuur Pi</td><td id="sysTemp">--</td></tr>
+      <tr><td>Voeding Pi</td><td id="sysPower">--</td></tr>
+      <tr><td>Ventilator</td><td id="sysFan">--</td></tr>
+      <tr><td>SD-kaart</td><td id="sysDisk">--</td></tr>
+    </table>
+    <div class="sub" id="sysAge">geen data</div>
+  </div>
+
+  <div class="card status-card">
+    <h2>Labo-check <span id="laboSum" style="text-transform:none;letter-spacing:0"></span></h2>
+    <ul class="check-list" id="laboList"><li class="sub">--</li></ul>
+  </div>
+
+  <div class="card">
+    <h2>Software &amp; diagnose</h2>
+    <table class="info-table">
+      <tr class="admin-only"><td>Golden image</td><td id="swGolden">--</td></tr>
+      <tr class="admin-only"><td>Setup-repo</td><td id="swSetup">--</td></tr>
+      <tr class="admin-only"><td>Docker-image</td><td id="swImage">--</td></tr>
+      <tr><td>Besturingssysteem</td><td id="swOs">--</td></tr>
+      <tr><td>Kernel / Docker</td><td id="swKernel">--</td></tr>
+      <tr><td>Bootloader</td><td id="swBoot">--</td></tr>
+      <tr class="admin-only"><td>Updates</td><td id="swUpdates">--</td></tr>
+      <tr><td>Vorige afsluiting</td><td id="dgShutdown">--</td></tr>
+      <tr><td>Klok</td><td id="dgClock">--</td></tr>
+      <tr><td>Wifi naar AP</td><td id="dgPing">--</td></tr>
+      <tr><td>Internet</td><td id="dgInternet">--</td></tr>
+      <tr><td>Lidar-draaiuren</td><td id="dgLidar" title="De LDS-02 draait zolang hij USB-stroom krijgt (ook zonder bringup) - geteld zolang hij stroom heeft. Opgegeven levensduur: 1000 u (ROBOTIS)">--</td></tr>
+      <tr class="admin-only"><td>Monitor</td><td id="dgMonitor" title="TurtleBot Monitor op de laptop van de docent (turtlebot_setup/monitor.conf)">--</td></tr>
+      <tr><td>Rosbridge-waakhond</td><td id="dgRbWd" title="Herstart rosbridge (de verbinding van deze pagina) als die geen gegevens meer doorgeeft - controle elke 30 s">--</td></tr>
+      <tr class="admin-only"><td>Monitor-opdrachten</td><td><label title="Mag de monitor van de docent deze robot bedienen (stop, piep, launches, bijwerken, uitschakelen)? Wordt onthouden."><input type="checkbox" id="monCtrl"> toelaten</label> <span class="sub" id="monLast"></span></td></tr>
+      <tr><td>Diensten</td><td id="dgServices">--</td></tr>
+      <tr><td>Container</td><td id="dgContainer">--</td></tr>
+      <tr><td>SD-kaartfouten</td><td id="dgSd">--</td></tr>
+    </table>
+    <div class="sub admin-only" style="margin-top:10px">Laatste commits setup-repo op deze robot:</div>
+    <ul class="admin-only" id="swSetupLog" style="margin:4px 0 0; padding-left:18px; font-size:0.82rem"><li class="sub">--</li></ul>
+  </div>
+
+  <div class="card wide">
+    <h2>Diensten</h2>
+    <div class="sub" style="margin-bottom:8px">Wat er in de container draait. Een gecrashte dienst start
+      <code>services_supervisor.sh</code> vanzelf opnieuw (binnen ~20 s); de launches start en stop je op
+      Rijden, Mappen en Navigatie.<span class="admin-only"> <b>Log</b>: laatste regels; <b>Herstart</b>: dienst
+      stoppen en opnieuw starten.</span></div>
+    <table class="svc-table">
+      <thead><tr><th>Dienst</th><th>Status</th><th class="opt">Actief sinds</th><th>Herstarts</th><th class="admin-only"></th></tr></thead>
+      <tbody id="svcBody"><tr><td colspan="5" class="sub">--</td></tr></tbody>
+    </table>
+    <div class="admin-only" id="svcLogWrap" style="display:none;margin-top:10px">
+      <div class="log-head"><b id="svcLogTitle"></b> <span class="sub" id="svcLogPath"></span>
+        <button class="launch-btn" id="svcLogRefresh" style="padding:4px 10px">Vernieuwen</button>
+        <button class="launch-btn" id="svcLogClose" style="padding:4px 10px">Sluiten</button></div>
+      <pre class="cmd" id="svcLog"></pre>
+    </div>
+    <div class="sub" id="svcMsg" style="margin-top:6px"></div>
+  </div>
+
+  <div class="card adm-card admin-only">
+    <h2>Instellingen (robot-config)</h2>
+    <table class="info-table" id="configTable">
+      <tr><td colspan="2" class="sub">nog geen data</td></tr>
+    </table>
+  </div>
+
+  <div class="card adm-card admin-only">
+    <h2>Launch control (les 2)</h2>
+    <div class="sub" style="margin-bottom:10px">
+      Studenten hebben geen terminal op de robot: zij starten de bringup met
+      de knop <b>Bringup</b> op Status, al de rest draait in turtlebot-vis op
+      hun laptop. Deze knoppen: vaste, voorgedefinieerde commando's.
+    </div>
+    <div class="launch-row">
+      <button class="launch-btn" data-launch="bringup"><span class="dot" id="dot-bringup"></span> Start robot (bringup)</button>
+      <button class="launch-btn stop-one" data-launch="stop_bringup">Stop</button>
+      <button class="launch-btn" data-launch="slam"><span class="dot" id="dot-slam"></span> Start SLAM</button>
+      <button class="launch-btn stop-one" data-launch="stop_slam">Stop</button>
+      <button class="launch-btn" data-launch="navigation"><span class="dot" id="dot-navigation"></span> Start Navigation</button>
+      <button class="launch-btn stop-one" data-launch="stop_navigation">Stop</button>
+      <button class="launch-btn" data-launch="camera"><span class="dot" id="dot-camera"></span> Start camera</button>
+      <button class="launch-btn stop-one" data-launch="stop_camera">Stop</button>
+      <button class="launch-btn" data-launch="joystick"><span class="dot" id="dot-joystick"></span> Start joystick</button>
+      <button class="launch-btn stop-one" data-launch="stop_joystick">Stop</button>
+      <button class="launch-btn stop" data-launch="stop_all">Stop alles</button>
+    </div>
+    <div class="sub" id="launchStatus" style="margin-top:10px">-</div>
+    <div class="sub" style="margin:16px 0 8px">
+      USB-stroom (lidar, OpenCR-USB, joystickontvanger): de Pi 5 schakelt
+      zijn 4 USB-poorten enkel samen. De lidar draait zolang hij USB-stroom
+      heeft (levensduur ~1000 u). Bringup, SLAM, Navigatie en Joystick zetten
+      de stroom vanzelf aan. In de terminal: <code>usb_power on</code>.
+    </div>
+    <div class="launch-row" style="align-items:center">
+      <button class="launch-btn" data-usb="usb_on"><span class="dot" id="dot-usb"></span> USB aan</button>
+      <button class="launch-btn stop-one" data-usb="usb_off">Uit</button>
+      <label class="sub" style="display:flex;align-items:center;gap:6px">
+        <input type="checkbox" id="usbAuto"> automatisch uit na 2 min zonder gebruik
+      </label>
+    </div>
+    <div class="sub" id="usbStatus" style="margin-top:8px">-</div>
+  </div>
+
+  <div class="card adm-card admin-only">
+    <h2>Camera-instellingen</h2>
+    <div class="sub" style="margin-bottom:10px">
+      Geldt voor het camerabeeld (<code>/camera/image_raw/compressed</code>). Toepassen herstart de camera
+      (~3 s zonder beeld). Meer pixels, fps of kwaliteit = meer wifi en CPU.
+    </div>
+    <div class="launch-row" style="align-items:center">
+      <label class="sub">Resolutie <select id="camRes">
+        <option value="640x480">640 x 480</option><option value="800x600">800 x 600</option>
+        <option value="1280x720">1280 x 720 (HD)</option><option value="1536x864">1536 x 864</option></select></label>
+      <label class="sub">Beelden/s <select id="camFps">
+        <option>5</option><option>10</option><option>15</option><option>20</option><option>30</option></select></label>
+      <label class="sub">JPEG-kwaliteit <input type="number" id="camQ" min="20" max="95" step="5" style="width:4.5em"></label>
+      <button class="launch-btn" id="camApply">Toepassen</button>
+      <button class="launch-btn stop-one" id="camDefault">Standaard</button>
+    </div>
+    <div class="sub" id="camInfo" style="margin-top:8px">-</div>
+    <div class="sub" id="camCalib" style="margin-top:4px">-</div>
+  </div>
+
+  <div class="card adm-card admin-only">
+    <h2>Robot</h2>
+    <div class="sub" style="margin-bottom:10px">
+      Stopt eerst alle launches (motoren uit), speelt het uit-melodietje en
+      herstart of schakelt dan de Raspberry Pi uit. Na uitschakelen: wacht
+      tot de groene led niet meer knippert voor je de batterij loskoppelt.
+    </div>
+    <div class="launch-row">
+      <button class="launch-btn" data-power="reboot">Herstarten</button>
+      <button class="launch-btn stop" data-power="shutdown">Uitschakelen</button>
+    </div>
+    <div class="sub" id="powerStatus" style="margin-top:10px">-</div>
+    <div class="launch-row" style="align-items:center;margin-top:14px">
+      <label class="sub" style="display:flex;align-items:center;gap:6px"
+        title="Grafische desktop op de Pi zelf (scherm via HDMI). Standaard uit: ~400 MB RAM minder. De keuze blijft bewaard na een herstart.">
+        <input type="checkbox" id="desktopToggle"> Desktop (scherm via HDMI)
+      </label>
+      <span class="sub" id="desktopStatus">-</span>
+    </div>
+    <div class="launch-row" style="align-items:center;margin-top:10px">
+      <label class="sub" style="display:flex;align-items:center;gap:6px"
+        title="Valt de verbinding weg (wifi van de robot, of geen enkele webpagina meer) terwijl de robot rijdt - bv. een route of project zonder toezicht - dan speelt de robot het uit-geluid, elke minuut opnieuw; het aan-geluid als er weer een pagina verbonden is.">
+        <input type="checkbox" id="connAlarm"> Piep als de verbinding wegvalt tijdens het rijden
+      </label>
+      <span class="sub" id="connAlarmStatus"></span>
+    </div>
+    <div class="sub" style="margin:16px 0 10px">
+      Maximale snelheid: plafond voor alle bronnen (pagina, gamepad, eigen
+      nodes, Nav2). Blijft bewaard na een herstart en een update. Hardware:
+      0,21 m/s en 2,84 rad/s (op 0,22 m/s weigeren de motoren het commando).
+    </div>
+    <div class="launch-row" style="align-items:center">
+      <label class="sub">Rechtdoor <input type="number" id="maxLin" min="0.01" max="0.21" step="0.01" style="width:5em"> m/s</label>
+      <label class="sub">Draaien <input type="number" id="maxAng" min="0.1" max="2.84" step="0.01" style="width:5em"> rad/s</label>
+      <button class="launch-btn" id="maxApply">Toepassen</button>
+      <button class="launch-btn stop-one" id="maxDefault">Standaard</button>
+    </div>
+    <div class="sub" id="maxStatus" style="margin-top:8px">-</div>
+    <div class="sub" style="margin:16px 0 10px">
+      Software bijwerken: haalt de nieuwste configuratie (git) en Docker-image
+      op. Is er een nieuwe image, dan herstart de container (lopende launches
+      stoppen, pagina ~1 minuut weg). Duurt van enkele seconden tot ~15
+      minuten (volledige image over wifi).
+    </div>
+    <div class="launch-row" style="align-items:center">
+      <button class="launch-btn" id="updateBtn">Software bijwerken</button>
+      <label class="sub" style="display:flex;align-items:center;gap:6px"
+        title="Welke image Software bijwerken ophaalt. Humble = :raspios-zenoh (alle robots), Jazzy = :jazzy (nieuwste Jazzy-versie, testrobot voor de overschakeling). Geldt bij de volgende Software bijwerken; Versie kiezen en Terug naar vorige versie volgen hetzelfde kanaal.">
+        Updatekanaal
+        <select id="chanSel" aria-label="Updatekanaal">
+          <option value="humble">Humble (raspios-zenoh)</option>
+          <option value="jazzy">Jazzy (nieuwste)</option>
+        </select>
+      </label>
+      <span class="sub" id="chanStatus"></span>
+    </div>
+    <div class="sub" id="updateStatus" style="margin-top:10px">-</div>
+    <progress id="updateBar" class="upd-bar" max="100" value="0" hidden aria-label="Voortgang van de update"></progress>
+    <div class="sub" id="updateHint" style="margin-top:4px"></div>
+    <div class="sub" id="rollbackBox" style="margin-top:10px">
+      Vorige versie: <span id="prevVersion">--</span>
+      <button class="launch-btn" id="rollbackBtn" style="margin-left:8px" disabled
+        title="Terug naar de image van voor de laatste update (werkt zonder internet). Nog eens = terug naar de nieuwe.">Terug naar vorige versie</button>
+    </div>
+    <div class="sub" style="margin-top:14px">
+      Versie kiezen: een vaste versie installeren, bv. om een hele klas tijdens
+      een les op dezelfde versie te houden. De huidige wordt de vorige versie;
+      de volgende <i>Software bijwerken</i> haalt weer de nieuwste. Ophalen
+      vraagt internet (behalve als die versie al op de robot staat).
+    </div>
+    <div class="launch-row" style="align-items:center;margin-top:8px">
+      <select id="verSel" aria-label="Versie"><option value="">-- eerst de lijst ophalen --</option></select>
+      <button class="launch-btn" id="verLoad">Versies ophalen</button>
+      <button class="launch-btn" id="verInstall" disabled>Installeren</button>
+    </div>
+  </div>
+
+  <div class="card ros-card">
+    <h2>Actieve ROS2-nodes</h2>
+    <div class="sub" style="margin-bottom:8px">
+      Alle nodes in de ROS-graph, ook die je zelf in een terminal gestart hebt.
+    </div>
+    <ul id="activeNodesList" style="margin:0; padding-left:18px; font-family:monospace; font-size:0.85rem">
+      <li class="sub">nog geen data</li>
+    </ul>
+  </div>
+
+  <div class="card ros-card">
+    <h2>Verbinden vanaf je laptop (WSL)</h2>
+    <div class="sub">
+      Laptop op de wifi van deze robot, dan in de <code>turtlebot_vis</code>-
+      container (of je eigen ROS2-shell in WSL):
+    </div>
+    <pre class="cmd" id="connectCmd">wachten op systeeminfo...</pre>
+    <div class="launch-row">
+      <button class="launch-btn" id="copyConnect">Kopiëren</button>
+    </div>
+    <div class="sub" id="copyStatus"></div>
+    <div class="sub" style="margin-top:12px">Verbonden laptops (Zenoh-clients):</div>
+    <ul id="zenohClients" style="margin:4px 0 0; padding-left:18px; font-family:monospace; font-size:0.85rem">
+      <li class="sub">--</li>
+    </ul>
+  </div>
+
+  <div class="card status-card">
+    <h2>Verbinden met je smartphone</h2>
+    <div class="sub">Scan met de camera van je smartphone (op de wifi van deze robot) om deze pagina te openen.</div>
+    <div class="qr-row">
+      <figure class="qr"><div id="qrPage"></div><figcaption id="qrPageText">--</figcaption></figure>
+      <figure class="qr admin-only" id="qrWifiBox"><div id="qrWifi"></div><figcaption id="qrWifiText">Wifi</figcaption></figure>
+    </div>
+    <div class="launch-row admin-only" style="margin-top:8px">
+      <button class="launch-btn" id="qrWifiBtn">Wifi-QR tonen</button>
+    </div>
+    <div class="sub admin-only" id="qrWifiMsg">Bevat het wifi-wachtwoord: enkel tonen aan wie op deze robot mag.</div>
+  </div>
+
+  <div class="card wide ros-card">
+    <h2 class="sw-head">Topics <label class="sub sw"><input type="checkbox" id="topicsOn"> aan</label></h2>
+    <div class="sub">Klik op een topic: type, wie publiceert en abonneert, frequentie en het laatste
+      bericht. Zelfde als <code>ros2 topic list</code>, <code>info</code>, <code>hz</code> en <code>echo</code>.</div>
+    <div class="sub" id="topicsOff">Uit: geen belasting voor de robot. Zet aan om topics te bekijken
+      (rosbridge stuurt dan berichten van het gekozen topic naar deze browser).</div>
+    <div id="topicsBody" hidden>
+    <div class="log-head" style="margin-top:8px">
+      <input type="text" id="topicFilter" placeholder="filter, bv. scan" aria-label="Topics filteren">
+      <button class="launch-btn" id="topicRefresh">Vernieuwen</button>
+      <span class="sub" id="topicCount"></span>
+    </div>
+    <div class="topic-wrap">
+      <div class="topic-list" id="topicList" role="listbox" aria-label="Topics"></div>
+      <div class="topic-detail" id="topicDetail"><div class="sub">Kies links een topic.</div></div>
+    </div>
+    </div>
+  </div>
+
+  <div class="card wide ros-card">
+    <h2 class="sw-head">TF-boom <label class="sub sw"><input type="checkbox" id="tfOn"> aan</label></h2>
+    <div class="sub">Alle coördinatenframes uit <code>/tf</code> en <code>/tf_static</code> en hoe vaak ze
+      bijgewerkt worden. Zelfde als <code>ros2 run tf2_tools view_frames</code>.</div>
+    <div class="sub" id="tfOff">Uit: geen belasting voor de robot. Zet aan om de frames te zien
+      (rosbridge stuurt dan elke <code>/tf</code>-update naar deze browser, ~30-50 per s).</div>
+    <div id="tfTree" class="tf-tree" hidden><div class="sub">nog geen frames (draait de bringup?)</div></div>
+  </div>
+
+  <div class="card wide ros-card">
+    <h2>Logs (/rosout)</h2>
+    <div class="log-head">
+      <select id="logLevel" title="Minimum niveau">
+        <option value="10">DEBUG+</option>
+        <option value="20">INFO+</option>
+        <option value="30">WARN+</option>
+        <option value="40">ERROR+</option>
+      </select>
+      <input type="text" id="logFilter" placeholder="filter op node of tekst" />
+      <button class="launch-btn" id="logPause">Pauze</button>
+      <button class="launch-btn" id="logClear">Wissen</button>
+      <span class="sub" id="logCount"></span>
+    </div>
+    <div id="logBox"><div class="sub">nog geen meldingen</div></div>
+  </div>
+
+</div>
+
+<footer>
+  Verbindt via rosbridge op <code id="wsUrl">-</code>. Deze pagina draait rechtstreeks op de robot - geen internet nodig.
+</footer>
+
+<script>
+(function () {
+  var rollbackAvailable = false;   // image :vorige exists on the host (host_info.json)
+  var ros = connectRos();
+  function applyView() {
+    var view = fenixPageId("system");      // status / ros / beheer (#info = status)
+    ["status", "ros", "beheer"].forEach(function (v) { document.body.classList.toggle("view-" + v, view === v); });
+  }
+  applyView();
+  window.addEventListener("hashchange", applyView);
+  initHeader(ros, "system");
+
+  // ---- Labo-check (Info): all rows, same as the header dropdown ----
+  setInterval(function () {
+    var rows = laboRows(fenixLaboCtx), sum = laboSummary(rows);
+    var se = document.getElementById("laboSum");
+    se.textContent = "- " + sum.text; se.style.color = hdrColor(sum.level);
+    document.getElementById("laboList").innerHTML = rows.map(function (r) {
+      return '<li><span class="dot ' + r[0] + '"></span><span class="name">' + escHtml(r[1]) + "</span><span>" + escHtml(r[2]) + "</span></li>";
+    }).join("");
+  }, 1000);
+
+  // ---- Beheer: PIN ----
+  document.addEventListener("fenix-admin", function (e) {
+    document.getElementById("pinNone").style.display = e.detail.pin_set === false ? "" : "none";
+  });
+  document.getElementById("pinForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var inp = document.getElementById("pinInput"), msg = document.getElementById("pinMsg");
+    msg.textContent = "controleren...";
+    fenixAdminUnlock(inp.value, function (ok, err) {
+      inp.value = "";
+      msg.textContent = ok ? "" : err;
+      msg.style.color = ok ? "" : "var(--red)";
+    });
+  });
+  startAgeTicker(["sysAge"]);
+
+  function formatUptime(s) {
+    if (s === null || s === undefined) return "--";
+    var h = Math.floor(s / 3600);
+    var m = Math.floor((s % 3600) / 60);
+    return h + "u " + m + "m";
+  }
+
+  var sysTick = rateTracker(null, "sysAge");
+  new ROSLIB.Topic({ ros: ros, name: "/system_info", messageType: "std_msgs/msg/String" })
+    .subscribe(function (msg) {
+      var d;
+      try { d = JSON.parse(msg.data); } catch (e) { return; }
+      d._recvMs = Date.now();
+      document.getElementById("sysHostname").textContent = d.hostname || "--";
+      document.getElementById("sysIp").textContent = d.ip || "--";
+      document.getElementById("sysMac").textContent = d.mac || "--";
+      document.getElementById("sysCpu").textContent =
+        (d.cpu_load_1min !== undefined ? d.cpu_load_1min : "--") +
+        " (" + d.cpu_count + " cores)";
+      document.getElementById("sysCpuCores").innerHTML =
+        (d.cpu_percent_per_core && d.cpu_percent_per_core.length)
+          ? d.cpu_percent_per_core.map(function (p, i) {
+              var mn = d.cpu_percent_per_core_min ? d.cpu_percent_per_core_min[i] : null;
+              var mx = d.cpu_percent_per_core_max ? d.cpu_percent_per_core_max[i] : null;
+              var range = (mn !== null && mx !== null) ? " (" + mn + "-" + mx + "%)" : "";
+              return "C" + i + ": " + p.toFixed(0) + "%" +
+                '<span class="sub" style="font-size:0.75rem">' + range + "</span>";
+            }).join("<br>")
+          : "--";
+      document.getElementById("sysMem").textContent =
+        d.mem_used_mb !== undefined && d.mem_total_mb !== undefined
+          ? (d.mem_used_mb / 1024).toFixed(1) + " / " + (d.mem_total_mb / 1024).toFixed(1) + " GB (" + d.mem_percent + "%)"
+          : (d.mem_percent !== undefined ? d.mem_percent + "%" : "--");
+      document.getElementById("sysNet").textContent =
+        (d.net_rx_kbps !== undefined && d.net_rx_kbps !== null)
+          ? "↓ " + d.net_rx_kbps + " kbps  ↑ " + d.net_tx_kbps + " kbps"
+          : "--";
+      showWifi(document.getElementById("sysWifi"), d);
+      document.getElementById("sysUptime").textContent = formatUptime(d.uptime_seconds);
+      document.getElementById("sysImage").textContent = fenixVersion(d.image_version).text;
+      var t = piTemp(d), pw = piPower(d), dk = diskState(d);
+      var tempEl = document.getElementById("sysTemp");
+      tempEl.textContent = t.text;
+      tempEl.style.color = LEVEL_COLOR[t.level];
+      var powEl = document.getElementById("sysPower");
+      powEl.textContent = pw.text + (d.ext5v_v ? " (5V-ingang " + d.ext5v_v.toFixed(2) + " V)" : "");
+      powEl.style.color = LEVEL_COLOR[pw.level];
+      var fn = fanState(d);
+      var fanEl = document.getElementById("sysFan");
+      fanEl.textContent = fn.text;
+      fanEl.style.color = LEVEL_COLOR[fn.level];
+      var diskEl = document.getElementById("sysDisk");
+      diskEl.textContent = dk.text;
+      diskEl.style.color = LEVEL_COLOR[dk.level];
+      showConnect(d);
+      showDiagnostics(d);
+      setCell("updateHint", updateState(d));
+      sysTick();
+
+      if (d.config) {
+        var rows = Object.keys(d.config).map(function (k) {
+          var v = d.config[k];
+          return "<tr><td>" + k + "</td><td>" + (v === null || v === undefined || v === "" ? "<span class=\"sub\">-</span>" : v) + "</td></tr>";
+        });
+        document.getElementById("configTable").innerHTML = rows.join("");
+      }
+    });
+
+  // ---- Launch control ----
+  new ROSLIB.Topic({ ros: ros, name: "/launch_status", messageType: "std_msgs/msg/String" })
+    .subscribe(function (msg) {
+      var status;
+      try { status = JSON.parse(msg.data); } catch (e) { return; }
+      Object.keys(status).forEach(function (name) {
+        var dot = document.getElementById("dot-" + name);
+        if (dot) dot.className = "dot " + (status[name] ? "ok" : "");
+      });
+      camShow(status.camera_settings);
+      var wd = status.rosbridge_watchdog;
+      if (wd) document.getElementById("dgRbWd").textContent = wd.restarts
+        ? wd.restarts + "x herstart, laatst " + new Date(wd.last * 1000).toLocaleTimeString("nl-BE") : "actief, nog niet nodig geweest";
+      var mc = document.getElementById("monCtrl");
+      if (document.activeElement !== mc) mc.checked = status.monitor_control !== false;
+      var ml = status.monitor_cmd;
+      document.getElementById("monLast").textContent = ml
+        ? "laatste: " + ml.cmd + " (" + (ml.ok ? "OK" : "mislukt") + ", " + new Date(ml.t * 1000).toLocaleTimeString("nl-BE") + ")" : "";
+      var on = status.usb_power === "on";
+      document.getElementById("dot-usb").className = "dot " + (on ? "ok" : "");
+      var auto = document.getElementById("usbAuto");
+      if (document.activeElement !== auto) auto.checked = !!status.usb_auto;
+      if (!usbMsg) {
+        usbStatus.textContent = on
+          ? "aan" + (status.usb_off_in != null ? " - gaat uit over " + status.usb_off_in + " s als niets ze gebruikt" : "")
+          : "uit (spaarstand) - lidar staat stil";
+      }
+    });
+
+  // ---- Camera-instellingen (launch_control_node + camera_params.py) ----
+  var camSt = null, camEdit = false;
+  ["camRes", "camFps", "camQ"].forEach(function (id) {
+    document.getElementById(id).addEventListener("input", function () { camEdit = true; camEstimate(); });
+  });
+  function camEstimate() {
+    // same rough model as camera_params.mbit_estimate (measured: 640x480, q60, 15 fps ~3.4 Mbit/s)
+    var r = document.getElementById("camRes").value.split("x"), fps = +document.getElementById("camFps").value;
+    var q = +document.getElementById("camQ").value, qf = q <= 40 ? 0.7 : q <= 60 ? 1.0 : q <= 80 ? 1.5 : 2.4;
+    var mbit = 3.4 * (r[0] * r[1] / 307200) * (fps / 15) * qf;
+    var d = camSt && camSt.default;
+    document.getElementById("camInfo").textContent = "geschat ~" + mbit.toFixed(1) + " Mbit/s" +
+      (mbit > 10 ? " - veel voor de wifi, zeker met meerdere kijkers" : "") +
+      (d ? " | standaard: " + d.resolution + ", " + d.fps + " fps, kwaliteit " + d.jpeg_quality : "") +
+      (camEdit ? " - nog niet toegepast" : "");
+  }
+  function camShow(cs) {
+    camSt = cs;
+    if (cs) {
+      var cc = document.getElementById("camCalib");
+      cc.innerHTML = cs.calibrated
+        ? '<span style="color:var(--green)">Intrinsiek gekalibreerd</span> voor ' + cs.resolution + " (state/camera_info/camera_" + cs.resolution + ".yaml)"
+        : '<span style="color:var(--yellow)">Niet gekalibreerd</span> voor ' + cs.resolution +
+          " - nodig voor afstanden (AprilTag, lidar op het camerabeeld). Kalibreren: turtlebot_vis, <code>calibrate_camera.sh</code> (dambord).";
+    }
+    if (!cs || camEdit) return;
+    document.getElementById("camRes").value = cs.resolution;
+    document.getElementById("camFps").value = String(cs.fps);
+    document.getElementById("camQ").value = cs.jpeg_quality;
+    camEstimate();
+  }
+  function camSend(settings, text) {
+    camEdit = false;
+    document.getElementById("camInfo").textContent = text;
+    fenixAdminAction("camera_settings", settings, function (ok, msg) {
+      if (!ok) document.getElementById("camInfo").textContent = "Fout: " + msg;
+    });
+  }
+  document.getElementById("camApply").addEventListener("click", function () {
+    var q = Math.max(20, Math.min(95, parseInt(document.getElementById("camQ").value, 10) || 60));
+    camSend({ resolution: document.getElementById("camRes").value,
+              fps: parseInt(document.getElementById("camFps").value, 10), jpeg_quality: q },
+            "toegepast - camera herstart...");
+  });
+  document.getElementById("camDefault").addEventListener("click", function () {
+    camSend({}, "standaard - camera herstart...");
+  });
+
+  // ---- Monitor-opdrachten toelaten ----
+  // Piep bij verbindingsverlies (cmd_vel_guard, state/conn_alarm)
+  var connAlarm = document.getElementById("connAlarm");
+  new ROSLIB.Topic({ ros: ros, name: "/cmd_vel_status", messageType: "std_msgs/msg/String", throttle_rate: 1000, queue_length: 1 })
+    .subscribe(function (m) {
+      var d; try { d = JSON.parse(m.data); } catch (e) { return; }
+      if ("conn_alarm" in d && document.activeElement !== connAlarm) connAlarm.checked = !!d.conn_alarm;
+    });
+  connAlarm.addEventListener("change", function (e) {
+    fenixAdminAction("conn_alarm", { on: e.target.checked }, function (ok, msg) {
+      document.getElementById("connAlarmStatus").textContent = (ok ? "" : "Fout: ") + msg;
+    });
+  });
+  document.getElementById("monCtrl").addEventListener("change", function (e) {
+    fenixAdminAction("monitor_options", { control: e.target.checked });
+    e.target.blur();
+  });
+
+  // ---- USB-stroom ----
+  var usbStatus = document.getElementById("usbStatus");
+  var usbMsg = "";
+  document.querySelectorAll(".launch-btn[data-usb]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      btn.disabled = true;
+      usbMsg = "...";
+      usbStatus.textContent = usbMsg;
+      fenixAdminAction(btn.dataset.usb, {}, function (ok, msg) {
+        btn.disabled = false;
+        usbMsg = (ok ? "OK: " : "Fout: ") + msg;
+        usbStatus.textContent = usbMsg;
+        setTimeout(function () { usbMsg = ""; }, 6000);
+      });
+    });
+  });
+  // ---- Desktop (HDMI) aan/uit ----
+  var desktopToggle = document.getElementById("desktopToggle");
+  var desktopStatus = document.getElementById("desktopStatus");
+  var desktopMsg = "";
+  new ROSLIB.Topic({ ros: ros, name: "/launch_status", messageType: "std_msgs/msg/String" })
+    .subscribe(function (msg) {
+      var st;
+      try { st = JSON.parse(msg.data).desktop; } catch (e) { return; }
+      if (!st) return;
+      if (document.activeElement !== desktopToggle && !desktopToggle.disabled) desktopToggle.checked = !!st.wanted;
+      if (!desktopMsg) desktopStatus.textContent = st.active === "active" ? "draait"
+        : st.active === "activating" ? "start..." : st.active === "unknown" ? "status onbekend" : "uit";
+    });
+  desktopToggle.addEventListener("change", function () {
+    var on = desktopToggle.checked;
+    if (!on && !window.confirm("Desktop stoppen? Wie nu met een scherm op de Pi werkt, wordt afgemeld.")) {
+      desktopToggle.checked = true; return;
+    }
+    desktopToggle.disabled = true;
+    desktopStatus.textContent = on ? "starten..." : "stoppen...";
+    fenixAdminAction("desktop", { on: on }, function (ok, msg) {
+      desktopToggle.disabled = false; desktopToggle.blur();
+      desktopMsg = (ok ? "" : "Fout: ") + msg;
+      desktopStatus.textContent = desktopMsg;
+      setTimeout(function () { desktopMsg = ""; }, 6000);
+    });
+  });
+
+  // ---- Maximale snelheid (cmd_vel_guard: parameters max_linear / max_angular) ----
+  var maxLin = document.getElementById("maxLin"), maxAng = document.getElementById("maxAng");
+  var maxStatus = document.getElementById("maxStatus");
+  function loadMax() {
+    new ROSLIB.Service({ ros: ros, name: "/cmd_vel_guard/get_parameters",
+                         serviceType: "rcl_interfaces/srv/GetParameters" }).callService(new ROSLIB.ServiceRequest({ names: ["max_linear", "max_angular"] }), function (r) {
+      var v = r.values || [];
+      if (v[0] && document.activeElement !== maxLin) maxLin.value = +v[0].double_value.toFixed(2);
+      if (v[1] && document.activeElement !== maxAng) maxAng.value = +v[1].double_value.toFixed(2);
+      maxStatus.textContent = "nu: " + maxLin.value + " m/s, " + maxAng.value + " rad/s";
+    }, function () { maxStatus.textContent = "cmd_vel_guard niet bereikbaar (oudere image?)"; });
+  }
+  // Writes state/speed_limit.json (PIN); cmd_vel_guard reads it within 1 s
+  function setMax(lin, ang) {
+    maxStatus.textContent = "toepassen...";
+    fenixAdminAction("speed_limit", { max_linear: lin, max_angular: ang }, function (ok, msg) {
+      if (!ok) { maxStatus.textContent = "Fout: " + msg; return; }
+      setTimeout(loadMax, 1500);
+    });
+  }
+  document.getElementById("maxApply").addEventListener("click", function () {
+    var lin = parseFloat(String(maxLin.value).replace(",", ".")), ang = parseFloat(String(maxAng.value).replace(",", "."));
+    if (isNaN(lin) || isNaN(ang)) { maxStatus.textContent = "Vul beide waarden in."; return; }
+    setMax(lin, ang);
+  });
+  document.getElementById("maxDefault").addEventListener("click", function () { setMax(0.21, 2.84); });
+  if (ros.isConnected) loadMax();
+  ros.on("connection", loadMax);
+
+  document.getElementById("usbAuto").addEventListener("change", function (e) {
+    fenixAdminAction("usb_options", { auto: e.target.checked });
+    e.target.blur();
+  });
+
+  // ---- ROS: topics en TF (enkel als de ROS-weergave open en zichtbaar is) ----
+  (function () {
+    // Over wifi te zwaar om elk bericht naar de browser te sturen: enkel 1 per s, geen frequentie
+    var HEAVY = /^sensor_msgs\/msg\/(Image|PointCloud2)$/;
+    var topics = [], selected = null, sub = null, stamps = [], lastMsg = null, lastDraw = 0;
+    var listEl = document.getElementById("topicList"), detailEl = document.getElementById("topicDetail");
+    var filterEl = document.getElementById("topicFilter"), countEl = document.getElementById("topicCount");
+    function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+    // Per onderdeel aan/uit (standaard uit, onthouden in deze browser): uit = geen abonnementen
+    var topicsOnEl = document.getElementById("topicsOn"), tfOnEl = document.getElementById("tfOn");
+    topicsOnEl.checked = lsGet("rosTopicsOn", "0") === "1";
+    tfOnEl.checked = lsGet("rosTfOn", "0") === "1";
+    function visible() { return fenixPageId("system") === "ros" && !document.hidden; }
+    function active() { return visible() && topicsOnEl.checked; }
+    function tfActive() { return visible() && tfOnEl.checked; }
+
+    function loadTopics() {
+      countEl.textContent = "laden...";
+      ros.getTopics(function (r) {
+        topics = r.topics.map(function (t, i) { return { name: t, type: r.types[i] }; })
+          .sort(function (a, b) { return a.name.localeCompare(b.name); });
+        renderList();
+      }, function (e) { countEl.textContent = "rosapi niet bereikbaar: " + e; });
+    }
+    function renderList() {
+      var f = filterEl.value.trim().toLowerCase();
+      var shown = topics.filter(function (t) { return !f || (t.name + " " + t.type).toLowerCase().indexOf(f) >= 0; });
+      countEl.textContent = shown.length + " van " + topics.length + " topics";
+      listEl.textContent = "";
+      shown.forEach(function (t) {
+        var b = el("button", null, t.name); b.type = "button"; b.setAttribute("role", "option");
+        b.setAttribute("aria-selected", selected && selected.name === t.name ? "true" : "false");
+        b.appendChild(el("small", null, t.type));
+        b.addEventListener("click", function () { select(t); });
+        listEl.appendChild(b);
+      });
+    }
+    // lange arrays (bv. /scan ranges, image data) samenvatten
+    function summarize(v, depth) {
+      if (Array.isArray(v)) {
+        if (v.length <= 12) return v.map(function (x) { return summarize(x, depth + 1); });
+        var nums = v.filter(function (x) { return typeof x === "number"; });
+        if (nums.length === v.length) {
+          var fin = nums.filter(isFinite);
+          return "[" + v.length + " getallen" + (fin.length ? ", min " + Math.min.apply(null, fin).toFixed(3) +
+            ", max " + Math.max.apply(null, fin).toFixed(3) : "") + (fin.length < v.length ? ", " + (v.length - fin.length) + " inf/nan" : "") + "]";
+        }
+        return v.slice(0, 3).map(function (x) { return summarize(x, depth + 1); }).concat(["... nog " + (v.length - 3)]);
+      }
+      if (typeof v === "string" && v.length > 120) return v.slice(0, 60) + "... (" + v.length + " tekens)";
+      if (v && typeof v === "object") {
+        var o = {}; Object.keys(v).forEach(function (k) { o[k] = summarize(v[k], depth + 1); }); return o;
+      }
+      return v;
+    }
+    function unsub() { if (sub) { sub.unsubscribe(); sub = null; } }
+    function subscribe() {
+      unsub();
+      if (!selected || !active()) return;
+      var heavy = HEAVY.test(selected.type);
+      stamps = []; lastMsg = null;
+      sub = new ROSLIB.Topic({ ros: ros, name: selected.name, messageType: selected.type,
+        throttle_rate: heavy ? 1000 : 0, queue_length: 1 });
+      sub.subscribe(function (m) {
+        var now = performance.now();
+        stamps.push(now); while (stamps.length && now - stamps[0] > 5000) stamps.shift();
+        lastMsg = m;
+        if (now - lastDraw > 500) { lastDraw = now; drawDetail(); }
+      });
+    }
+    var info = { pubs: null, subs: null };
+    function select(t) {
+      selected = t; info = { pubs: null, subs: null };
+      renderList(); subscribe(); drawDetail();
+      ["publishers", "subscribers"].forEach(function (kind) {
+        new ROSLIB.Service({ ros: ros, name: "/rosapi/" + kind, serviceType: "rosapi_msgs/srv/" + (kind === "publishers" ? "Publishers" : "Subscribers") })
+          .callService(new ROSLIB.ServiceRequest({ topic: t.name }), function (r) {
+            if (selected !== t) return;
+            info[kind === "publishers" ? "pubs" : "subs"] = r[kind] || []; drawDetail();
+          }, function () {});
+      });
+    }
+    function drawDetail() {
+      if (!selected) return;
+      var heavy = HEAVY.test(selected.type);
+      detailEl.textContent = "";
+      var tb = el("table");
+      function row(k, v) { var tr = el("tr"); tr.appendChild(el("td", null, k)); tr.appendChild(el("td", null, v)); tb.appendChild(tr); }
+      row("Topic", selected.name);
+      row("Type", selected.type);
+      row("Publishers", info.pubs ? (info.pubs.length ? info.pubs.join(", ") : "geen") : "...");
+      row("Subscribers", info.subs ? (info.subs.length ? info.subs.join(", ") : "geen") : "...");
+      var hz = stamps.length > 1 ? (stamps.length - 1) / ((stamps[stamps.length - 1] - stamps[0]) / 1000) : 0;
+      row("Frequentie", heavy ? "niet gemeten (te zwaar over wifi; ros2 topic hz in turtlebot-vis)"
+        : stamps.length > 1 ? hz.toFixed(1) + " Hz (laatste 5 s)" : (lastMsg ? "1 bericht" : "nog geen bericht ontvangen"));
+      detailEl.appendChild(tb);
+      if (lastMsg) {
+        detailEl.appendChild(el("div", "sub", "Laatste bericht" + (heavy ? " (max. 1 per s)" : "") + ":"));
+        detailEl.appendChild(el("pre", null, JSON.stringify(summarize(lastMsg, 0), null, 2)));
+      }
+    }
+
+    // TF: frames uit /tf en /tf_static
+    var frames = {}, tfSubs = [];
+    function tfStart() {
+      if (tfSubs.length || !tfActive()) return;
+      [["/tf", false], ["/tf_static", true]].forEach(function (d) {
+        var t = new ROSLIB.Topic({ ros: ros, name: d[0], messageType: "tf2_msgs/msg/TFMessage", queue_length: 10 });
+        t.subscribe(function (m) {
+          var now = performance.now();
+          (m.transforms || []).forEach(function (tr) {
+            var c = tr.child_frame_id.replace(/^\//, ""), p = tr.header.frame_id.replace(/^\//, "");
+            var f = frames[c] = frames[c] || { parent: p, stamps: [], static: d[1] };
+            f.parent = p; f.static = d[1]; f.last = now;
+            f.stamps.push(now); while (f.stamps.length && now - f.stamps[0] > 3000) f.stamps.shift();
+          });
+        });
+        tfSubs.push(t);
+      });
+    }
+    function tfStop() { tfSubs.forEach(function (t) { t.unsubscribe(); }); tfSubs = []; }
+    function drawTf() {
+      if (!tfActive()) return;
+      var box = document.getElementById("tfTree"), now = performance.now();
+      var kids = {}, names = Object.keys(frames);
+      if (!names.length) return;
+      names.forEach(function (c) { (kids[frames[c].parent] = kids[frames[c].parent] || []).push(c); });
+      var roots = Object.keys(kids).filter(function (p) { return !frames[p]; }).sort();
+      function branch(name) {
+        var li = el("li", null, name), f = frames[name];
+        if (f) {
+          var age = (now - f.last) / 1000, n = f.stamps.length;
+          var hz = n > 1 ? (n - 1) / ((f.stamps[n - 1] - f.stamps[0]) / 1000) : 0;
+          var meta = f.static ? "statisch" : age > 2 ? "geen update sinds " + age.toFixed(0) + " s" : hz ? hz.toFixed(0) + " Hz" : "";
+          li.appendChild(el("span", "tf-meta" + (!f.static && age > 2 ? " tf-stale" : ""), meta));
+        }
+        var ch = (kids[name] || []).sort();
+        if (ch.length) { var ul = el("ul"); ch.forEach(function (c) { ul.appendChild(branch(c)); }); li.appendChild(ul); }
+        return li;
+      }
+      var top = el("ul"); roots.forEach(function (r) { top.appendChild(branch(r)); });
+      box.textContent = ""; box.appendChild(top);
+    }
+    setInterval(drawTf, 1000);
+    setInterval(function () { if (selected && sub && active()) drawDetail(); }, 2000);
+
+    var wasActive = false, wasTf = false;
+    function onView() {
+      var a = active(), t = tfActive();
+      document.getElementById("topicsBody").hidden = !topicsOnEl.checked;
+      document.getElementById("topicsOff").hidden = topicsOnEl.checked;
+      document.getElementById("tfTree").hidden = !tfOnEl.checked;
+      document.getElementById("tfOff").hidden = tfOnEl.checked;
+      if (a && !wasActive) { if (ros.isConnected) loadTopics(); subscribe(); }
+      if (!a && wasActive) unsub();
+      if (t && !wasTf) tfStart();
+      if (!t && wasTf) { tfStop(); frames = {}; }
+      wasActive = a; wasTf = t;
+    }
+    topicsOnEl.addEventListener("change", function () { lsSet("rosTopicsOn", topicsOnEl.checked ? "1" : "0"); onView(); });
+    tfOnEl.addEventListener("change", function () { lsSet("rosTfOn", tfOnEl.checked ? "1" : "0"); onView(); });
+    filterEl.addEventListener("input", renderList);
+    document.getElementById("topicRefresh").addEventListener("click", loadTopics);
+    window.addEventListener("hashchange", onView);
+    document.addEventListener("visibilitychange", onView);
+    ros.on("connection", function () {
+      if (active()) { loadTopics(); subscribe(); }
+      if (tfActive()) { tfStop(); tfStart(); }
+    });
+    onView();
+  })();
+
+  // ---- Actieve ROS2-nodes ----
+  new ROSLIB.Topic({ ros: ros, name: "/active_nodes", messageType: "std_msgs/msg/String" })
+    .subscribe(function (msg) {
+      var names;
+      try { names = JSON.parse(msg.data); } catch (e) { return; }
+      var list = document.getElementById("activeNodesList");
+      list.innerHTML = names.length
+        ? names.map(function (n) { return "<li>" + n + "</li>"; }).join("")
+        : "<li class=\"sub\">geen nodes actief</li>";
+    });
+
+  var launchStatus = document.getElementById("launchStatus");
+  document.querySelectorAll(".launch-btn[data-launch]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var name = btn.dataset.launch;
+      var srv = new ROSLIB.Service({
+        ros: ros, name: "/launch/" + name, serviceType: "std_srvs/srv/Trigger",
+      });
+      document.querySelectorAll(".launch-btn").forEach(function (b) { b.disabled = true; });
+      launchStatus.textContent = "...";
+      srv.callService(new ROSLIB.ServiceRequest({}), function (result) {
+        document.querySelectorAll(".launch-btn").forEach(function (b) { b.disabled = false; });
+        launchStatus.textContent = (result.success ? "OK: " : "Fout: ") + result.message;
+      }, function (err) {
+        document.querySelectorAll(".launch-btn").forEach(function (b) { b.disabled = false; });
+        launchStatus.textContent = "Fout: " + err;
+      });
+    });
+  });
+
+  // ---- Herstarten / uitschakelen ----
+  var powerStatus = document.getElementById("powerStatus");
+  var POWER_CONFIRM = {
+    reboot: "Robot herstarten? Lopende launches worden gestopt.",
+    shutdown: "Robot uitschakelen? Je moet hem daarna fysiek terug aanzetten.",
+  };
+  document.querySelectorAll(".launch-btn[data-power]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var action = btn.dataset.power;
+      if (!window.confirm(POWER_CONFIRM[action])) return;
+      var srv = new ROSLIB.Service({
+        ros: ros, name: "/system/" + action, serviceType: "std_srvs/srv/Trigger",
+      });
+      document.querySelectorAll(".launch-btn").forEach(function (b) { b.disabled = true; });
+      powerStatus.textContent = "...";
+      srv.callService(new ROSLIB.ServiceRequest({}), function (result) {
+        powerStatus.textContent = (result.success ? "OK: " : "Fout: ") + result.message;
+        if (!result.success) {
+          document.querySelectorAll(".launch-btn").forEach(function (b) { b.disabled = false; });
+        }
+      }, function (err) {
+        document.querySelectorAll(".launch-btn").forEach(function (b) { b.disabled = false; });
+        powerStatus.textContent = "Fout: " + err;
+      });
+    });
+  });
+
+  // ---- Software & diagnose ----
+  // ---- Diensten (t79): system_info (services, services_since, supervisor)
+  // + launch_status; Log / Herstart via Beheer (PIN, status_page_server) ----
+  var SVC_ROWS = [
+    ["Basis", [["zenoh", "Zenoh-router", "ROS 2-verkeer (rmw_zenoh), poort 7447"],
+               ["rosbridge", "rosbridge", "verbinding van deze pagina's met ROS, poort 9090"],
+               ["webpagina", "Webpagina", "deze statuspagina, poort 8080"],
+               ["system_info", "Systeeminfo", "/system_info: deze gegevens"],
+               ["launch_control", "Launch control", "knoppen Bringup, Kaart maken, Navigatie, camera, updates"],
+               ["twist_mux", "twist_mux", "kiest de stuurbron: gamepad > pagina > /cmd_vel"],
+               ["cmd_vel_guard", "cmd_vel_guard", "waakhond (stop na 1,5 s) en maximale snelheid"],
+               ["nav_web", "Nav-web", "Navigatie-pagina: doelen, routes, zones"],
+               ["camera", "Camera", "camera_ros (aan/uit op Rijden)"],
+               ["terminal", "Webterminal", "ttyd, poort 7681 (enkel met wachtwoord)"]]],
+    ["Launches", [["bringup", "Bringup", "motoren, lidar, IMU (robot.launch.py)"],
+                  ["slam", "Kaart maken", "Cartographer"],
+                  ["navigation", "Navigatie", "Nav2 met een kaart"],
+                  ["joystick", "Joystick", "gamepad (teleop_twist_joy)"]]]
+  ];
+  var NO_RESTART = { zenoh: 1, camera: 1, bringup: 1, slam: 1, navigation: 1, joystick: 1 };
+  var svcLogName = null;
+  function hhmm(epoch) {
+    var dt = new Date(epoch * 1000), today = new Date().toDateString() === dt.toDateString();
+    return (today ? "" : dt.toLocaleDateString("nl-BE", { day: "2-digit", month: "2-digit" }) + " ") +
+      dt.toLocaleTimeString("nl-BE", { hour: "2-digit", minute: "2-digit" });
+  }
+  function renderServices(d) {
+    var svc = d.services || {}, since = d.services_since || {}, sup = d.supervisor || {};
+    var ls = fenixLaboCtx.launch || {}, lfresh = Date.now() - (ls.t || 0) < 6000;
+    var html = "";
+    SVC_ROWS.forEach(function (g) {
+      html += '<tr class="grp"><td colspan="5">' + g[0] + "</td></tr>";
+      g[1].forEach(function (r) {
+        var k = r[0], st, cls;
+        if (g[0] === "Launches") {
+          st = !lfresh ? null : !!ls[k]; cls = st === null ? "" : st ? "ok" : "";
+          st = st === null ? "onbekend" : st ? "actief" : "uit";
+        } else {
+          var up = k in svc ? svc[k] : (since[k] != null ? true : (k in since ? false : null));
+          if (k === "camera") { up = since.camera != null; }
+          if (k === "terminal" && svc.terminal === null) { cls = ""; st = "uit (geen wachtwoord)"; }
+          else if (k === "camera" && !up) { cls = ""; st = "uit"; }
+          else { cls = up === null ? "" : up ? "ok" : "bad"; st = up === null ? "onbekend" : up ? "actief" : "gestopt"; }
+        }
+        var s = sup[k];
+        html += "<tr><td title=\"" + escHtml(r[2]) + "\">" + escHtml(r[1]) + "</td>" +
+          '<td><span class="dot ' + cls + '"></span>' + escHtml(st) + "</td>" +
+          '<td class="opt">' + (since[k] ? hhmm(since[k]) : "") + "</td>" +
+          "<td>" + (s ? s.restarts + "x" + (s.last ? " (" + hhmm(s.last) + ")" : "") : (g[0] === "Launches" ? "" : "0")) + "</td>" +
+          '<td class="act admin-only"><button data-svc-log="' + k + '">Log</button>' +
+          (NO_RESTART[k] ? "" : '<button data-svc-restart="' + k + '">Herstart</button>') + "</td></tr>";
+      });
+    });
+    html += '<tr class="grp"><td colspan="5">Supervisor</td></tr><tr><td>Crashlog</td><td colspan="3" class="sub">' +
+      "einde van de log van elke gecrashte dienst, vlak voor de herstart</td>" +
+      '<td class="act admin-only"><button data-svc-log="supervisor">Log</button></td></tr>';
+    var body = document.getElementById("svcBody");
+    if (body.dataset.html !== html) { body.innerHTML = html; body.dataset.html = html; }
+  }
+  function svcSay(t) { document.getElementById("svcMsg").textContent = t; }
+  function loadSvcLog(name) {
+    svcLogName = name;
+    document.getElementById("svcLogWrap").style.display = "";
+    document.getElementById("svcLogTitle").textContent = name;
+    document.getElementById("svcLogPath").textContent = "laden...";
+    fenixAdminAction("service_log", { name: name }, function (ok, msg, j) {
+      document.getElementById("svcLogPath").textContent = msg;
+      var pre = document.getElementById("svcLog");
+      pre.textContent = ok ? (j.log || "(leeg)") : "";
+      pre.scrollTop = pre.scrollHeight;
+    });
+  }
+  document.getElementById("svcBody").addEventListener("click", function (e) {
+    var b = e.target.closest("button");
+    if (!b) return;
+    if (b.dataset.svcLog) { loadSvcLog(b.dataset.svcLog); return; }
+    var k = b.dataset.svcRestart;
+    if (!k || !confirm(k + " herstarten?" + (k === "launch_control" ? "\nLopende launches blijven draaien; de knoppen (Bringup, Navigatie...) werken enkele seconden niet." : "") +
+                       (k === "rosbridge" || k === "webpagina" ? "\nDeze pagina verliest even de verbinding." : ""))) return;
+    b.disabled = true;
+    fenixAdminAction("service_restart", { name: k }, function (ok, msg) {
+      svcSay((ok ? "" : "Fout: ") + msg);
+      setTimeout(function () { b.disabled = false; }, 5000);
+    });
+  });
+  document.getElementById("svcLogRefresh").addEventListener("click", function () { if (svcLogName) loadSvcLog(svcLogName); });
+  document.getElementById("svcLogClose").addEventListener("click", function () {
+    svcLogName = null; document.getElementById("svcLogWrap").style.display = "none";
+  });
+
+  function setCell(id, state) {
+    var el = document.getElementById(id);
+    el.textContent = state.text;
+    el.style.color = LEVEL_COLOR[state.level || ""];
+  }
+  function showDiagnostics(d) {
+    var h = d.host || {};
+    document.getElementById("prevVersion").textContent = h.image_previous || "geen (wordt bewaard bij de volgende update)";
+    rollbackAvailable = !!h.image_previous;
+    // golden stamp: "... setup <hash>" -> link
+    document.getElementById("swGolden").innerHTML = h.golden
+      ? escHtml(h.golden).replace(/setup ([0-9a-f]{7,40})/, function (m, hash) {
+          return "setup " + commitLink(h.setup_repo_url, hash);
+        })
+      : "geen stempel (geen kloon van de golden image)";
+    document.getElementById("swSetup").innerHTML = h.setup_commit_full
+      ? commitLink(h.setup_repo_url, h.setup_commit_full) + " " +
+        escHtml((h.setup_log && h.setup_log[0] ? h.setup_log[0].date + " - " + h.setup_log[0].subject : "")) +
+        (h.setup_branch ? ' <span class="sub">(' + escHtml(h.setup_branch) + ")</span>" : "")
+      : escHtml(h.setup_commit || "--");
+    document.getElementById("swImage").innerHTML = d.image_commit
+      ? escHtml(d.image_version || "") + " - " + commitLink(IMAGE_REPO_URL, d.image_commit) +
+        (d.image_subject ? " " + escHtml(d.image_subject) : "")
+      : escHtml(d.image_version || "--");
+    setCell("swUpdates", updateState(d));
+    var logEl = document.getElementById("swSetupLog");
+    var logHtml = (h.setup_log || []).map(function (c) {
+      return "<li>" + commitLink(h.setup_repo_url, c.hash) + " " + escHtml(c.date) + " - " + escHtml(c.subject) + "</li>";
+    }).join("") || '<li class="sub">--</li>';
+    if (logEl.innerHTML !== logHtml) logEl.innerHTML = logHtml;
+    document.getElementById("swOs").textContent = (h.os || "--") + (h.rpi_issue ? " - " + h.rpi_issue : "");
+    document.getElementById("swKernel").textContent = (h.kernel || "--") + " / Docker " + (h.docker || "--");
+    document.getElementById("swBoot").textContent = h.bootloader || "--";
+    setCell("dgShutdown", shutdownState(d));
+    setCell("dgClock", clockState(d));
+    var ping = pingState(d);
+    if (d.ping && d.ping.gateway) ping.text += " (" + d.ping.gateway + ")";
+    setCell("dgPing", ping);
+    setCell("dgServices", servicesState(d));
+    renderServices(d);
+    var inet = internetState(d);
+    if (d.internet && d.internet.latency_ms != null) inet.text += " (" + d.internet.latency_ms + " ms)";
+    setCell("dgInternet", inet);
+    document.getElementById("dgInternet").title = internetDetail(d);
+    var ld = d.lidar;
+    document.getElementById("dgLidar").textContent = ld
+      ? ld.hours.toFixed(1) + " u van ~1000 u (geteld sinds " + ld.since + ")" + (ld.spinning ? " - draait" : " - staat stil")
+      : "--";
+    var mon = d.monitor || {};
+    setCell("dgMonitor", !mon.url ? { level: "", text: "niet ingesteld (monitor.conf)" }
+      : mon.ok === true ? { level: "ok", text: "status wordt verstuurd naar " + mon.url }
+      : mon.ok === false ? { level: "warn", text: "monitor niet bereikbaar: " + mon.url + " (laptop aan? firewall?)" }
+      : { level: "", text: "nog niet geprobeerd: " + mon.url });
+    var c = d.container || {};
+    document.getElementById("dgContainer").textContent =
+      (c.started ? "gestart " + new Date(c.started * 1000).toLocaleString("nl-BE") : "--") +
+      (c.starts_24h !== null && c.starts_24h !== undefined ? " - " + c.starts_24h + "x gestart in 24 u" : "");
+    var sd = sdErrorState(d);
+    if (d.sd_errors && d.sd_errors.last) sd.text += " - laatste: " + d.sd_errors.last;
+    setCell("dgSd", sd);
+  }
+
+  // ---- Verbinden met je smartphone (QR, qrcode.js) ----
+  function qrSvg(el, text) {
+    var qr = qrcode(0, "M");
+    qr.addData(text); qr.make();
+    el.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+  }
+  var pageUrl = location.origin + "/";
+  qrSvg(document.getElementById("qrPage"), pageUrl);
+  document.getElementById("qrPageText").textContent = pageUrl;
+  var qrWifiBtn = document.getElementById("qrWifiBtn"), qrWifiBox = document.getElementById("qrWifiBox");
+  qrWifiBox.hidden = true;
+  function wifiEsc(s) { return String(s).replace(/([\\;,:"])/g, "\\$1"); }
+  qrWifiBtn.addEventListener("click", function () {
+    if (!qrWifiBox.hidden) { qrWifiBox.hidden = true; document.getElementById("qrWifi").innerHTML = ""; qrWifiBtn.textContent = "Wifi-QR tonen"; return; }
+    fetch("/api/admin/wifi?token=" + encodeURIComponent(fenixAdminToken()), { cache: "no-store" })
+      .then(function (r) { return r.json().then(function (j) { return [r.status, j]; }); })
+      .then(function (a) {
+        var msg = document.getElementById("qrWifiMsg");
+        if (a[0] !== 200) { msg.textContent = "Fout: " + (a[1].error || a[0]); return; }
+        if (!a[1].psk) { msg.textContent = "Geen wifi-wachtwoord gevonden (state/wifi_psk)."; return; }
+        qrSvg(document.getElementById("qrWifi"), "WIFI:T:WPA;S:" + wifiEsc(a[1].ssid) + ";P:" + wifiEsc(a[1].psk) + ";;");
+        document.getElementById("qrWifiText").textContent = a[1].ssid;
+        qrWifiBox.hidden = false; qrWifiBtn.textContent = "Wifi-QR verbergen";
+      }).catch(function (e) { document.getElementById("qrWifiMsg").textContent = "Fout: " + e; });
+  });
+  document.addEventListener("fenix-admin", function (e) {
+    if (!e.detail.unlocked) { qrWifiBox.hidden = true; document.getElementById("qrWifi").innerHTML = ""; qrWifiBtn.textContent = "Wifi-QR tonen"; }
+  });
+
+  // ---- Verbinden vanaf je laptop ----
+  var connectText = "";
+  function showConnect(d) {
+    var cfg = d.config || {};
+    var dom = cfg.ROS_DOMAIN_ID || "0";
+    var ip = d.ip || window.location.hostname;
+    connectText =
+      "export RMW_IMPLEMENTATION=rmw_zenoh_cpp\n" +
+      "export ROS_DOMAIN_ID=" + dom + "\n" +
+      "export ZENOH_CONFIG_OVERRIDE='mode=\"client\";connect/endpoints=[\"tcp/" + ip + ":7447\"]'\n" +
+      "ros2 daemon stop; ros2 topic list";
+    var pre = document.getElementById("connectCmd");
+    if (pre.textContent !== connectText) pre.textContent = connectText;
+    var clients = d.zenoh_clients || [];
+    document.getElementById("zenohClients").innerHTML = clients.length
+      ? clients.map(function (c) { return "<li>" + c + "</li>"; }).join("")
+      : '<li class="sub">geen</li>';
+  }
+  document.getElementById("copyConnect").addEventListener("click", function () {
+    var st = document.getElementById("copyStatus");
+    if (!connectText) return;
+    copyText(connectText).then(function () { st.textContent = "Gekopieerd."; },
+      function () { st.textContent = "Kopiëren lukte niet - selecteer de tekst met de hand."; });
+  });
+
+  // ---- Logs (/rosout) ----
+  var LEVEL_NAME = { 10: "DEBUG", 20: "INFO", 30: "WARN", 40: "ERROR", 50: "FATAL" };
+  var MAX_LOG = 300;
+  var logLines = [];
+  var logPaused = false;
+  var logLevelSel = document.getElementById("logLevel");
+  var logFilterIn = document.getElementById("logFilter");
+  var logBox = document.getElementById("logBox");
+  logLevelSel.value = lsGet("logLevel", "20");
+
+  function escapeHtml(t) {
+    return String(t).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+
+  function renderLogs() {
+    var minLvl = parseInt(logLevelSel.value, 10);
+    var f = logFilterIn.value.toLowerCase();
+    var shown = logLines.filter(function (l) {
+      return l.level >= minLvl && (!f || (l.name + " " + l.msg).toLowerCase().indexOf(f) >= 0);
+    });
+    var atBottom = logBox.scrollTop + logBox.clientHeight >= logBox.scrollHeight - 20;
+    logBox.innerHTML = shown.length ? shown.map(function (l) {
+      var lvl = LEVEL_NAME[l.level] || l.level;
+      return '<div class="lvl-' + lvl + '">' + l.time + " [" + lvl + "] [" +
+        escapeHtml(l.name) + "] " + escapeHtml(l.msg) + "</div>";
+    }).join("") : '<div class="sub">geen meldingen (filter?)</div>';
+    if (atBottom) logBox.scrollTop = logBox.scrollHeight;
+    document.getElementById("logCount").textContent = shown.length + "/" + logLines.length + " getoond";
+  }
+
+  var logRenderPending = false;
+  new ROSLIB.Topic({ ros: ros, name: "/rosout", messageType: "rcl_interfaces/msg/Log", queue_length: 50 })
+    .subscribe(function (m) {
+      var d = new Date(m.stamp.sec * 1000 + Math.floor(m.stamp.nanosec / 1e6));
+      logLines.push({ level: m.level, name: m.name, msg: m.msg,
+                      time: d.toLocaleTimeString("nl-BE") });
+      if (logLines.length > MAX_LOG) logLines.splice(0, logLines.length - MAX_LOG);
+      // a burst of log lines -> one re-render per 300 ms
+      if (!logPaused && !logRenderPending) {
+        logRenderPending = true;
+        setTimeout(function () { logRenderPending = false; if (!logPaused) renderLogs(); }, 300);
+      }
+    });
+  logLevelSel.addEventListener("change", function () { lsSet("logLevel", logLevelSel.value); renderLogs(); });
+  logFilterIn.addEventListener("input", renderLogs);
+  document.getElementById("logPause").addEventListener("click", function () {
+    logPaused = !logPaused;
+    this.textContent = logPaused ? "Verder" : "Pauze";
+    if (!logPaused) renderLogs();
+  });
+  document.getElementById("logClear").addEventListener("click", function () { logLines = []; renderLogs(); });
+
+  // ---- Software bijwerken ----
+  var updateBtn = document.getElementById("updateBtn");
+  var updateStatus = document.getElementById("updateStatus");
+  var updateBar = document.getElementById("updateBar");
+  new ROSLIB.Topic({ ros: ros, name: "/system/update_status", messageType: "std_msgs/msg/String" })
+    .subscribe(function (msg) {
+      var d;
+      try { d = JSON.parse(msg.data); } catch (e) { return; }
+      var when = d.finished ? new Date(d.finished * 1000).toLocaleString("nl-BE") : null;
+      var busy = d.state === "activating" || d.rollback === "activating" || d.install === "activating";
+      updateBtn.disabled = busy;
+      rollbackBtn.disabled = busy || !rollbackAvailable;
+      verBusy = busy; verRender();
+      // pull_progress.py (turtlebot_robot): "⬇️ Nieuwe image ophalen: 42 % (...)"
+      var pct = d.state === "activating" && d.message ? /: (\d+) %/.exec(d.message) : null;
+      updateBar.hidden = !pct;
+      if (pct) updateBar.value = +pct[1];
+      if (d.install === "activating") {
+        updateStatus.textContent = "Versie installeren" + (d.message ? ": " + d.message : "...");
+      } else if (d.message && /^(✅|❌) .*(geïnstalleerd|draait al|ongeldige versie|ophalen mislukt|niet op deze robot)/.test(d.message) && d.state !== "activating") {
+        updateStatus.textContent = d.message;
+      } else if (d.rollback === "activating") {
+        updateStatus.textContent = "Terugschakelen bezig" + (d.message ? ": " + d.message : "...");
+      } else if (d.message && /^(✅|❌) .*(Teruggeschakeld|vorige)/.test(d.message) && d.state !== "activating") {
+        updateStatus.textContent = d.message;
+      } else if (d.state === "activating") {
+        updateStatus.textContent = "Update bezig" + (d.message ? ": " + d.message : "...");
+      } else if (d.state === "active" && d.result === "success") {
+        updateStatus.textContent = "Laatste update OK (" + when + ")";
+      } else if (d.state === "failed") {
+        // message = laatste stap uit update_turtlebot.sh; bij een time-out is
+        // dat de stap die bleef hangen
+        var why = d.result === "timeout" ? "time-out na 30 min" + (d.message ? " tijdens: " + d.message : "")
+          : (d.message || "details: journalctl -u turtlebot-update op de robot");
+        updateStatus.textContent = "Laatste update mislukt" + (when ? " (" + when + ")" : "") + " - " + why;
+      } else if (d.state === "unknown") {
+        updateStatus.textContent = "Status onbekend (systeembus niet bereikbaar?)";
+      } else {
+        updateStatus.textContent = "Nog geen update sinds de laatste opstart";
+      }
+    });
+  var rollbackBtn = document.getElementById("rollbackBtn");
+  rollbackBtn.addEventListener("click", function () {
+    if (!window.confirm("Terug naar de vorige versie (" + document.getElementById("prevVersion").textContent +
+                        ")? De container herstart en lopende launches stoppen.")) return;
+    rollbackBtn.disabled = true;
+    updateStatus.textContent = "...";
+    fenixAdminAction("rollback", {}, function (ok, msg) {
+      updateStatus.textContent = (ok ? "OK: " : "Fout: ") + msg;
+      if (!ok) rollbackBtn.disabled = false;
+    });
+  });
+  // ---- Updatekanaal: state/image_channel (setup_turtlebot.sh kiest de tag) ----
+  var chanSel = document.getElementById("chanSel");
+  new ROSLIB.Topic({ ros: ros, name: "/launch_status", messageType: "std_msgs/msg/String", throttle_rate: 2000, queue_length: 1 })
+    .subscribe(function (m) {
+      var d; try { d = JSON.parse(m.data); } catch (e) { return; }
+      if (d.image_channel && document.activeElement !== chanSel && !chanSel.dataset.busy) chanSel.value = d.image_channel;
+    });
+  chanSel.addEventListener("change", function () {
+    var ch = chanSel.value;
+    if (!confirm("Updatekanaal " + (ch === "jazzy" ? "Jazzy" : "Humble") + "? Geldt bij de volgende Software bijwerken" +
+                 (ch === "jazzy" ? " - Humble-laptops (turtlebot-vis:zenoh) praten dan niet meer met deze robot." : "."))) {
+      chanSel.value = ch === "jazzy" ? "humble" : "jazzy"; return;
+    }
+    chanSel.dataset.busy = "1";
+    fenixAdminAction("image_channel", { channel: ch }, function (ok, msg) {
+      document.getElementById("chanStatus").textContent = (ok ? "" : "Fout: ") + msg;
+      setTimeout(function () { delete chanSel.dataset.busy; }, 3000);
+    });
+  });
+
+  // ---- Versie kiezen (t70): tags vX.Y.Z van Docker Hub, install_version.sh op de host ----
+  var verSel = document.getElementById("verSel"), verLoad = document.getElementById("verLoad"),
+      verInstall = document.getElementById("verInstall"), verBusy = false;
+  function verRender() { verInstall.disabled = verBusy || !verSel.value; }
+  verSel.addEventListener("change", verRender);
+  verLoad.addEventListener("click", function () {
+    verLoad.disabled = true;
+    updateStatus.textContent = "Versies ophalen...";
+    fenixAdminAction("list_versions", {}, function (ok, msg, j) {
+      verLoad.disabled = false;
+      if (!ok) { updateStatus.textContent = "Fout: " + msg; return; }
+      var cur = fenixVersion(j.current).short;
+      verSel.innerHTML = '<option value="">-- kies een versie --</option>' + j.versions.map(function (v) {
+        return '<option value="' + escHtml(v.tag) + '">' + escHtml(v.tag) + " (" + escHtml(v.date) + ")" +
+          (v.tag === cur ? " - draait nu" : "") + "</option>";
+      }).join("");
+      updateStatus.textContent = j.versions.length + " versies gevonden (nu: " + (cur || "?") + ")";
+      verRender();
+    });
+  });
+  verInstall.addEventListener("click", function () {
+    var tag = verSel.value;
+    if (!tag || !window.confirm("Versie " + tag + " installeren? De container herstart en lopende launches stoppen. " +
+                                "De volgende Software bijwerken haalt weer de nieuwste.")) return;
+    verInstall.disabled = true;
+    updateStatus.textContent = "...";
+    fenixAdminAction("install_version", { version: tag }, function (ok, msg) {
+      updateStatus.textContent = (ok ? "OK: " : "Fout: ") + msg;
+      if (!ok) verRender();
+    });
+  });
+
+  updateBtn.addEventListener("click", function () {
+    if (!window.confirm("Software bijwerken? Bij een nieuwe image herstart de container en stoppen lopende launches.")) return;
+    updateBtn.disabled = true;
+    updateStatus.textContent = "...";
+    fenixAdminAction("update", {}, function (ok, msg) {
+      updateStatus.textContent = (ok ? "OK: " : "Fout: ") + msg;
+      if (!ok) updateBtn.disabled = false;
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

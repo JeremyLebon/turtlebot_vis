@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Turtlebot Projecten</title>
+<script src="roslib.min.js"></script>
+<script src="common.js?v=29"></script>
+<style>
+  :root {
+    --bg: #14161a; --card: #1e2126; --border: #2c3038; --text: #e6e8eb; --muted: #8a8f98;
+    --green: #2ecc71; --yellow: #f1c40f; --red: #e74c3c; --accent: #4da3ff; --orange: #f0883e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; padding: 24px; }
+  header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+  h1 { margin: 0; font-size: 1.4rem; }
+  .header-right { display: flex; gap: 8px; align-items: center; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: .85rem;
+           font-weight: 600; background: var(--card); border: 1px solid var(--border); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+  .dot.ok { background: var(--green); } .dot.warn { background: var(--yellow); } .dot.bad { background: var(--red); }
+  .grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr); gap: 16px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } body { padding: 16px; } }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 16px; }
+  .card h2 { margin: 0 0 10px 0; font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .sub { color: var(--muted); font-size: .85rem; }
+  select { background: #262a31; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font-size: .95rem; }
+  .btn { background: #262a31; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 7px 12px;
+         font-size: .88rem; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+  .btn:hover { border-color: var(--accent); } .btn:disabled { opacity: .45; cursor: default; }
+  .btn.on { border-color: var(--green); }
+  .btn.stop { color: var(--red); border-color: var(--red); background: transparent; }
+  ul { margin: 6px 0 0; padding-left: 20px; } li { margin: 4px 0; line-height: 1.4; }
+  code { background: #262a31; padding: 1px 5px; border-radius: 4px; font-size: .85em; word-break: break-all; }
+  .check { display: flex; gap: 8px; align-items: center; margin: 4px 0; }
+  .ok-t { color: var(--green); } .bad-t { color: var(--red); } .opt-t { color: var(--yellow); }
+  table.live { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  table.live td, table.live th { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+  table.live th { color: var(--muted); font-weight: 600; font-size: .78rem; }
+  details { margin: 8px 0; } summary { cursor: pointer; font-weight: 600; }
+  a { color: var(--accent); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+</style>
+</head>
+<body>
+
+<header id="appHeader"></header>
+
+<div class="card">
+  <div class="row">
+    <label class="sub" for="projSel">Project</label>
+    <select id="projSel"><option>laden...</option></select>
+    <span class="sub" id="projSource"></span>
+  </div>
+  <p id="projSummary" style="margin:10px 0 0"></p>
+</div>
+
+<div class="grid">
+  <div>
+    <div class="card">
+      <h2>Starten</h2>
+      <div class="row" id="projLaunches"></div>
+      <div class="sub" id="projMsg" style="margin-top:8px"></div>
+      <div class="sub" style="margin-top:6px">"Stop alles" (Status-pagina, joystick-knop of de monitor) stopt ook de projecten.</div>
+    </div>
+    <div class="card" id="liveCard" style="display:none">
+      <h2 id="liveTitle">Live</h2>
+      <div id="liveBody" class="sub">-</div>
+    </div>
+    <div class="card">
+      <h2>Stappen</h2>
+      <div id="projLevels"></div>
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <h2>Controles</h2>
+      <div id="projChecks"></div>
+    </div>
+    <div class="card">
+      <h2>Nodig</h2>
+      <ul id="projNeeds"></ul>
+    </div>
+    <div class="card" id="dlCard">
+      <h2>Downloads en links</h2>
+      <ul id="projDownloads"></ul>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var ros = connectRos();
+  initHeader(ros, "projects");
+
+  var projects = [], cur = null, status = null;
+  var sel = document.getElementById("projSel");
+
+  // project.json -> page (projects_lib.py on the robot, /api/projects)
+  function load() {
+    fetch("/api/projects").then(function (r) { return r.json(); }).then(function (list) {
+      projects = list;
+      if (!list.length) { sel.innerHTML = "<option>geen projecten gevonden</option>"; return; }
+      var want = lsGet("project", list[0].id);
+      sel.innerHTML = list.map(function (p) {
+        return '<option value="' + escHtml(p.id) + '"' + (p.id === want ? " selected" : "") + ">" + escHtml(p.title) + "</option>";
+      }).join("");
+      show(sel.value);
+    }).catch(function () { sel.innerHTML = "<option>kon projecten niet laden</option>"; });
+  }
+  sel.addEventListener("change", function () { lsSet("project", sel.value); show(sel.value); });
+
+  function show(id) {
+    cur = projects.filter(function (p) { return p.id === id; })[0];
+    if (!cur) return;
+    document.getElementById("projSummary").textContent = cur.summary || "";
+    document.getElementById("projSource").textContent = cur.source === "ros2_ws"
+      ? "eigen versie (~/ros2_ws)" : "versie uit de image (aanpassen: kopieer naar ~/ros2_ws/src)";
+    document.getElementById("projNeeds").innerHTML = (cur.needs || []).map(function (n) { return "<li>" + escHtml(n) + "</li>"; }).join("");
+    var dl = cur.downloads || [];
+    document.getElementById("dlCard").style.display = dl.length ? "" : "none";
+    document.getElementById("projDownloads").innerHTML = dl.map(function (d) {
+      return '<li><a href="' + escHtml(d.url) + '" target="_blank" rel="noopener">' + escHtml(d.label) + "</a></li>";
+    }).join("");
+    document.getElementById("projLevels").innerHTML = (cur.levels || []).map(function (l, i) {
+      return "<details" + (i === 0 ? " open" : "") + "><summary>" + escHtml(l.title) + "</summary><ol>" +
+        l.steps.map(function (s) { return "<li>" + codeify(s) + "</li>"; }).join("") + "</ol></details>";
+    }).join("");
+    document.getElementById("projLaunches").innerHTML = (cur.launches || []).map(function (l) {
+      return '<button class="btn fx-ib" data-launch="' + escHtml(l.id) + '"><span class="pi">' + fxIcon("play", 16) + "</span> " + escHtml(l.label) + "</button>";
+    }).join("");
+    setupLive();
+    render();
+  }
+  // commands in a step ("ros2 ...", "colcon ...", "cp ...") shown as code
+  function codeify(s) {
+    return escHtml(s).replace(/((?:ros2|colcon|cp|cd|source|rviz2|top) [^,;]*?)(?=$| en | of |\)|, |; )/g, "<code>$1</code>");
+  }
+
+  document.getElementById("projLaunches").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-launch]");
+    if (!b || !cur) return;
+    var running = status && status.projects_running && status.projects_running[cur.id + ":" + b.dataset.launch];
+    new ROSLIB.Topic({ ros: ros, name: "/launch/project_cmd", messageType: "std_msgs/msg/String" })
+      .publish(new ROSLIB.Message({ data: JSON.stringify({ project: cur.id, launch: b.dataset.launch, action: running ? "stop" : "start" }) }));
+    document.getElementById("projMsg").textContent = running ? "stoppen..." : "starten...";
+  });
+
+  // ---- controls: what the project needs (from /launch_status) ----
+  var CHECKS = {
+    camera_running: function (s) { return !!s.camera; },
+    camera_calibrated: function (s) { return !!(s.camera_settings && s.camera_settings.calibrated); },
+    bringup: function (s) { return !!s.bringup; },
+    navigation: function (s) { return !!s.navigation; },
+    no_slam_nav: function (s) { return !s.slam && !s.navigation; },
+  };
+  var lastMsgT = 0;
+  new ROSLIB.Topic({ ros: ros, name: "/launch_status", messageType: "std_msgs/msg/String", throttle_rate: 1000 })
+    .subscribe(function (m) {
+      try { status = JSON.parse(m.data); } catch (e) { return; }
+      render();
+    });
+  function render() {
+    if (!cur || !status) return;
+    document.getElementById("projChecks").innerHTML = (cur.checks || []).map(function (c) {
+      var fn = CHECKS[c.type], ok = fn ? fn(status) : null;
+      var cls = ok ? "ok-t" : c.optional ? "opt-t" : "bad-t";
+      return '<div class="check"><span class="' + cls + '">' + (ok ? "&#10003;" : "&#10007;") + "</span><span>" +
+        escHtml(c.label) + (!ok && c.optional ? ' <span class="sub">(' + escHtml(c.optional) + ")</span>" : "") + "</span></div>";
+    }).join("");
+    document.querySelectorAll("#projLaunches [data-launch]").forEach(function (b) {
+      var on = !!(status.projects_running || {})[cur.id + ":" + b.dataset.launch];
+      b.classList.toggle("on", on);
+      var pi = b.querySelector(".pi"), want = on ? "square" : "play";
+      if (pi.dataset.icon !== want) { pi.dataset.icon = want; pi.innerHTML = fxIcon(want, 16); }
+      b.setAttribute("data-tip", on ? "draait - klik om te stoppen" : "klik om te starten");
+    });
+    var pm = status.project_msg;
+    if (pm && pm.t !== lastMsgT) { lastMsgT = pm.t; document.getElementById("projMsg").textContent = pm.text; }
+  }
+
+  // ---- live view ("tags": AprilTag detections + distance from /tf) ----
+  var liveSubs = [], tags = {};
+  function setupLive() {
+    liveSubs.forEach(function (t) { t.unsubscribe(); });
+    liveSubs = [];
+    var live = (cur.live || [])[0];
+    document.getElementById("liveCard").style.display = live ? "" : "none";
+    if (!live) return;
+    document.getElementById("liveTitle").textContent = live.label || "Live";
+    if (live.type === "tags") {
+      tags = {};
+      var det = new ROSLIB.Topic({ ros: ros, name: live.detections, messageType: "apriltag_msgs/msg/AprilTagDetectionArray",
+                                   throttle_rate: 200, queue_length: 1 });
+      det.subscribe(function (m) {
+        var now = Date.now();
+        (m.detections || []).forEach(function (d) {
+          var t = tags[d.id] || (tags[d.id] = {});
+          t.seen = now; t.margin = d.decision_margin; t.family = d.family;
+        });
+      });
+      // tag poses come as TF camera -> <tf_prefix><id> (apriltag_node)
+      var tf = new ROSLIB.Topic({ ros: ros, name: "/tf", messageType: "tf2_msgs/msg/TFMessage", queue_length: 50 });
+      tf.subscribe(function (m) {
+        (m.transforms || []).forEach(function (t) {
+          if (t.child_frame_id.indexOf(live.tf_prefix) !== 0) return;
+          var id = t.child_frame_id.substring(live.tf_prefix.length), p = t.transform.translation;
+          var e = tags[id] || (tags[id] = {});
+          e.dist = Math.sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+          e.lr = p.x; e.ud = p.y; e.fwd = p.z;   // camera frame: x right, y down, z forward
+          e.tfSeen = Date.now();
+        });
+      });
+      liveSubs = [det, tf];
+    } else if (live.type === "json") {
+      // a project node publishes its state as JSON (std_msgs/String)
+      var js = new ROSLIB.Topic({ ros: ros, name: live.topic, messageType: "std_msgs/msg/String", throttle_rate: 300, queue_length: 1 });
+      jsonState = null;
+      js.subscribe(function (m) { try { jsonState = { d: JSON.parse(m.data), t: Date.now() }; } catch (e) {} });
+      liveSubs = [js];
+    }
+  }
+  var jsonState = null;
+  setInterval(function () {
+    var live = cur && (cur.live || [])[0];
+    if (live && live.type === "json") {
+      var fresh = jsonState && Date.now() - jsonState.t < 3000, units = live.units || {};
+      document.getElementById("liveBody").innerHTML = !fresh ? '<span class="sub">nog geen gegevens - start het project</span>'
+        : '<table class="live">' + Object.keys(jsonState.d).map(function (k) {
+            var v = jsonState.d[k];
+            if (Array.isArray(v)) v = v.join(", ");
+            return "<tr><th>" + escHtml(k.replace(/_/g, " ")) + "</th><td>" +
+              (v === null || v === undefined ? "--" : escHtml(v) + (units[k] && typeof v === "number" ? " " + units[k] : "")) + "</td></tr>";
+          }).join("") + "</table>";
+      return;
+    }
+    if (!live || live.type !== "tags") return;
+    var now = Date.now(), rows = Object.keys(tags).filter(function (id) { return now - (tags[id].seen || 0) < 1500; });
+    var running = status && Object.keys(status.projects_running || {}).some(function (k) {
+      return k.indexOf(cur.id + ":") === 0 && status.projects_running[k];
+    });
+    document.getElementById("liveBody").innerHTML = !running ? '<span class="sub">start de detectie om tags te zien</span>'
+      : !rows.length ? '<span class="sub">geen tags in beeld</span>'
+      : '<table class="live"><tr><th>Tag</th><th>Afstand</th><th>Links/rechts</th><th>Zekerheid</th></tr>' +
+        rows.map(function (id) {
+          var t = tags[id], d = t.dist != null && now - (t.tfSeen || 0) < 1500;
+          return "<tr><td><b>" + escHtml(id) + "</b></td><td>" + (d ? t.dist.toFixed(2) + " m" : "--") + "</td><td>" +
+            (d ? (t.lr > 0 ? "rechts " : "links ") + Math.abs(t.lr).toFixed(2) + " m" : "--") + "</td><td>" +
+            (t.margin != null ? Math.round(t.margin) : "--") + "</td></tr>";
+        }).join("") + "</table>" +
+        (status && status.camera_settings && !status.camera_settings.calibrated
+          ? '<div class="sub" style="margin-top:6px;color:var(--yellow)">Camera niet gekalibreerd: de afstanden kloppen niet.</div>' : "");
+  }, 300);
+
+  load();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,718 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Fenix · Rijden</title>
+<script src="roslib.min.js"></script>
+<script src="common.js?v=29"></script>
+<style>
+  :root {
+    --bg: #14161a;
+    --card: #1e2126;
+    --border: #2c3038;
+    --text: #e6e8eb;
+    --muted: #8a8f98;
+    --green: #2ecc71;
+    --yellow: #f1c40f;
+    --red: #e74c3c;
+    --accent: #4da3ff;
+    --pip: 30%;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    padding: 12px 16px 24px;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.ok { background: var(--green); }
+  .dot.warn { background: var(--yellow); }
+  .dot.bad { background: var(--red); }
+  .hidden { display: none !important; }
+  .sub { color: var(--muted); font-size: 0.78rem; }
+
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 10px; min-width: 0; }
+  /* toolbar above the stage: groups of icon buttons */
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .grp { display: inline-flex; align-items: center; gap: 4px; padding: 3px; background: #181b20; border: 1px solid var(--border); border-radius: 11px; }
+  .grp .lbl { color: var(--muted); font-size: .72rem; font-weight: 700; padding: 0 4px 0 6px; text-transform: uppercase; letter-spacing: .04em; }
+  .spacer { flex: 1; }
+  select, input[type=text] {
+    background: #2a2e35; color: var(--text); border: 1px solid var(--border); border-radius: 8px;
+    padding: 0 8px; height: 36px; font: inherit; font-size: .82rem;
+  }
+  .ib {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    min-width: 36px; height: 36px; padding: 0 8px; border-radius: 8px;
+    background: #2a2e35; border: 1px solid var(--border); color: var(--text); cursor: pointer; font: inherit; font-size: .8rem; font-weight: 700;
+  }
+  .ib:hover { border-color: var(--accent); }
+  a.ib { text-decoration: none; }
+  .ib:disabled { opacity: .45; cursor: default; }
+  .ib.on, .ib.pri { background: var(--accent); border-color: var(--accent); color: #0b1a2b; }
+  .ib.offst { background: #3a1d1d; border-color: #6e2b2b; color: #ff8a80; }
+
+  /* the stage: one big view + a small one, or side by side */
+  #stage { position: relative; height: min(72vh, 680px); min-height: 320px; background: #0d0f12; border-radius: 10px; overflow: hidden; }
+  .pane { position: absolute; background: #0d0f12; overflow: hidden; }
+  .pane.big { inset: 0; }
+  .pane.small { top: 10px; right: 10px; width: var(--pip); aspect-ratio: 4 / 3; border: 2px solid var(--accent); border-radius: 9px;
+                z-index: 4; cursor: pointer; box-shadow: 0 6px 18px #0008; }
+  #stage.split .pane { top: 0; bottom: 0; width: 50%; inset: auto; height: 100%; border: 0; border-radius: 0; aspect-ratio: auto; cursor: default; box-shadow: none; }
+  #stage.split #paneMap { left: 0; } #stage.split #paneCam { right: 0; border-left: 1px solid var(--border); }
+  #viewCanvas { width: 100%; height: 100%; display: block; touch-action: none; }
+  #paneCam img { width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
+  .cam-off { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
+             color: var(--muted); font-style: italic; font-size: .82rem; padding: 10px; }
+  .swap-hint { position: absolute; left: 6px; bottom: 6px; background: #000a; color: var(--text); border-radius: 6px; padding: 2px 6px;
+               font-size: .7rem; pointer-events: none; display: none; }
+  .pane.small .swap-hint { display: block; }
+  .pane-label { position: absolute; left: 10px; top: 10px; z-index: 3; display: flex; align-items: center; gap: 6px;
+                background: #0009; border-radius: 8px; padding: 4px 8px; font-size: .8rem; font-weight: 700; pointer-events: none; }
+  .pane.small .pane-label { display: none; }
+
+  /* driving controls on the stage */
+  .overlay { position: absolute; z-index: 5; background: #14161acc; border: 1px solid #ffffff1a; border-radius: 14px; padding: 8px; backdrop-filter: blur(3px); }
+  #pad { left: 10px; bottom: 10px; }
+  .dpad { display: grid; grid-template-columns: repeat(3, 54px); grid-template-rows: repeat(3, 54px); gap: 6px; }
+  .dpad button {
+    display: flex; align-items: center; justify-content: center;
+    background: #2a2e35d9; border: 1px solid var(--border); border-radius: 12px; color: var(--text);
+    cursor: pointer; user-select: none; touch-action: none; padding: 0;
+  }
+  .dpad button:active, .dpad button.active { background: var(--accent); color: #0b1a2b; }
+  .dpad button.stop { background: #3a1d1dd9; border-color: #6e2b2b; color: #ff8a80; }
+  .dpad .up { grid-column: 2; grid-row: 1; }
+  .dpad .left { grid-column: 1; grid-row: 2; }
+  .dpad .stop { grid-column: 2; grid-row: 2; }
+  .dpad .right { grid-column: 3; grid-row: 2; }
+  .dpad .down { grid-column: 2; grid-row: 3; }
+  #stageWrap { position: relative; }
+  #speedBox { right: 10px; bottom: 10px; width: 250px; }
+  .speed { display: grid; grid-template-columns: 22px minmax(0, 1fr) 66px; align-items: center; gap: 8px; }
+  .speed input { width: 100%; }
+  .speed .v { font-size: .78rem; color: var(--muted); text-align: right; }
+  #stageWrap.no-drive #pad, #stageWrap.no-drive #speedBox { display: none; }
+  .msg { margin-top: 8px; min-height: 1.2em; }
+  footer { color: var(--muted); font-size: 0.7rem; text-align: center; margin-top: 16px; }
+
+  @media (max-width: 760px) {
+    body { padding: 10px 10px 20px; }
+    #stage { height: 62vh; }
+    .pane.small { width: calc(var(--pip) * 1.4); }
+    #stage.split .pane { width: 100%; height: 50%; left: 0; right: 0; }
+    #stage.split #paneMap { top: 0; } #stage.split #paneCam { top: 50%; border-left: 0; border-top: 1px solid var(--border); }
+    .dpad { grid-template-columns: repeat(3, 46px); grid-template-rows: repeat(3, 46px); gap: 5px; }
+    #pad { left: 6px; bottom: 6px; padding: 6px; background: #14161a99; }
+    /* speed sliders below the stage on a phone, so the view stays free */
+    #speedBox { position: static; width: auto; margin-top: 8px; background: var(--card); backdrop-filter: none; }
+    .grp .lbl { display: none; }
+  }
+</style>
+</head>
+<body>
+<header id="appHeader"></header>
+
+<!-- for the labo-check (rates); not shown -->
+<span class="hidden" id="scanHz">--</span>
+<span class="hidden" id="camIcon"></span><span class="hidden" id="driveIcon"></span>
+<span class="hidden" id="driveHint"></span>
+
+<div class="card">
+  <div class="bar">
+    <span class="grp">
+      <span class="lbl">Beeld</span>
+      <button class="ib" id="lySwap" aria-label="Wissel kaart en camera" data-tip="Wissel kaart en camera van plaats (of tik op het kleine venster)"></button>
+      <button class="ib" data-layout="split" id="lySplit" data-tip="Naast elkaar (op een smartphone: onder elkaar)"></button>
+      <button class="ib" id="pipSize" data-tip="Grootte van het kleine venster">M</button>
+    </span>
+    <span class="grp">
+      <span class="lbl">Camera</span>
+      <button class="ib" id="camToggle" data-tip="Camera aan/uit">--</button>
+      <select id="camRate" aria-label="Beelden per seconde" data-tip="Beelden per seconde - elk beeld kost ~40 KB wifi per open pagina">
+        <option value="off">beeld uit</option>
+        <option value="1">1 fps</option>
+        <option value="5">5 fps</option>
+        <option value="max">max</option>
+      </select>
+    </span>
+    <span class="grp">
+      <span class="lbl">Lidar</span>
+      <select id="scanRate" aria-label="Lidar-verversing" data-tip="Hoe vaak het lidar-beeld ververst - lager = minder wifi">
+        <option value="off">uit</option>
+        <option value="1">1 Hz</option>
+        <option value="2">2 Hz</option>
+        <option value="5">5 Hz</option>
+        <option value="max">max</option>
+      </select>
+      <select id="scanRange" aria-label="Bereik" data-tip="Bereik van het lidar-beeld (zonder kaart)">
+        <option value="1">1 m</option>
+        <option value="2">2 m</option>
+        <option value="3.5">3,5 m</option>
+      </select>
+    </span>
+    <span class="spacer"></span>
+    <span class="grp">
+      <span class="lbl">Rijden</span>
+      <button class="ib" id="bringupToggle" data-tip="Bringup">--</button>
+      <button class="ib on" id="driveToggle" data-tip="Pijlen en snelheden tonen/verbergen (toetsenbord en joystick werken altijd)"></button>
+      <button class="ib" id="joyToggle" data-tip="Joystick F710 aan/uit">--</button>
+      <button class="ib" id="motorToggle" data-tip="Motoren">--</button>
+    </span>
+  </div>
+
+  <div id="stageWrap">
+  <div id="stage">
+    <div class="pane big" id="paneMap">
+      <canvas id="viewCanvas"></canvas>
+      <div class="pane-label"><span id="viewIcon"></span><span id="viewTitle">Lidar</span></div>
+      <span class="swap-hint">wissel</span>
+    </div>
+    <div class="pane small" id="paneCam">
+      <img id="camImg" style="display:none" alt="Camerabeeld" />
+      <div class="cam-off" id="camOff">camerastatus laden...</div>
+      <span class="swap-hint">wissel</span>
+    </div>
+
+    <div class="overlay" id="pad">
+      <div class="dpad">
+        <button class="up" data-dir="fwd" aria-label="Vooruit" data-tip="Vooruit (pijl omhoog / W)"></button>
+        <button class="left" data-dir="left" aria-label="Links draaien" data-tip="Links draaien (pijl links / A)"></button>
+        <button class="stop" data-dir="stop" aria-label="Stop" data-tip="Stop (spatie)"></button>
+        <button class="right" data-dir="right" aria-label="Rechts draaien" data-tip="Rechts draaien (pijl rechts / D)"></button>
+        <button class="down" data-dir="back" aria-label="Achteruit" data-tip="Achteruit (pijl omlaag / S)"></button>
+      </div>
+    </div>
+  </div>
+    <div class="overlay" id="speedBox">
+      <div class="speed">
+        <span id="linIcon" tabindex="0" data-tip="Snelheid rechtdoor: pijlen, toetsenbord en gamepad (stick volledig). RB op de gamepad = maximum van de docent."></span>
+        <input type="range" id="linSlider" min="0.02" max="0.21" step="0.01" aria-label="Snelheid rechtdoor" />
+        <span class="v" id="linVal">--</span>
+        <span id="angIcon" tabindex="0" data-tip="Snelheid draaien: pijlen, toetsenbord en gamepad (stick volledig). RB op de gamepad = maximum van de docent."></span>
+        <input type="range" id="angSlider" min="0.2" max="2.8" step="0.1" aria-label="Snelheid draaien" />
+        <span class="v" id="angVal">--</span>
+      </div>
+      <div class="sub" id="joyInfo" style="margin-top:4px"></div>
+    </div>
+  </div>
+  <div class="sub msg" id="viewMsg">-</div>
+</div>
+
+<footer>rosbridge: <code id="wsUrl">-</code> &middot; draait rechtstreeks op de robot, geen internet nodig</footer>
+
+<script>
+(function () {
+  var ros = connectRos();
+  initHeader(ros, "index");
+  startAgeTicker([]);
+
+  document.getElementById("viewIcon").innerHTML = fxIcon("lidar");
+  document.getElementById("camIcon").innerHTML = fxIcon("camera");
+  document.getElementById("driveIcon").innerHTML = fxIcon("index");
+  document.getElementById("linIcon").innerHTML = fxIcon("fwd");
+  document.getElementById("angIcon").innerHTML = fxIcon("turn");
+  document.getElementById("joyToggle").innerHTML = fxIcon("gamepad");
+  document.getElementById("bringupToggle").innerHTML = fxIcon("play") + "<span>Bringup</span>";
+  document.getElementById("motorToggle").innerHTML = fxIcon("bolt");
+  [["up", "up"], ["left", "left"], ["right", "right"], ["down", "down"]].forEach(function (p) {
+    document.querySelector(".dpad ." + p[0]).innerHTML = fxIcon(p[1], 26, 2.5);
+  });
+  document.querySelector(".dpad .stop").innerHTML = fxIcon("square", 22);
+
+  // Last time each topic was seen, for the labo-check (common.js laboRows)
+  var lastSeen = {};
+  function seen(key) { lastSeen[key] = Date.now(); }
+  function fresh(key, ms) { return lastSeen[key] && Date.now() - lastSeen[key] < (ms || 3000); }
+
+  // All TurtleBot3 topics publish at ~23 Hz; every subscription costs
+  // rosbridge CPU per open page (measured 2026-10-07: ~3.5-7 % of a core
+  // each, unthrottled). The page needs far less, so throttle in rosbridge.
+  new ROSLIB.Topic({ ros: ros, name: "/battery_state", messageType: "sensor_msgs/msg/BatteryState",
+                     throttle_rate: 1000, queue_length: 1 })
+    .subscribe(function () { seen("battery"); });
+
+  // Lidar rate for the labo-check. Throttled to 5 Hz in rosbridge - LDS-01/02
+  // publish at ~5 Hz anyway.
+  var scanTick = rateTracker("scanHz", null);
+  new ROSLIB.Topic({ ros: ros, name: "/scan", messageType: "sensor_msgs/msg/LaserScan",
+                     throttle_rate: 200, queue_length: 1 })
+    .subscribe(function () { scanTick(); seen("scan"); });
+  // IMU / odom: only whether they're alive
+  new ROSLIB.Topic({ ros: ros, name: "/imu", messageType: "sensor_msgs/msg/Imu", throttle_rate: 1000, queue_length: 1 })
+    .subscribe(function () { seen("imu"); });
+  new ROSLIB.Topic({ ros: ros, name: "/odom", messageType: "nav_msgs/msg/Odometry", throttle_rate: 1000, queue_length: 1 })
+    .subscribe(function () { seen("odom"); });
+
+  // ---- launch status (camera, joystick, SLAM state) ----
+  var status = null;
+  new ROSLIB.Topic({ ros: ros, name: "/launch_status", messageType: "std_msgs/msg/String", throttle_rate: 1000, queue_length: 1 })
+    .subscribe(function (msg) {
+      try { status = JSON.parse(msg.data); } catch (e) { return; }
+      renderCam(); renderJoy(); renderSlam(); renderBringup();
+    });
+  function trigger(name, cb) {
+    new ROSLIB.Service({ ros: ros, name: name, serviceType: "std_srvs/srv/Trigger" })
+      .callService(new ROSLIB.ServiceRequest({}), function (r) { cb(r.success, r.message); },
+                   function (err) { cb(false, String(err)); });
+  }
+
+  // ---- Camera ----
+  // Compressed image via rosbridge (base64). Heaviest item on the page
+  // (~9 % of a core in rosbridge, ~5 Mbit/s wifi at full rate), so the rate
+  // is selectable; throttle_rate is applied by rosbridge on the robot.
+  var camRateSel = document.getElementById("camRate");
+  camRateSel.value = lsGet("camRate", "5");
+  var camTopic = null, camMsg = "";
+  var camToggle = document.getElementById("camToggle");
+  camToggle.innerHTML = fxIcon("camera");
+  function onCamImage(msg) {
+    seen("camera");
+    var img = document.getElementById("camImg");
+    img.src = "data:image/jpeg;base64," + msg.data;
+    img.style.display = "block";
+    document.getElementById("camOff").style.display = "none";
+  }
+  function renderCam() {
+    if (!status) return;
+    camToggle.classList.toggle("on", !!status.camera_enabled);
+    camToggle.setAttribute("data-tip", "Camera " + (status.camera_enabled ? "aan" : "uit") + " - klik om " +
+      (status.camera_enabled ? "uit" : "aan") + " te zetten (wordt onthouden, ook na een herstart)");
+    var text = null;
+    if (!status.camera_sensor) text = "geen camera aangesloten (wordt enkel bij het opstarten van de Pi gedetecteerd)";
+    else if (!status.camera_enabled) text = "camera uitgeschakeld";
+    else if (!status.camera) text = "camera wordt gestart...";
+    else if (camRateSel.value === "off") text = "camerabeeld uitgeschakeld op deze pagina";
+    else if (!fresh("camera", 5000)) text = "wachten op beeld (" + status.camera_sensor + ")...";
+    if (text) {
+      document.getElementById("camImg").style.display = "none";
+      var off = document.getElementById("camOff");
+      off.style.display = "";
+      off.textContent = (camMsg ? camMsg + " - " : "") + text;
+    }
+  }
+  camToggle.addEventListener("click", function () {
+    if (!status) return;
+    camToggle.disabled = true;
+    camMsg = "";
+    trigger(status.camera_enabled ? "/launch/stop_camera" : "/launch/camera", function (ok, msg) {
+      camToggle.disabled = false;
+      if (!ok) camMsg = msg;
+    });
+  });
+  setInterval(renderCam, 1000);
+  function subscribeCam() {
+    if (camTopic) { camTopic.unsubscribe(onCamImage); camTopic = null; }
+    var r = camRateSel.value;
+    if (r === "off") { renderCam(); return; }
+    camTopic = new ROSLIB.Topic({
+      ros: ros, name: "/camera/image_raw/compressed",
+      messageType: "sensor_msgs/msg/CompressedImage", compression: "none",
+      throttle_rate: r === "max" ? 0 : Math.round(1000 / parseFloat(r)), queue_length: 1,
+    });
+    camTopic.subscribe(onCamImage);
+  }
+  camRateSel.addEventListener("change", function () { lsSet("camRate", camRateSel.value); subscribeCam(); });
+  subscribeCam();
+
+  // ---- Joystick (F710) - /launch/joystick, not remembered ----
+  var joyToggle = document.getElementById("joyToggle");
+  var joyInfo = document.getElementById("joyInfo");
+  var joyMsg = "";
+  function renderJoy() {
+    if (!status) return;
+    var on = !!status.joystick;
+    joyToggle.classList.toggle("on", on);
+    var dev = status.joystick_device;
+    var usbOff = status.usb_power === "off";
+    var state = dev ? dev + " gedetecteerd" : usbOff ? "USB-stroom uit (spaarstand) - gaat aan bij aanzetten" : "geen ontvanger gevonden";
+    joyToggle.setAttribute("data-tip", "Joystick F710 " + (on ? "aan" : "uit") + " - " + state +
+      "\nLB + linker stick = rijden, rechter stick = draaien, RB = sneller. Heeft voorrang op de pagina.");
+    joyInfo.textContent = joyMsg || (on ? "Joystick aan: LB ingedrukt houden + sticks (snelheid = sliders, RB = maximum)." : "");
+  }
+  joyToggle.addEventListener("click", function () {
+    if (!status) return;
+    joyToggle.disabled = true;
+    joyMsg = "";
+    trigger(status.joystick ? "/launch/stop_joystick" : "/launch/joystick", function (ok, msg) {
+      joyToggle.disabled = false;
+      if (!ok) { joyMsg = msg; setTimeout(function () { joyMsg = ""; renderJoy(); }, 8000); }
+      renderJoy();
+    });
+  });
+
+  // ---- Bringup - /launch/bringup: lidar, OpenCR (motoren, batterij), odom, TF.
+  // Studenten werken niet op de robot zelf: deze knop vervangt
+  // `ros2 launch turtlebot3_bringup robot.launch.py` in een robotterminal.
+  var bringupBtn = document.getElementById("bringupToggle");
+  var bringupMsg = "";
+  function renderBringup() {
+    if (!status) return;
+    var on = !!status.bringup;
+    bringupBtn.classList.toggle("on", on);
+    bringupBtn.innerHTML = fxIcon(on ? "square" : "play") + "<span>Bringup</span>";
+    var dep = status.slam ? "kaart maken" : status.navigation ? "navigatie" : "";
+    bringupBtn.setAttribute("data-tip", (bringupMsg ? bringupMsg + "\n" : "") +
+      "Bringup " + (on ? "draait - klik = stoppen" : "uit - klik = starten") +
+      "\nZelfde als: ros2 launch turtlebot3_bringup robot.launch.py" +
+      "\nLidar (/scan), OpenCR: motoren, batterij, IMU (/odom, /imu, /tf)" +
+      (dep ? "\nNodig voor " + dep + " (draait nu)" : ""));
+  }
+  bringupBtn.addEventListener("click", function () {
+    if (!status) return;
+    var on = !!status.bringup;
+    if (on && (status.slam || status.navigation) &&
+        !confirm("Bringup stoppen? " + (status.slam ? "Kaart maken" : "Navigatie") + " werkt dan niet meer.")) return;
+    bringupBtn.disabled = true;
+    bringupMsg = on ? "stoppen..." : "starten (USB-stroom, lidar, OpenCR - ~10 s)...";
+    renderBringup();
+    trigger(on ? "/launch/stop_bringup" : "/launch/bringup", function (ok, msg) {
+      bringupBtn.disabled = false;
+      bringupMsg = ok ? "" : msg;
+      if (!ok) setTimeout(function () { bringupMsg = ""; renderBringup(); }, 8000);
+      renderBringup();
+    });
+  });
+
+  // ---- Motor torque ----
+  var motorService = new ROSLIB.Service({ ros: ros, name: "/motor_power", serviceType: "std_srvs/srv/SetBool" });
+  var motorBtn = document.getElementById("motorToggle");
+  var motorState = null;
+  function renderMotorBtn() {
+    motorBtn.classList.toggle("on", motorState === true);
+    motorBtn.classList.toggle("offst", motorState === false);
+    motorBtn.disabled = motorState === null;
+    motorBtn.setAttribute("data-tip", motorState === null ? "Motoren: onbekend (bringup gestart?)"
+      : motorState ? "Motoren aan - klik = uit (robot met de hand duwen)" : "Motoren uit - klik = aan");
+  }
+  new ROSLIB.Topic({ ros: ros, name: "/sensor_state", messageType: "turtlebot3_msgs/msg/SensorState",
+                     throttle_rate: 500, queue_length: 1 })
+    .subscribe(function (msg) { seen("sensor_state"); motorState = !!msg.torque; renderMotorBtn(); });
+  setInterval(function () { if (!fresh("sensor_state", 4000) && motorState !== null) { motorState = null; renderMotorBtn(); } }, 2000);
+  renderMotorBtn();
+  motorBtn.addEventListener("click", function () {
+    var target = !(motorState === true);
+    motorBtn.disabled = true;
+    motorService.callService(new ROSLIB.ServiceRequest({ data: target }), function () {
+      motorState = target; renderMotorBtn();
+    }, function () { renderMotorBtn(); });
+  });
+
+  // ---- Teleop: separate linear (m/s) and angular (rad/s) speed ----
+  // TwistStamped since Jazzy (v1.0.0), like the simulation; cmd_vel_guard
+  // stamps the outgoing command, so the header here only names the frame
+  var cmdVel = new ROSLIB.Topic({ ros: ros, name: "/cmd_vel_web", messageType: "geometry_msgs/msg/TwistStamped" });
+  var linSlider = document.getElementById("linSlider"), angSlider = document.getElementById("angSlider");
+  linSlider.value = lsGet("teleopLin", "0.12");
+  angSlider.value = lsGet("teleopAng", "1.0");
+  function showSpeeds() {
+    document.getElementById("linVal").textContent = parseFloat(linSlider.value).toFixed(2).replace(".", ",") + " m/s";
+    document.getElementById("angVal").textContent = parseFloat(angSlider.value).toFixed(1).replace(".", ",") + " rad/s";
+  }
+  // The sliders also set the gamepad speed (t76: stick fully = slider value,
+  // RB = the lecturer's maximum). The robot keeps the value (cmd_vel_guard,
+  // teleop_speed.json), so every open page shows the same one - whoever
+  // slides last wins. localStorage only until the robot's value arrives.
+  var teleopSpeed = new ROSLIB.Topic({ ros: ros, name: "/teleop_speed", messageType: "std_msgs/msg/String" });
+  var slidAt = 0;
+  function sendSpeeds() {
+    teleopSpeed.publish(new ROSLIB.Message({ data: JSON.stringify({
+      lin: parseFloat(linSlider.value), ang: parseFloat(angSlider.value) }) }));
+  }
+  [linSlider, angSlider].forEach(function (sl) {
+    sl.addEventListener("input", function () {
+      slidAt = Date.now();
+      lsSet("teleopLin", linSlider.value); lsSet("teleopAng", angSlider.value);
+      showSpeeds();
+    });
+    sl.addEventListener("change", function () { slidAt = Date.now(); sendSpeeds(); });
+  });
+  new ROSLIB.Topic({ ros: ros, name: "/cmd_vel_status", messageType: "std_msgs/msg/String", throttle_rate: 1000 })
+    .subscribe(function (m) {
+      var d; try { d = JSON.parse(m.data); } catch (e) { return; }
+      if (d.teleop_linear == null || Date.now() - slidAt < 3000) return;   // image < 0.26 / just slid
+      if (Math.abs(parseFloat(linSlider.value) - d.teleop_linear) > 0.004 ||
+          Math.abs(parseFloat(angSlider.value) - d.teleop_angular) > 0.04) {
+        linSlider.value = d.teleop_linear; angSlider.value = d.teleop_angular;
+        showSpeeds();
+      }
+    });
+  showSpeeds();
+  // sliders only go up to the lecturer's maximum (cmd_vel_guard, Beheer > Robot)
+  function loadSpeedMax() {
+    new ROSLIB.Service({ ros: ros, name: "/cmd_vel_guard/get_parameters", serviceType: "rcl_interfaces/srv/GetParameters" })
+      .callService(new ROSLIB.ServiceRequest({ names: ["max_linear", "max_angular"] }), function (r) {
+        var v = r.values || [];
+        if (v[0] && v[0].type === 3) linSlider.max = Math.max(0.02, v[0].double_value).toFixed(2);
+        if (v[1] && v[1].type === 3) angSlider.max = Math.max(0.2, v[1].double_value).toFixed(1);
+        showSpeeds();
+      }, function () {});
+  }
+  if (ros.isConnected) loadSpeedMax();
+  ros.on("connection", loadSpeedMax);
+
+  var activeDir = null, publishInterval = null;
+  function twistFor(dir) {
+    var v = parseFloat(linSlider.value), w = parseFloat(angSlider.value);
+    var t = { linear: { x: 0, y: 0, z: 0 }, angular: { x: 0, y: 0, z: 0 } };
+    if (dir === "fwd") t.linear.x = v;
+    else if (dir === "back") t.linear.x = -v;
+    else if (dir === "left") t.angular.z = w;
+    else if (dir === "right") t.angular.z = -w;
+    return t;
+  }
+  function publishTwist(dir) { cmdVel.publish(new ROSLIB.Message({ header: { frame_id: "base_link" }, twist: twistFor(dir) })); }
+  function startDir(dir) {
+    if (dir === "stop") { stopDir(); return; }
+    if (document.body.classList.contains("fx-offline")) return;   // no connection (t80)
+    activeDir = dir;
+    document.querySelectorAll(".dpad button").forEach(function (b) { b.classList.toggle("active", b.dataset.dir === dir); });
+    publishTwist(dir);
+    if (publishInterval) clearInterval(publishInterval);
+    publishInterval = setInterval(function () { publishTwist(activeDir); }, 150);
+  }
+  function stopDir() {
+    activeDir = null;
+    document.querySelectorAll(".dpad button").forEach(function (b) { b.classList.remove("active"); });
+    if (publishInterval) { clearInterval(publishInterval); publishInterval = null; }
+    publishTwist("stop");
+  }
+  document.querySelectorAll(".dpad button").forEach(function (btn) {
+    var dir = btn.dataset.dir;
+    btn.addEventListener("mousedown", function (e) { e.preventDefault(); startDir(dir); });
+    btn.addEventListener("touchstart", function (e) { e.preventDefault(); startDir(dir); });
+    btn.addEventListener("mouseup", stopDir);
+    btn.addEventListener("mouseleave", function () { if (activeDir === dir) stopDir(); });
+    btn.addEventListener("touchend", stopDir);
+    btn.addEventListener("touchcancel", stopDir);
+  });
+  var KEY_DIR = { ArrowUp: "fwd", ArrowDown: "back", ArrowLeft: "left", ArrowRight: "right",
+                  w: "fwd", s: "back", a: "left", d: "right", W: "fwd", S: "back", A: "left", D: "right", " ": "stop" };
+  function typing(e) { return e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) && e.target.type !== "range"; }
+  document.addEventListener("keydown", function (e) {
+    if (typing(e) || !KEY_DIR[e.key]) return;
+    e.preventDefault();
+    if (activeDir !== KEY_DIR[e.key]) startDir(KEY_DIR[e.key]);
+  });
+  document.addEventListener("keyup", function (e) {
+    if (typing(e) || !KEY_DIR[e.key]) return;
+    e.preventDefault(); stopDir();
+  });
+  window.addEventListener("blur", stopDir);
+  // tab hidden (phone locked, other app) or connection gone: stop right away;
+  // a hidden tab still runs the interval (throttled) and would keep driving.
+  // cmd_vel_guard on the robot stops it too if nothing arrives any more.
+  document.addEventListener("visibilitychange", function () { if (document.hidden) stopDir(); });
+  window.addEventListener("pagehide", stopDir);
+  ros.on("close", function () { if (activeDir) stopDir(); });
+  ros.on("fx-offline", function () { if (activeDir) stopDir(); });   // heartbeat lost, socket maybe still open
+
+  // ---- Kaart maken: enkel op Mappen (nav.html#mappen); hier enkel de uitleg ----
+  var viewMsg = document.getElementById("viewMsg");
+  function slamOn() { return !!(status && status.slam); }
+  function renderSlam() {
+    var on = slamOn();
+    viewMsg.textContent = mode === "map"
+      ? (on ? "Kaart in opbouw - opslaan en stoppen op Mappen. Wit = vrij, zwart = muur, groen = lidar nu." : "Kaart van Navigatie. Wit = vrij, zwart = muur, groen = lidar nu.")
+      : on ? "Kaart maken gestart - wachten op de eerste kaart..."
+      : "Lidar rond de robot (vooruit = boven, ringen om de 0,5 m). Een kaart maken: tab Mappen.";
+  }
+
+  // ---- Map / lidar view ----
+  // With a map (SLAM, or Navigation) and a robot pose: the map, the robot
+  // and the lidar points in the map frame. Otherwise: the lidar around the
+  // robot (forward = up).
+  var canvas = document.getElementById("viewCanvas");
+  var ctx = canvas.getContext("2d");
+  var rateSel = document.getElementById("scanRate");
+  var rangeSel = document.getElementById("scanRange");
+  rateSel.value = lsGet("scanRate", "2");
+  rangeSel.value = lsGet("scanRange", "2");
+  var lastScan = null, plotTopic = null;
+  var mapImg = document.createElement("canvas"), map = null, mapT = 0;
+  var robot = null;
+  var mode = "lidar";
+
+  function yawOf(q) { return Math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z)); }
+  new ROSLIB.Topic({ ros: ros, name: "/map", messageType: "nav_msgs/msg/OccupancyGrid", throttle_rate: 2000, queue_length: 1 })
+    .subscribe(function (msg) {
+      var w = msg.info.width, h = msg.info.height, data = msg.data;
+      if (!w || !h) return;
+      mapImg.width = w; mapImg.height = h;
+      var mctx = mapImg.getContext("2d");
+      var img = mctx.createImageData(w, h);
+      for (var i = 0; i < w * h; i++) {
+        var v = data[i];
+        // unknown = background grey, free = light, occupied = dark (Cartographer: probabilities)
+        var g = v < 0 ? 42 : (v > 65 ? 20 : 235 - Math.round(v * 1.5));
+        var row = h - 1 - Math.floor(i / w), col = i % w;   // OccupancyGrid origin bottom-left
+        var di = (row * w + col) * 4;
+        img.data[di] = g; img.data[di + 1] = g; img.data[di + 2] = g + (v < 0 ? 6 : 0); img.data[di + 3] = 255;
+      }
+      mctx.putImageData(img, 0, 0);
+      map = { w: w, h: h, res: msg.info.resolution, ox: msg.info.origin.position.x, oy: msg.info.origin.position.y };
+      mapT = Date.now();
+      draw();
+    });
+  new ROSLIB.Topic({ ros: ros, name: "/web/robot_pose", messageType: "geometry_msgs/msg/PoseStamped", throttle_rate: 200, queue_length: 1 })
+    .subscribe(function (msg) {
+      robot = { x: msg.pose.position.x, y: msg.pose.position.y, yaw: yawOf(msg.pose.orientation), t: Date.now() };
+      draw();
+    });
+
+  function onPlotScan(msg) { lastScan = msg; draw(); }
+  function subscribePlot() {
+    if (plotTopic) { plotTopic.unsubscribe(onPlotScan); plotTopic = null; }
+    var r = rateSel.value;
+    if (r === "off") { lastScan = null; draw(); return; }
+    plotTopic = new ROSLIB.Topic({
+      ros: ros, name: "/scan", messageType: "sensor_msgs/msg/LaserScan",
+      throttle_rate: r === "max" ? 0 : Math.round(1000 / parseFloat(r)), queue_length: 1,
+    });
+    plotTopic.subscribe(onPlotScan);
+  }
+
+  function draw() {
+    var dpr = window.devicePixelRatio || 1;
+    var w = canvas.clientWidth, h = canvas.clientHeight;
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+      canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    var mapLive = map && status && (status.slam || status.navigation) && Date.now() - mapT < 30000;
+    var poseLive = robot && Date.now() - robot.t < 3000;
+    var newMode = mapLive && poseLive ? "map" : "lidar";
+    if (newMode !== mode) {
+      mode = newMode;
+      document.getElementById("viewTitle").textContent = mode === "map" ? "Kaart" : "Lidar";
+      document.getElementById("viewIcon").innerHTML = fxIcon(mode === "map" ? "nav" : "lidar");
+      rangeSel.style.display = mode === "map" ? "none" : "";
+      renderSlam();
+    }
+    if (mode === "map") drawMap(w, h); else drawLidar(w, h);
+  }
+
+  function drawMap(w, h) {
+    var mw = map.w * map.res, mh = map.h * map.res;
+    var s = Math.min((w - 16) / mw, (h - 16) / mh);            // px per m, whole map fits
+    var offX = (w - mw * s) / 2, offY = (h - mh * s) / 2;
+    function toC(x, y) { return [offX + (x - map.ox) * s, offY + (mh - (y - map.oy)) * s]; }
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(mapImg, offX, offY, mw * s, mh * s);
+    if (lastScan && robot) {
+      ctx.fillStyle = "#2ecc71";
+      var r = lastScan.ranges;
+      for (var i = 0; i < r.length; i++) {
+        var d = r[i];
+        if (d === null || !isFinite(d) || d < lastScan.range_min || d > lastScan.range_max) continue;
+        var a = robot.yaw + lastScan.angle_min + i * lastScan.angle_increment;
+        var p = toC(robot.x + d * Math.cos(a), robot.y + d * Math.sin(a));
+        ctx.fillRect(p[0] - 1.5, p[1] - 1.5, 3, 3);
+      }
+    }
+    var c = toC(robot.x, robot.y), rr = Math.max(6, 0.105 * s);
+    ctx.fillStyle = "#4da3ff";
+    ctx.beginPath(); ctx.arc(c[0], c[1], rr, 0, 2 * Math.PI); ctx.fill();
+    ctx.strokeStyle = "#0b1a2b"; ctx.lineWidth = 3; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(c[0], c[1]);
+    ctx.lineTo(c[0] + Math.cos(robot.yaw) * rr * 1.6, c[1] - Math.sin(robot.yaw) * rr * 1.6); ctx.stroke();
+    // scale bar: 1 m
+    ctx.strokeStyle = "#8a8f98"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(12, h - 12); ctx.lineTo(12 + s, h - 12); ctx.stroke();
+    ctx.fillStyle = "#8a8f98"; ctx.font = "11px sans-serif"; ctx.textAlign = "left";
+    ctx.fillText("1 m", 14, h - 17);
+  }
+
+  function drawLidar(w, h) {
+    var cx = w / 2, cy = h / 2;
+    var maxRange = parseFloat(rangeSel.value);
+    var scale = (Math.min(w, h) / 2 - 6) / maxRange;  // px per m
+    ctx.strokeStyle = "#2c3038"; ctx.lineWidth = 1;
+    for (var rr = 0.5; rr <= maxRange + 1e-6; rr += 0.5) {
+      ctx.beginPath(); ctx.arc(cx, cy, rr * scale, 0, 2 * Math.PI); ctx.stroke();
+    }
+    ctx.fillStyle = "#4da3ff";
+    ctx.beginPath(); ctx.moveTo(cx, cy - 9); ctx.lineTo(cx - 6, cy + 6); ctx.lineTo(cx + 6, cy + 6); ctx.closePath(); ctx.fill();
+    if (!lastScan) {
+      ctx.fillStyle = "#8a8f98"; ctx.font = "13px sans-serif"; ctx.textAlign = "center";
+      ctx.fillText(rateSel.value === "off" ? "lidar-beeld uitgeschakeld" : "wachten op /scan (bringup gestart?)", cx, cy + 30);
+      return;
+    }
+    // ROS: x forward, y left -> canvas: up = +x, left = +y
+    ctx.fillStyle = "#2ecc71";
+    var ranges = lastScan.ranges;
+    for (var i = 0; i < ranges.length; i++) {
+      var r = ranges[i];
+      if (r === null || !isFinite(r) || r < lastScan.range_min || r > lastScan.range_max) continue;
+      var a = lastScan.angle_min + i * lastScan.angle_increment;
+      ctx.fillRect(cx - r * Math.sin(a) * scale - 1.5, cy - r * Math.cos(a) * scale - 1.5, 3, 3);
+    }
+  }
+
+  rateSel.addEventListener("change", function () { lsSet("scanRate", rateSel.value); subscribePlot(); });
+  rangeSel.addEventListener("change", function () { lsSet("scanRange", rangeSel.value); draw(); });
+  window.addEventListener("resize", draw);
+  setInterval(draw, 2000);   // mode switches when SLAM stops / pose goes stale
+  subscribePlot();
+  draw();
+  renderSlam();
+
+  // ---- Stage layout: map big / camera big / side by side, small-window size ----
+  var stage = document.getElementById("stage");
+  var paneMap = document.getElementById("paneMap"), paneCam = document.getElementById("paneCam");
+  document.getElementById("lySwap").innerHTML = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4L3 8l4 4"/><path d="M3 8h14"/><path d="M17 12l4 4-4 4"/><path d="M21 16H7"/></svg>';
+  document.getElementById("lySplit").innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg>';
+  document.getElementById("driveToggle").innerHTML = fxIcon("index");
+  var PIP = { S: "22%", M: "30%", L: "42%" };
+  var layout = lsGet("rijdenLayout", "map"), pip = lsGet("rijdenPip", "M");
+  var driveShown = lsGet("rijdenDrive", "1") === "1";
+  function applyLayout() {
+    stage.classList.toggle("split", layout === "split");
+    paneMap.className = "pane " + (layout === "cam" ? "small" : "big");
+    paneCam.className = "pane " + (layout === "map" ? "small" : layout === "cam" ? "big" : "big");
+    if (layout === "split") { paneMap.className = "pane"; paneCam.className = "pane"; }
+    document.getElementById("lySplit").classList.toggle("on", layout === "split");
+    stage.style.setProperty("--pip", PIP[pip]);
+    var ps = document.getElementById("pipSize");
+    ps.textContent = pip; ps.disabled = layout === "split";
+    document.getElementById("stageWrap").classList.toggle("no-drive", !driveShown);
+    document.getElementById("driveToggle").classList.toggle("on", driveShown);
+    setTimeout(draw, 0);
+  }
+  // one swap button: map <-> camera (from side by side: map big); split toggles
+  document.getElementById("lySwap").addEventListener("click", function () {
+    layout = layout === "map" ? "cam" : "map"; lsSet("rijdenLayout", layout); applyLayout();
+  });
+  document.querySelectorAll("[data-layout]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      layout = layout === b.dataset.layout ? "map" : b.dataset.layout; lsSet("rijdenLayout", layout); applyLayout();
+    });
+  });
+  document.getElementById("pipSize").addEventListener("click", function () {
+    pip = pip === "S" ? "M" : pip === "M" ? "L" : "S"; lsSet("rijdenPip", pip); applyLayout();
+  });
+  [paneMap, paneCam].forEach(function (p) {
+    p.addEventListener("click", function () {
+      if (!p.classList.contains("small")) return;
+      layout = p === paneMap ? "map" : "cam"; lsSet("rijdenLayout", layout); applyLayout();
+    });
+  });
+  document.getElementById("driveToggle").addEventListener("click", function () {
+    driveShown = !driveShown; lsSet("rijdenDrive", driveShown ? "1" : "0"); applyLayout();
+  });
+  if (window.ResizeObserver) new ResizeObserver(function () { draw(); }).observe(paneMap);
+  applyLayout();
+
+  // labo-check in the header: this page follows the sensor topics itself
+  setLaboSource(fresh,
+    function (key) { return key === "scan" ? document.getElementById("scanHz").textContent : null; },
+    function () { return camRateSel.value === "off"; });
+})();
+</script>
+
+</body>
+</html>

@@ -171,8 +171,8 @@ def ros_checks(sim, html=False):
 
 def main():
     nr = os.environ.get("TB_NR")
-    html = nr == "htmlsim"
-    sim = nr in ("sim", "htmlsim")
+    html = nr in ("htmlsim", "virtueel")
+    sim = nr in ("sim", "htmlsim", "virtueel")
     print("Turtlebot-vis check (ROS 2 %s)" % os.environ.get("ROS_DISTRO", "?"))
 
     rmw = os.environ.get("RMW_IMPLEMENTATION", "")
@@ -195,7 +195,11 @@ def main():
             if html:
                 rb = port_open("127.0.0.1", 9090) is not None
                 line(OK if rb else BAD, "rosbridge", "ws://localhost:9090" + ("" if rb else
-                     " luistert niet - zie /tmp/vis_services/rosbridge.log (of: robot htmlsim)"))
+                     " luistert niet - zie /tmp/vis_services/rosbridge.log (of: robot %s)" % nr))
+            if nr == "virtueel":
+                vr = http_ok("http://127.0.0.1:%s/" % os.environ.get("VR_PORT", "8090"))
+                line(OK if vr else BAD, "Virtuele robot", "statuspagina http://localhost:%s" % os.environ.get("VR_PORT", "8090")
+                     + ("" if vr else " antwoordt niet - zie /tmp/vis_services/vr_*.log (of: robot virtueel)"))
             try:
                 ros_checks(sim, html)
             except Exception as exc:     # never a traceback for the student
@@ -211,7 +215,7 @@ def main():
     text = ", ".join("%s %d" % kv for kv in counts.items() if kv[1]) or "geen"
     if extra:
         text += " - meer dan één: restjes van een vorige modus, opruimen met: robot %s" % (
-            "htmlsim" if html else "sim" if sim else nr or "")
+            nr if sim else nr or "")
     line(WARN if extra else OK, "Bridges", text.rstrip())
     display = os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
     line(OK if display and (os.path.exists("/tmp/.X11-unix") or os.path.exists("/mnt/wslg")) else WARN,

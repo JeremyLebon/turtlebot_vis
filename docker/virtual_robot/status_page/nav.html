@@ -1,0 +1,1907 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Turtlebot Navigatie</title>
+<script src="roslib.min.js"></script>
+<script src="common.js?v=29"></script>
+<style>
+  :root {
+    --bg: #14161a;
+    --card: #1e2126;
+    --border: #2c3038;
+    --text: #e6e8eb;
+    --muted: #8a8f98;
+    --green: #2ecc71;
+    --yellow: #f1c40f;
+    --red: #e74c3c;
+    --accent: #4da3ff;
+    --orange: #ff9f43;
+    --purple: #b38cff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  h1 { margin: 0; font-size: 1.2rem; }
+  .header-right { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px;
+    border-radius: 999px; font-size: 0.8rem; font-weight: 600;
+    background: var(--card); border: 1px solid var(--border);
+  }
+  a.badge { color: var(--text); text-decoration: none; }
+  a.badge:hover { border-color: var(--accent); }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.ok { background: var(--green); }
+  .dot.warn { background: var(--yellow); }
+  .dot.bad { background: var(--red); }
+
+  .main { display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: 12px; align-items: start; }
+  .side { display: flex; flex-direction: column; gap: 12px; }
+  /* nav.html = Mappen (#mappen) + Navigatie: elements per view */
+  body.view-maps .nav-only { display: none !important; }
+  body.view-nav .maps-only { display: none !important; }
+  .maps-only .step-btns { padding-left: 0; margin-left: 0; }
+  .map-name-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+  .adv input { width: 5.5em; background: #262a31; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 3px 5px; }
+  .adv input.dirty { border-color: var(--orange); }
+  .adv .saved { color: var(--accent); font-size: 0.75rem; margin-left: 4px; }
+  .adv td.grp { padding-top: 10px; color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .restart { color: var(--orange); }
+  #advBox summary { cursor: pointer; }
+  .card h2 { margin: 0 0 10px 0; font-size: 0.95rem; font-weight: 700; color: var(--text); }
+  .mapcard { padding: 10px; }
+  .sub { color: var(--muted); font-size: 0.8rem; }
+
+  .btn {
+    padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border);
+    background: #262a31; color: var(--text); font-size: 0.85rem; cursor: pointer;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+  .btn.active { background: var(--accent); border-color: var(--accent); color: #0b1a2b; font-weight: 600; }
+  .btn.stop { background: transparent; color: var(--red); border-color: var(--red); }
+  .btn.danger { background: var(--red); border-color: var(--red); color: #2a0d0d; font-weight: 600; }
+
+  select, input[type=text] {
+    background: #262a31; color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 8px; font-size: 0.85rem;
+  }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+  .step-note a { color: var(--accent); }
+  .toolbar .sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 4px; }
+  #mapWrap { position: relative; width: 100%; min-height: 460px; background: #202328; border-radius: 10px; overflow: hidden;
+             touch-action: none; display: flex; align-items: center; justify-content: center; }
+  /* Fenix: tools as icon buttons on the map */
+  #toolRail, #zoomBar { position: absolute; top: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 6; }
+  #toolRail { left: 8px; }
+  #zoomBar { right: 8px; }
+  #toolRail .btn, #zoomBar .btn { width: 42px; height: 42px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+                                   background: #1d2026e8; border-radius: 10px; }
+  #toolRail .btn.active, #zoomBar .btn.active { background: var(--accent); border-color: var(--accent); color: #0b1a2b; }
+  #toolRail .btn.danger { background: #3a1d1d; border-color: #6e2b2b; color: #ff8a80; }
+  .rsep { height: 1px; background: var(--border); margin: 2px 6px; }
+  /* teleop to correct Nav2 (cmd_vel_web goes before /cmd_vel in twist_mux) */
+  #navPad { position: absolute; z-index: 7; display: grid; grid-template-columns: repeat(3, 48px); grid-template-rows: repeat(3, 48px);
+            gap: 5px; padding: 6px; background: #14161acc; border: 1px solid #ffffff1a; border-radius: 14px; }
+  #navPad button { display: flex; align-items: center; justify-content: center; background: #2a2e35d9; border: 1px solid var(--border);
+                   border-radius: 11px; color: var(--text); cursor: pointer; user-select: none; touch-action: none; padding: 0; }
+  #navPad button.active, #navPad button:active { background: var(--accent); color: #0b1a2b; }
+  #navPad .stop { background: #3a1d1dd9; border-color: #6e2b2b; color: #ff8a80; }
+  #navPad .up { grid-column: 2; grid-row: 1; } #navPad .left { grid-column: 1; grid-row: 2; } #navPad .stop { grid-column: 2; grid-row: 2; }
+  #navPad .right { grid-column: 3; grid-row: 2; } #navPad .down { grid-column: 2; grid-row: 3; }
+  /* "wissel" label on the small view, as on Rijden; swap button on the small map */
+  .swap-hint { position: absolute; left: 6px; bottom: 6px; background: #000a; color: var(--text); border-radius: 6px; padding: 2px 6px;
+               font-size: .7rem; pointer-events: none; display: none; z-index: 2; }
+  #mapWrap:not(.ly-cam):not(.ly-split) #camPip .swap-hint { display: block; }
+  #mapSwap { display: none; position: absolute; z-index: 6; width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border);
+             background: #1d2026e8; color: var(--text); cursor: pointer; padding: 0; align-items: center; justify-content: center; }
+  #mapWrap.ly-cam #mapSwap { display: inline-flex; }
+  /* view presets (like Rijden): map big + camera small, camera big + map small, side by side */
+  .viewbar { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-bottom: 8px; }
+  .viewbar .grp.left { margin-right: auto; }
+  .grp .btn.wide { width: auto; padding: 0 12px; gap: 6px; }
+  .grp { display: inline-flex; align-items: center; gap: 4px; padding: 3px; background: #181b20; border: 1px solid var(--border); border-radius: 11px; }
+  .grp .glbl { color: var(--muted); font-size: .72rem; font-weight: 700; padding: 0 4px 0 6px; text-transform: uppercase; letter-spacing: .04em; }
+  .grp .btn { width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; }
+  .grp .btn.on { background: var(--accent); border-color: var(--accent); color: #0b1a2b; }
+  #mapWrap.ly-cam #camPip { display: block !important; position: absolute; inset: 0; width: auto; aspect-ratio: auto; border: 0; cursor: default; box-shadow: none;
+                            border-radius: 0; z-index: 1; }
+  #mapWrap.ly-cam { height: min(72vh, 660px); }
+  #mapWrap.ly-cam #camPipClose { display: none; }
+  #mapWrap.ly-cam #mapCanvas { position: absolute; top: 10px; right: 62px; z-index: 5; border: 2px solid var(--accent);
+                               border-radius: 9px; box-shadow: 0 6px 18px #0008; margin: 0 !important; }
+  #mapWrap.ly-split { justify-content: flex-start; padding: 0 56px; gap: 8px; }
+  #mapWrap.ly-split #camPip { display: block !important; position: relative; right: auto; top: auto; bottom: auto; flex: 1 1 0; width: auto; cursor: default;
+                              aspect-ratio: 4 / 3; z-index: 1; }
+  #mapWrap.ly-split #camPipClose { display: none; }
+  .hidden-cbs { display: none; }
+  #ctxBar { position: absolute; left: 62px; right: 62px; top: 8px; z-index: 6; display: flex; flex-direction: column; align-items: flex-start;
+            gap: 6px; pointer-events: none; }
+  .toolbar.float { pointer-events: auto; margin: 0; background: #1d2026f0; border: 1px solid var(--border); border-radius: 12px; padding: 6px 8px;
+                   box-shadow: 0 6px 18px #0007; }
+  .toolbar.float .btn { display: inline-flex; align-items: center; gap: 6px; }
+  .brushes { display: inline-flex; gap: 4px; }
+  .btn.brush.active { background: var(--accent); border-color: var(--accent); color: #0b1a2b; }
+  .algo { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 10px; align-items: center; }
+  .algo select { width: 100%; }
+  .algo .sub:last-child { grid-column: 1 / -1; }
+  #mapCanvas { display: block; width: 100%; cursor: crosshair; }
+  #mapWrap.no-map #mapCanvas { display: none; }   /* no empty square before the first map */
+  /* camera picture-in-picture in the map (Fenix step 2) */
+  #camPip { position: absolute; right: 62px; top: 10px; cursor: pointer; box-shadow: 0 6px 18px #0008; width: min(240px, 40%); aspect-ratio: 4 / 3; background: #000;
+            border: 2px solid var(--accent); border-radius: 8px; overflow: hidden; z-index: 5; display: none; }
+  #camPip img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  #camPipMsg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
+               color: var(--muted); font-size: .75rem; padding: 6px; }
+  #camPipClose { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; border-radius: 99px; border: 0;
+                 background: #262a31cc; color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+  #poseHint { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); background: #000b; color: var(--yellow, #e5c07b); padding: 4px 10px; border-radius: 6px; font-size: 0.85rem; pointer-events: none; }
+  #mapEmpty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 20px; color: var(--muted); }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; background: var(--c); }
+
+  .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .steps li { display: flex; flex-direction: column; gap: 6px; }
+  .step-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 0.9rem; }
+  .step-num { width: 20px; height: 20px; border-radius: 50%; background: #2c3038; color: var(--muted); font-size: 0.75rem; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  .step-btns { display: flex; flex-wrap: wrap; gap: 6px; padding-left: 28px; }
+  .step-note { padding-left: 28px; }
+
+  table.kv { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  table.kv td { padding: 4px 0; border-bottom: 1px solid var(--border); }
+  table.kv td:first-child { color: var(--muted); width: 45%; }
+  #navMsg { margin-top: 8px; font-weight: 600; }
+  #launchMsg { margin-top: 10px; min-height: 1em; }
+
+  @media (max-width: 900px) { .main { grid-template-columns: 1fr; } }
+  /* phones: tools as rows above / below the map, map full width */
+  @media (max-width: 760px) {
+    #mapWrap { flex-direction: column; min-height: 0; gap: 6px; padding: 6px; background: transparent; overflow: visible; }
+    #toolRail, #zoomBar, #ctxBar { position: static; flex-direction: row; flex-wrap: wrap; }
+    #toolRail { order: 1; } #ctxBar { order: 2; align-items: stretch; width: 100%; } #mapCanvas { order: 3; } #zoomBar { order: 4; }
+    .rsep { width: 1px; height: auto; margin: 4px 2px; }
+    .toolbar.float { box-shadow: none; }
+    #mapWrap.ly-split { padding: 6px; }
+    #poseHint { position: static; transform: none; order: 3; width: 100%; text-align: center; }
+    #mapEmpty { position: relative; inset: auto; order: 3; width: 100%; min-height: 240px; background: #202328; border-radius: 8px; }
+    #mapWrap.ly-split #camPip { position: relative; order: 5; flex: none; width: 100%; }
+    #mapWrap.ly-cam { height: auto; }
+    #mapWrap.ly-cam #camPip { position: relative; inset: auto; order: 3; width: 100%; aspect-ratio: 4 / 3; }
+    .viewbar { justify-content: flex-start; }
+    #toolRail .btn, #zoomBar .btn { width: 40px; height: 40px; }
+  }
+</style>
+</head>
+<body>
+
+<header id="appHeader"></header>
+
+<div class="main">
+  <div class="card mapcard">
+    <div class="viewbar">
+      <span class="grp left maps-only"><span class="glbl">Kaart</span>
+        <button class="btn wide" id="slamBtn" data-icon="play" data-tip="Nieuwe kaart maken (SLAM): rij rustig rond en sla rechts op">Kaart maken</button>
+      </span>
+      <span class="grp"><span class="glbl">Beeld</span>
+        <button class="btn" id="nlySwap" aria-label="Wissel kaart en camera" data-tip="Wissel kaart en camera van plaats (of tik op het kleine venster)"></button>
+        <button class="btn" data-nlayout="split" id="nlySplit" aria-label="Naast elkaar" data-tip="Kaart en camera naast elkaar (op een smartphone onder elkaar)"></button>
+        <button class="btn" id="npipSize" aria-label="Grootte klein venster" data-tip="Grootte van het kleine venster">M</button>
+      </span>
+    </div>
+    <div id="mapWrap" class="no-map">
+      <canvas id="mapCanvas" width="10" height="10"></canvas>
+      <div id="mapEmpty"><span class="maps-only">Nog geen kaart.<br>Start linksboven <b>Kaart maken</b>, of kies hiernaast een opgeslagen kaart.</span><span class="nav-only">Nog geen kaart.<br>Maak er een op <a href="nav.html#mappen">Mappen</a>, of start hiernaast Navigatie met een opgeslagen kaart.</span></div>
+      <div id="toolRail" role="toolbar" aria-label="Kaartgereedschap">
+        <button class="btn mode active tip-r" data-mode="view" data-icon="eye" aria-label="Kijken" data-tip="Kijken (niets aanklikken)"></button>
+        <button class="btn mode tip-r nav-only" data-mode="initialpose" data-icon="crosshair" aria-label="Beginpositie" data-tip="Beginpositie: klik waar de robot staat en sleep in zijn kijkrichting"></button>
+        <button class="btn mode tip-r nav-only" data-mode="goal" data-icon="flag" aria-label="Doel" data-tip="Doel: klik op het doel, sleep voor de eindrichting"></button>
+        <button class="btn mode tip-r nav-only" data-mode="route" data-icon="route" aria-label="Route" data-tip="Route: punten na elkaar aanklikken (sleep = richting per punt)"></button>
+        <span class="rsep nav-only"></span>
+        <button class="btn mode tip-r maps-only" data-mode="zones" data-icon="zones" aria-label="Zones" data-tip="Zones: verboden zones, virtuele muren, voorkeur, snelheid (per kaart)"></button>
+        <button class="btn mode tip-r maps-only" data-mode="edit" data-icon="pencil" aria-label="Kaart bewerken" data-tip="Kaart bewerken: muren bij- of wegtekenen (het origineel blijft bewaard)"></button>
+        <button class="btn mode tip-r" data-mode="measure" id="measureBtn" data-icon="ruler" aria-label="Meten" data-tip="Meten: sleep van punt A naar punt B"></button>
+        <span class="rsep nav-only"></span>
+        <button class="btn tip-r nav-only" id="pauseBtn" data-icon="pause" style="display:none" aria-label="Pauze" data-tip="Pauze: doel of route onderbreken (later verder)"></button>
+        <button class="btn tip-r nav-only" id="resumeBtn" data-icon="play" style="display:none" aria-label="Verder" data-tip="Verder rijden"></button>
+        <button class="btn danger tip-r nav-only" id="cancelBtn" data-icon="x" aria-label="Annuleer" data-tip="Doel of route annuleren"></button>
+        <button class="btn tip-r nav-only" id="exploreResumeBtn" data-icon="loop" style="display:none" aria-label="Verkennen hervatten" data-tip="Verkennen hervatten (doel/route stoppen)"></button>
+      </div>
+      <div id="ctxBar">
+    <div class="toolbar float" id="editBar" style="display:none">
+      <span class="brushes"><button class="btn brush" data-brush="100" data-icon="wall" data-tip="Penseel: obstakel / muur (zwart)">muur</button><button class="btn brush" data-brush="0" data-icon="eraser" data-tip="Penseel: vrij maken (wit)">vrij</button><button class="btn brush" data-brush="-1" data-icon="unknown" data-tip="Penseel: onbekend (grijs)">onbekend</button></span>
+      <select id="editBrush" style="display:none" aria-hidden="true">
+        <option value="100">obstakel (zwart)</option>
+        <option value="0">vrij (wit)</option>
+        <option value="-1">onbekend (grijs)</option>
+      </select>
+      <label class="sub">grootte <input type="range" id="editSize" min="1" max="12" value="2" style="width:80px"> <span id="editSizeTxt">2</span> cellen</label>
+      <button class="btn" id="editUndo" data-icon="undo">Ongedaan maken</button>
+      <button class="btn" id="editSave" data-icon="check" data-tip="Kaart bewaren; map_server laadt ze meteen opnieuw (AMCL en planner)">Bewaar kaart</button>
+      <button class="btn" id="editDiscard" data-icon="x" data-tip="Niet-bewaarde wijzigingen weggooien">Annuleer wijzigingen</button>
+      <button class="btn stop admin-only" id="editRestore" data-icon="reboot" data-tip="Terug naar de kaart zoals SLAM ze bewaarde">Origineel terugzetten</button>
+      <span class="sub" id="editInfo"></span>
+    </div>
+    <div class="toolbar float" id="zoneBar" style="display:none">
+      <select id="zoneType" title="Soort zone">
+        <option value="nogo" title="De robot komt hier nooit (planner en controller)">verboden zone</option>
+        <option value="wall" title="Lijn die de robot niet kruist, 10 cm breed">virtuele muur</option>
+        <option value="lane" title="De planner verkiest paden hierdoor; erbuiten mag, maar kost meer">voorkeurszone</option>
+        <option value="speed" title="Maximale snelheid in deze zone, in % van de normale topsnelheid">snelheidszone</option>
+        <option value="area" title="Enkel bij Verkennen: de robot zoekt enkel binnen dit gebied (bv. niet achter een raam)">verkenningsgebied</option>
+      </select>
+      <span id="zoneSpeedBox" style="display:none"><input type="number" id="zoneSpeed" min="5" max="100" step="5" value="40" style="width:4.5em" title="% van de topsnelheid"> %</span>
+      <button class="btn" id="zoneDone" data-icon="check" data-tip="Vorm afsluiten (of dubbelklik)">Klaar</button>
+      <button class="btn" id="zoneUndo" data-icon="undo">Laatste punt weg</button>
+      <button class="btn" id="zoneDelLast">Laatste zone weg</button>
+      <button class="btn stop" id="zoneClear" data-icon="trash">Wis alle</button>
+      <button class="btn" id="zoneSave" data-icon="check" data-tip="Bewaren voor deze kaart en meteen naar Nav2 sturen">Bewaar &amp; toepassen</button>
+      <span class="sub" id="zoneInfo"></span>
+    </div>
+    <div class="toolbar float nav-only" id="poseSuggestBar" style="display:none">
+      <span class="sub" id="poseSuggestTxt">Laatst gekende positie op deze kaart</span>
+      <button class="btn" id="psOk" data-icon="check">Klopt</button>
+      <button class="btn" id="psSelf" data-icon="crosshair">Zelf aanduiden</button>
+    </div>
+    <div class="toolbar float" id="routeBar" style="display:none">
+      <span class="sub" id="routeCount">0 punten</span>
+      <button class="btn" id="routeGo" data-icon="play">Rij route</button>
+      <label class="sub"><input type="checkbox" id="routeLoop" /> in een lus</label>
+      <label class="sub" title="Tussenpunten ruim (25 cm): de robot rijdt vlot door naar het volgende punt. Uit: elk punt met de gekozen nauwkeurigheid"><input type="checkbox" id="routeViaLoose" checked /> tussenpunten ruim</label>
+      <button class="btn" id="routeUndo" data-icon="undo">Laatste punt weg</button>
+      <button class="btn" id="routeClear" data-icon="trash">Wis punten</button>
+      <span class="sep"></span>
+      <input type="text" id="routeName" placeholder="naam" style="width:7em" maxlength="40">
+      <button class="btn" id="routeSave" data-icon="save" data-tip="Deze route bewaren bij de kaart">Bewaar als</button>
+      <select id="routeLoad" title="Bewaarde routes van deze kaart"><option value="">bewaarde routes...</option></select>
+      <button class="btn stop" id="routeDel" data-icon="trash" data-tip="Gekozen bewaarde route verwijderen">Verwijder</button>
+    </div>
+      </div>
+      <div id="zoomBar" role="toolbar" aria-label="Weergave">
+        <button class="btn tip-l" id="zoomIn" data-icon="plus" aria-label="Inzoomen" data-tip="Inzoomen (of muiswiel / knijpen)"></button>
+        <button class="btn tip-l" id="zoomOut" data-icon="minus" aria-label="Uitzoomen" data-tip="Uitzoomen"></button>
+        <button class="btn tip-l" id="zoomFit" data-icon="fit" aria-label="Hele kaart" data-tip="Hele kaart"></button>
+        <span class="rsep"></span>
+        <button class="btn tip-l layer" data-layer="showScan" data-icon="scan" aria-label="Laserscan" data-tip="Laserscan (rood) op de kaart: ligt hij op de muren, dan klopt de lokalisatie (op Mappen standaard aan)"></button>
+        <button class="btn tip-l layer" data-layer="showLocalCm" data-icon="localcm" aria-label="Local costmap" data-tip="Local costmap: obstakels + veiligheidsmarge rond de robot (3 x 3 m)"></button>
+        <button class="btn tip-l layer" data-layer="showGlobalCm" data-icon="globalcm" aria-label="Global costmap" data-tip="Global costmap: hele kaart + veiligheidsmarge (planner)"></button>
+        <button class="btn tip-l" id="navPadBtn" data-icon="index" aria-label="Bijsturen" data-tip="Bijsturen (teleop) tonen/verbergen - gaat voor op Nav2 zolang je een pijl ingedrukt houdt"></button>
+        <button class="btn tip-l" id="camPipBtn" data-icon="camera" aria-label="Camera" data-tip="Camerabeeld in de kaart"></button>
+        <span class="hidden-cbs"><input type="checkbox" id="showLocalCm"><input type="checkbox" id="showScan"><input type="checkbox" id="showGlobalCm"></span>
+      </div>
+      <button id="mapSwap" aria-label="Kaart groot" title="Kaart weer groot"></button>
+      <div id="navPad" style="display:none">
+        <button class="up" data-dir="fwd" aria-label="Vooruit" data-tip="Vooruit (W)"></button>
+        <button class="left" data-dir="left" aria-label="Links draaien" data-tip="Links (A)"></button>
+        <button class="stop" data-dir="stop" aria-label="Stop" data-tip="Stop (spatie)"></button>
+        <button class="right" data-dir="right" aria-label="Rechts draaien" data-tip="Rechts (D)"></button>
+        <button class="down" data-dir="back" aria-label="Achteruit" data-tip="Achteruit (S)"></button>
+      </div>
+      <div id="camPip"><img id="camPipImg" alt="Camerabeeld" style="display:none"><div id="camPipMsg">camera...</div><span class="swap-hint">wissel</span>
+        <button id="camPipClose" aria-label="Camerabeeld sluiten" title="Camerabeeld sluiten"></button></div>
+      <div id="poseHint" style="display:none">Robotpositie onbekend - zet de beginpositie (knop "Beginpositie")</div>
+    </div>
+    <div class="toolbar" id="routePoints" style="display:none" title="Wat de robot doet als hij bij het punt aankomt, voor hij doorrijdt (bewaard met de route)"></div>
+    <div class="legend sub">
+      <span style="--c: var(--green)">robot</span>
+      <span class="nav-only" style="--c: var(--accent)">gepland pad</span>
+      <span class="nav-only" style="--c: var(--orange)">doel</span>
+      <span class="nav-only" style="--c: var(--purple)">route</span>
+      <span style="--c: #ff4d6d">laserscan</span>
+      <span style="--c: #e5484d">verboden / muur</span>
+      <span style="--c: #3fb950">voorkeurszone</span>
+      <span style="--c: #4ea1ff">snelheidszone</span>
+      <span style="--c: #e3b341">verkenningsgebied</span>
+      <span id="mapInfo"></span>
+    </div>
+    <div class="sub" id="modeHint" style="margin-top:6px"></div>
+  </div>
+  <div class="side">
+    <div class="card maps-only">
+      <h2>Kaart maken</h2>
+      <div class="sub">Start linksboven <b>Kaart maken</b>, rij rustig rond (pijlen op de kaart, toetsen W A S D of de gamepad) tot alles
+        grijs/wit is, en sla op. Wit = vrij, zwart = muur.</div>
+      <div class="map-name-row">
+        <input type="text" id="mapName" aria-label="Naam van de kaart" style="width:12em" maxlength="40">
+        <button class="btn" id="saveMapBtn" data-icon="save" data-tip="Kaart opslaan (daarna bij Kaarten en op Navigatie te kiezen)">Opslaan</button>
+      </div>
+      <div class="sub" id="slamMsg"></div>
+    </div>
+
+    <div class="card maps-only">
+      <h2>Kaarten</h2>
+      <div class="sub">Kies een kaart: ze verschijnt meteen, ook zonder Navigatie, en je kan ze bewerken en
+        zones tekenen. <b>Openen</b> start Navigatie met die kaart (de robot rijdt niet vanzelf).</div>
+      <div class="step-btns" style="margin-top:8px">
+        <select id="mapLib" title="Bewaarde kaarten op deze robot"><option>--</option></select>
+        <button class="btn" data-launch="navigation" data-icon="play" data-tip="Kaart openen: Navigatie starten met deze kaart (bringup start mee). Draait Navigatie al met een andere kaart, dan herstart ze met deze.">Openen</button>
+        <button class="btn stop" data-launch="stop_navigation" data-icon="square" data-tip="Kaart sluiten (Navigatie stoppen)">Sluiten</button>
+      </div>
+      <div class="toolbar" style="margin-top:6px">
+        <button class="btn admin-only" id="mapRename" data-icon="rename" data-tip="Gekozen kaart hernoemen (zones en routes gaan mee)">Hernoem</button>
+        <button class="btn" id="mapCopy" data-icon="copy" data-tip="Kopie van de gekozen kaart (bv. voor je die bewerkt)">Kopie</button>
+        <button class="btn stop admin-only" id="mapDelete" data-icon="trash" data-tip="Gekozen kaart verwijderen">Verwijder</button>
+        <button class="btn" id="mapExport" data-icon="export" data-tip="Kaart + zones + routes downloaden als zip (map.yaml, map.pgm, zones, routes), om op een andere robot te importeren">Exporteer</button>
+        <label class="btn" data-icon="import" data-tip="Kaart importeren: zip van een andere robot (of een zip met .yaml + .pgm)" style="cursor:pointer">Importeer
+          <input type="file" id="mapImport" accept=".zip,.json" style="display:none"></label>
+      </div>
+      <div class="sub" id="mapMsg"></div>
+      <div class="sub launch-msg"></div>
+    </div>
+
+    <div class="card nav-only">
+      <h2>Navigatie</h2>
+      <ol class="steps">
+        <li>
+          <div class="step-head"><span class="step-num">1</span>Kaart</div>
+          <div class="sub step-note">Een kaart maak, bewerk en beheer je op <a href="nav.html#mappen">Mappen</a>.</div>
+        </li>
+        <li>
+          <div class="step-head"><span class="step-num">2</span><span class="dot" id="dot-navigation"></span>Navigatie starten</div>
+          <div class="step-btns">
+            <select id="mapSel" title="Kaart voor Navigatie - geldt bij het (her)starten"><option>--</option></select>
+            <button class="btn" data-launch="navigation" data-icon="play" data-tip="Navigatie starten met deze kaart (bringup start mee)">Start</button>
+            <button class="btn stop" data-launch="stop_navigation" data-icon="square" data-tip="Navigatie stoppen">Stop</button>
+          </div>
+        </li>
+        <li>
+          <div class="step-head"><span class="step-num">3</span>Beginpositie zetten</div>
+          <div class="sub step-note">Knop <b>Beginpositie</b>, klik waar de robot staat en sleep in zijn kijkrichting. Klopt de lidar niet met de muren, probeer opnieuw.</div>
+        </li>
+        <li>
+          <div class="step-head"><span class="step-num">4</span>Doel of route</div>
+          <div class="sub step-note"><b>Doel</b>: klik (en sleep voor de eindrichting). <b>Route</b>: punten aanklikken, dan <b>Rij route</b>. De joystick en de webteleop gaan altijd voor.</div>
+        </li>
+      </ol>
+      <div class="sub launch-msg" id="launchMsg"></div>
+    </div>
+
+    <div class="card nav-only">
+      <h2>Algoritmes</h2>
+      <div class="algo">
+      <label class="sub" for="plannerSel">Planner</label>
+      <select id="plannerSel" title="Globale planner: berekent het pad over de hele kaart">
+        <option value="GridBased" title="NavFn met Dijkstra - standaard van TurtleBot3">NavFn (Dijkstra)</option>
+        <option value="AStar" title="NavFn met A* - zelfde paden, sneller berekend">NavFn (A*)</option>
+        <option value="Smac2D" title="Smac Planner 2D - A* op het rooster, vloeiender paden">Smac 2D</option>
+        <option value="ThetaStar" title="Theta* - rechte lijnen tussen hoeken (any-angle)">Theta*</option>
+      </select>
+      <label class="sub" for="controllerSel">Controller</label>
+      <select id="controllerSel" title="Lokale controller: volgt het pad en ontwijkt obstakels">
+        <option value="FollowPath" title="DWB - probeert veel snelheden uit en kiest de beste (standaard)">DWB</option>
+        <option value="RPP" title="Regulated Pure Pursuit - volgt een punt voor zich op het pad, rustig">Pure Pursuit</option>
+        <option value="MPPI" title="MPPI - simuleert 1000 mogelijke trajecten per stap en kiest het beste; vloeiend, maar zwaar voor de Pi">MPPI</option>
+      </select>
+      <label class="sub" for="tolSel">Nauwkeurigheid</label>
+      <select id="tolSel" title="Wanneer is de robot 'aangekomen'? Nauwkeuriger dan AMCL (5-10 cm) heeft geen zin: dan gaat hij wiebelen of blijven draaien">
+        <option value="ruim" title="25 cm, 14 graden - standaard van TurtleBot3">ruim (25 cm)</option>
+        <option value="normaal" title="10 cm, 9 graden">normaal (10 cm)</option>
+        <option value="precies" title="5 cm, 5 graden - kan wiebelen aan het doel">precies (5 cm)</option>
+        <option value="eigen">eigen...</option>
+      </select>
+      <span id="tolCustom" style="display:none">
+        <input type="number" id="tolXy" min="2" max="100" step="1" style="width:4.5em" title="afstand tot het doel (cm)"> cm
+        <input type="number" id="tolYaw" min="1" max="180" step="1" style="width:4.5em" title="afwijking van de eindrichting (graden)"> &deg;
+      </span>
+      <span class="sub">geldt voor het volgende doel of de volgende route</span>
+      </div>
+    </div>
+
+    <div class="card nav-only">
+      <h2>Navigatiestatus</h2>
+      <table class="kv">
+        <tr><td>Nav2</td><td id="nsReady">--</td></tr>
+        <tr><td>Toestand</td><td id="nsState">--</td></tr>
+        <tr><td>Afstand tot doel</td><td id="nsDist">--</td></tr>
+        <tr><td>Nog ongeveer</td><td id="nsEta">--</td></tr>
+        <tr><td>Recoveries</td><td id="nsRec">--</td></tr>
+        <tr><td>Routepunt</td><td id="nsWp">--</td></tr>
+        <tr><td>Doeltolerantie</td><td id="nsTol" title="Huidige instelling van de goal checker in Nav2 (controller_server)">--</td></tr>
+        <tr><td>Robotpositie</td><td id="nsPose">--</td></tr>
+        <tr><td>Lokalisatie</td><td id="nsLoc" title="Hoe zeker AMCL is van de positie (ellips op de kaart: 95 %). Twijfel na de beginpositie is normaal tot de robot een stukje gereden heeft.">--</td></tr>
+      </table>
+      <div class="toolbar" style="margin-top:8px">
+        <button class="btn" id="relocBtn" data-icon="reboot" title="AMCL vergeet waar de robot is en zoekt opnieuw over de hele kaart; de robot draait daarvoor ter plaatse rond">Opnieuw lokaliseren</button>
+      </div>
+      <div id="navMsg"></div>
+      <div class="sub" id="photoLine" style="display:none">Laatste foto: <a id="photoLink" target="_blank"></a> - <a href="/api/photos" target="_blank">alle foto's</a></div>
+    </div>
+
+    <div class="card admin-only nav-only">
+      <details id="advBox">
+        <summary><h2 style="display:inline">Geavanceerd - Nav2-instellingen</h2></summary>
+        <div class="sub" style="margin:8px 0">
+          Waarden van de draaiende Nav2. <b>Toepassen</b> zet ze meteen (live),
+          <b>Bewaren</b> onthoudt ze voor elke volgende start van Navigatie
+          (<code>state/nav2_overrides.yaml</code>). <span class="restart">&#x21bb;</span> = werkt pas na herstart Navigatie.
+        </div>
+        <table class="kv adv" id="advTable"><tr><td class="sub">open dit paneel terwijl Navigatie draait</td></tr></table>
+        <div class="toolbar" style="margin-top:8px">
+          <button class="btn" id="advApply" title="Gewijzigde waarden nu in Nav2 zetten">Toepassen</button>
+          <button class="btn" id="advSave" title="Gewijzigde waarden + eerder bewaarde waarden onthouden">Bewaren</button>
+          <button class="btn stop" id="advReset" title="Alle eigen instellingen wissen (standaard vanaf de volgende start van Navigatie)">Standaard</button>
+          <button class="btn" id="advReload" title="Waarden opnieuw uit Nav2 lezen">Herlaad</button>
+        </div>
+        <div class="sub" id="advMsg"></div>
+      </details>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var ros = connectRos();
+  initHeader(ros, "nav");
+  // launch messages: Navigatie card and Kaarten card (Mappen)
+  function setLaunchMsg(t) { document.querySelectorAll(".launch-msg").forEach(function (e) { e.textContent = t; }); }
+  fenixIcons();
+
+  // ---- Fenix map UI: brush buttons over the hidden select, layer toggles ----
+  var brushSel = document.getElementById("editBrush");
+  function showBrush() {
+    document.querySelectorAll(".brush").forEach(function (b) { b.classList.toggle("active", b.dataset.brush === brushSel.value); });
+  }
+  document.querySelectorAll(".brush").forEach(function (b) {
+    b.addEventListener("click", function () {
+      brushSel.value = b.dataset.brush;
+      brushSel.dispatchEvent(new Event("change"));
+      showBrush();
+    });
+  });
+  showBrush();
+  function showLayers() {
+    document.querySelectorAll(".layer").forEach(function (b) {
+      b.classList.toggle("active", document.getElementById(b.dataset.layer).checked);
+    });
+  }
+  document.querySelectorAll(".layer").forEach(function (b) {
+    b.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var cb = document.getElementById(b.dataset.layer);
+      cb.checked = !cb.checked;
+      cb.dispatchEvent(new Event("change"));
+      showLayers();
+    });
+  });
+  setTimeout(showLayers, 0);
+
+  // ---- state ----
+  var map = null;            // {w, h, res, ox, oy}
+  var mapImg = document.createElement("canvas");
+  var robot = null;          // {x, y, yaw}
+  var plan = [];             // [[x, y], ...]
+  var lastLaunch = null;     // last /launch_status
+  var goal = null;           // {x, y, yaw}
+  var route = [];            // [{x, y, yaw}, ...]
+  var drag = null;           // {x, y, x2, y2} while setting a pose
+  var mode = "view";
+  var navStatus = null;
+
+  var canvas = document.getElementById("mapCanvas");
+  var ctx = canvas.getContext("2d");
+  var wrap = document.getElementById("mapWrap");
+
+  function yawOf(q) { return Math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z)); }
+
+  function sendCmd(obj) {
+    navCmd.publish(new ROSLIB.Message({ data: JSON.stringify(obj) }));
+  }
+  var navCmd = new ROSLIB.Topic({ ros: ros, name: "/web/nav_cmd", messageType: "std_msgs/msg/String" });
+
+  // ---- subscriptions ----
+  // Map: the /map topic (SLAM republishes it every second), and - because a
+  // page that connects later sometimes misses the latched /map from
+  // map_server (rosbridge + Zenoh) - the GetMap service of map_server
+  // (Navigation), asked every 3 s for as long as no map is shown. Only while
+  // Navigation runs: without map_server every call was a rosbridge ERROR in
+  // /rosout, so a red alert every few seconds during SLAM (t81).
+  new ROSLIB.Topic({ ros: ros, name: "/map", messageType: "nav_msgs/msg/OccupancyGrid",
+                     throttle_rate: 2000, queue_length: 1 })
+    .subscribe(showMap);
+  var getMapSrv = new ROSLIB.Service({ ros: ros, name: "/map_server/map", serviceType: "nav_msgs/srv/GetMap" });
+  var getMapBusy = false;
+  function fetchMap() {
+    if (map || getMapBusy || !ros.isConnected || !(navStatus && navStatus.nav2_ready)) return;
+    getMapBusy = true;
+    getMapSrv.callService(new ROSLIB.ServiceRequest({}), function (res) {
+      getMapBusy = false;
+      if (res && res.map) showMap(res.map);
+    }, function () { getMapBusy = false; });   // no map_server (no Navigation): fine
+  }
+  setInterval(fetchMap, 3000);
+  ros.on("connection", function () { setTimeout(fetchMap, 500); });
+
+  function showMap(msg) {
+      if (editDirty) return;   // map editor has unsaved changes
+      mapGrid = { w: msg.info.width, h: msg.info.height, data: Int8Array.from(msg.data) };
+      var w = msg.info.width, h = msg.info.height, data = msg.data;
+      if (!w || !h) return;
+      mapImg.width = w; mapImg.height = h;
+      var mctx = mapImg.getContext("2d");
+      var img = mctx.createImageData(w, h);
+      for (var i = 0; i < w * h; i++) {
+        var v = data[i];
+        // unknown = background grey, free = light, occupied = dark
+        var g = v < 0 ? 58 : (v > 65 ? 20 : 235 - Math.round(v * 1.5));
+        var row = h - 1 - Math.floor(i / w), col = i % w;   // OccupancyGrid origin bottom-left
+        var di = (row * w + col) * 4;
+        img.data[di] = g; img.data[di + 1] = g; img.data[di + 2] = g + (v < 0 ? 6 : 0); img.data[di + 3] = 255;
+      }
+      mctx.putImageData(img, 0, 0);
+      map = { w: w, h: h, res: msg.info.resolution,
+              ox: msg.info.origin.position.x, oy: msg.info.origin.position.y };
+      document.getElementById("mapEmpty").style.display = "none";
+      wrap.classList.remove("no-map");
+      document.getElementById("mapInfo").textContent =
+        (w * map.res).toFixed(1) + " x " + (h * map.res).toFixed(1) + " m, " + map.res.toFixed(2) + " m/cel";
+      resize();
+  }
+
+  new ROSLIB.Topic({ ros: ros, name: "/web/robot_pose", messageType: "geometry_msgs/msg/PoseStamped",
+                     throttle_rate: 200, queue_length: 1 })
+    .subscribe(function (msg) {
+      robot = { x: msg.pose.position.x, y: msg.pose.position.y, yaw: yawOf(msg.pose.orientation), t: Date.now() };
+      document.getElementById("nsPose").textContent =
+        "x " + robot.x.toFixed(2) + "  y " + robot.y.toFixed(2) + "  " + Math.round(robot.yaw * 180 / Math.PI) + "°";
+      draw();
+    });
+
+  new ROSLIB.Topic({ ros: ros, name: "/plan", messageType: "nav_msgs/msg/Path",
+                     throttle_rate: 500, queue_length: 1 })
+    .subscribe(function (msg) {
+      var step = Math.max(1, Math.floor(msg.poses.length / 300));
+      plan = [];
+      for (var i = 0; i < msg.poses.length; i += step)
+        plan.push([msg.poses[i].pose.position.x, msg.poses[i].pose.position.y]);
+      draw();
+    });
+
+  new ROSLIB.Topic({ ros: ros, name: "/web/nav_status", messageType: "std_msgs/msg/String" })
+    .subscribe(function (msg) {
+      try { navStatus = JSON.parse(msg.data); } catch (e) { return; }
+      renderStatus();
+    });
+
+  new ROSLIB.Topic({ ros: ros, name: "/launch_status", messageType: "std_msgs/msg/String" })
+    .subscribe(function (msg) {
+      var st;
+      try { st = JSON.parse(msg.data); } catch (e) { return; }
+      // Navigation (re)started, maybe with another map: fetch that map
+      if (st.navigation && !(lastLaunch && lastLaunch.navigation) && lastLaunch) {
+        map = null;
+        setTimeout(fetchMap, 2000);
+      }
+      lastLaunch = st;
+      renderSlam();
+      advSaved = st.nav2_overrides || {};
+      showMapMsg(st);
+      advShowSaved();
+      document.getElementById("dot-navigation").className = "dot " + (st.navigation ? "ok" : "");
+      renderMaps(st.maps || [], st.map_selected);
+      syncFileMap();
+    });
+
+  // ---- map choice (launch_control_node remembers it for the next Navigation start) ----
+  // two selects, same choice: mapSel (Navigatie) and mapLib (Mappen)
+  var mapSel = document.getElementById("mapSel"), mapLib = document.getElementById("mapLib");
+  var mapsShown = "";
+  function renderMaps(maps, selected) {
+    var key = maps.join("|") + "#" + selected;
+    if (key === mapsShown || document.activeElement === mapSel || document.activeElement === mapLib) return;
+    mapsShown = key;
+    var html = maps.length
+      ? maps.map(function (m) { return "<option" + (m === selected ? " selected" : "") + ">" + escHtml(m) + "</option>"; }).join("")
+      : "<option>geen kaarten</option>";
+    mapSel.innerHTML = html; mapLib.innerHTML = html;
+  }
+  var navOptions = new ROSLIB.Topic({ ros: ros, name: "/launch/nav_options", messageType: "std_msgs/msg/String" });
+  mapLib.addEventListener("change", function () {
+    if (fileMap && (editDirty || zoneDirty)) {   // the shown file map changes (t83)
+      if (!confirm("Niet-bewaarde wijzigingen aan kaart " + zoneMap + " weggooien?")) { mapLib.value = fileMap; return; }
+      editGrid = null; editDirty = false; editUndoStack = []; zoneDirty = false; zoneCur = [];
+    }
+    mapSel.value = mapLib.value;
+    mapSel.dispatchEvent(new Event("change"));
+    syncFileMap();
+  });
+  mapSel.addEventListener("change", function () {
+    mapLib.value = mapSel.value;
+    navOptions.publish(new ROSLIB.Message({ data: JSON.stringify({ map: mapSel.value }) }));
+    setLaunchMsg("Kaart '" + mapSel.value + "' gekozen - Openen of Start om Navigatie ermee te (her)starten");
+  });
+
+  // ---- planner / controller (per goal, remembered in this browser) ----
+  var plannerSel = document.getElementById("plannerSel");
+  var controllerSel = document.getElementById("controllerSel");
+  plannerSel.value = lsGet("navPlanner", "GridBased");
+  controllerSel.value = lsGet("navController", "FollowPath");
+  plannerSel.addEventListener("change", function () { lsSet("navPlanner", plannerSel.value); });
+  controllerSel.addEventListener("change", function () { lsSet("navController", controllerSel.value); });
+  // Goal tolerance (nav_web_node sets controller_server's goal checker
+  // before each goal): a preset name, or {xy: m, yaw: rad} for "eigen".
+  var tolSel = document.getElementById("tolSel");
+  var tolXy = document.getElementById("tolXy"), tolYaw = document.getElementById("tolYaw");
+  tolSel.value = lsGet("navTol", "normaal");
+  tolXy.value = lsGet("navTolXy", "10");
+  tolYaw.value = lsGet("navTolYaw", "9");
+  function tolUi() { document.getElementById("tolCustom").style.display = tolSel.value === "eigen" ? "" : "none"; }
+  tolUi();
+  tolSel.addEventListener("change", function () { lsSet("navTol", tolSel.value); tolUi(); });
+  tolXy.addEventListener("change", function () { lsSet("navTolXy", tolXy.value); });
+  tolYaw.addEventListener("change", function () { lsSet("navTolYaw", tolYaw.value); });
+  var routeViaLoose = document.getElementById("routeViaLoose");
+  routeViaLoose.checked = lsGet("navViaLoose", "1") === "1";
+  routeViaLoose.addEventListener("change", function () { lsSet("navViaLoose", routeViaLoose.checked ? "1" : "0"); });
+  function tolerance() {
+    if (tolSel.value !== "eigen") return tolSel.value;
+    return { xy: (parseFloat(tolXy.value) || 10) / 100, yaw: (parseFloat(tolYaw.value) || 9) * Math.PI / 180 };
+  }
+  function algo() { return { planner: plannerSel.value, controller: controllerSel.value, tolerance: tolerance() }; }
+
+  // ---- status card ----
+  var STATE_TEXT = { idle: "klaar", sending: "verzenden...", navigating: "onderweg", succeeded: "aangekomen",
+                     aborted: "mislukt", canceled: "geannuleerd", rejected: "geweigerd",
+                     unavailable: "Nav2 draait niet", error: "fout", paused: "gepauzeerd", action: "actie bij punt" };
+  function renderStatus() {
+    var s = navStatus;
+    if (!s) return;
+    var ready = document.getElementById("nsReady");
+    ready.textContent = s.nav2_ready ? "actief" : "niet gestart";
+    ready.style.color = s.nav2_ready ? "var(--green)" : "var(--muted)";
+    var stEl = document.getElementById("nsState");
+    stEl.textContent = (STATE_TEXT[s.state] || s.state) + (s.mode ? " (" + (s.mode === "route" ? "route" : "doel") + ")" : "");
+    stEl.style.color = s.state === "succeeded" ? "var(--green)" : (s.state === "aborted" || s.state === "error" || s.state === "rejected") ? "var(--red)" : "";
+    var nav = s.state === "navigating";
+    document.getElementById("nsDist").textContent = nav && s.distance_remaining != null ? s.distance_remaining.toFixed(2) + " m" : "--";
+    document.getElementById("nsEta").textContent = nav && s.eta_s ? Math.round(s.eta_s) + " s" : "--";
+    document.getElementById("nsRec").textContent = s.recoveries != null && nav ? s.recoveries : "--";
+    document.getElementById("nsWp").textContent = s.mode === "route" && s.waypoints
+      ? (s.waypoint + 1) + " van " + s.waypoints + (s.route_loop ? " (ronde " + s.lap + ")" : "") : "--";
+    document.getElementById("nsTol").textContent = s.tolerance
+      ? Math.round(s.tolerance.xy * 100) + " cm, " + Math.round(s.tolerance.yaw * 180 / Math.PI) + "\u00b0" : "--";
+    renderLoc(s);
+    document.getElementById("navMsg").textContent = s.message || "";
+    document.getElementById("exploreResumeBtn").style.display = s.explore === "paused" ? "" : "none";
+    document.getElementById("pauseBtn").style.display = nav || s.state === "action" || s.state === "sending" ? "" : "none";
+    document.getElementById("resumeBtn").style.display = s.state === "paused" ? "" : "none";
+    document.getElementById("photoLine").style.display = s.last_photo ? "" : "none";
+    if (s.last_photo) {
+      var pl = document.getElementById("photoLink");
+      pl.textContent = s.last_photo; pl.href = "/photos/" + encodeURIComponent(s.last_photo);
+    }
+  }
+
+  // ---- localization (t49) and suggested initial pose (t51) ----
+  var LOC_TEXT = { good: "goed", doubt: "twijfel", lost: "kwijt" };
+  var LOC_COLOR = { good: "--green", doubt: "--yellow", lost: "--red" };
+  function renderLoc(s) {
+    var el = document.getElementById("nsLoc"), l = s.loc;
+    if (!s.nav2_ready) poseSuggestDismissed = false;   // next Navigation start: suggest again
+    if (!s.nav2_ready) { el.textContent = "--"; el.style.color = ""; }
+    else if (!l) { el.textContent = "nog geen positie - zet de beginpositie"; el.style.color = "var(--muted)"; }
+    else {
+      el.textContent = LOC_TEXT[l.quality] + " (\u00b1" + Math.round(Math.max(l.a, 0.01) * 200) + " cm, \u00b1" +
+        Math.round(l.syaw * 2 * 180 / Math.PI) + "\u00b0)" + (l.quality === "doubt" ? " - rij een stukje" : l.quality === "lost" ? " - opnieuw lokaliseren of beginpositie" : "");
+      el.style.color = css(LOC_COLOR[l.quality]);
+    }
+    document.getElementById("relocBtn").disabled = !s.nav2_ready;
+    var sug = s.pose_suggestion, bar = document.getElementById("poseSuggestBar");
+    var show = !!sug && !poseSuggestDismissed && document.body.classList.contains("view-nav");
+    bar.style.display = show ? "" : "none";
+    if (show) {
+      var ago = Math.max(0, Date.now() / 1000 - sug.t);
+      document.getElementById("poseSuggestTxt").textContent = "Staat de robot nog waar hij laatst was (gestippelde pijl, " +
+        (ago < 3600 ? Math.round(ago / 60) + " min" : ago < 172800 ? Math.round(ago / 3600) + " u" : Math.round(ago / 86400) + " dagen") + " geleden)?";
+    }
+    if (JSON.stringify(sug) !== JSON.stringify(poseSuggest)) { poseSuggest = sug; draw(); }
+  }
+  var poseSuggest = null, poseSuggestDismissed = false;
+  document.getElementById("psOk").addEventListener("click", function () {
+    if (!poseSuggest) return;
+    sendCmd({ cmd: "initialpose", x: poseSuggest.x, y: poseSuggest.y, yaw: poseSuggest.yaw });
+    poseSuggestDismissed = true;
+    document.getElementById("poseSuggestBar").style.display = "none";
+  });
+  document.getElementById("psSelf").addEventListener("click", function () {
+    poseSuggestDismissed = true;
+    document.getElementById("poseSuggestBar").style.display = "none";
+    setMode("initialpose");
+  });
+  document.getElementById("relocBtn").addEventListener("click", function () {
+    if (!window.confirm("Opnieuw lokaliseren? AMCL zoekt de robot over de hele kaart en de robot draait ter plaatse " +
+                        "een volledige toer. Zorg dat er plaats is rond de robot.")) return;
+    poseSuggestDismissed = true;
+    sendCmd({ cmd: "relocalize" });
+  });
+  function drawLoc() {
+    var dpr = window.devicePixelRatio || 1, pxPerM = 1 / map.res * scale * view.z;
+    var l = navStatus && navStatus.nav2_ready ? navStatus.loc : null;
+    if (l) {
+      // 95 % ellipse (2 sigma); canvas y points down, so the angle flips
+      var c = toCanvas(l.x, l.y);
+      ctx.beginPath();
+      ctx.ellipse(c[0], c[1], Math.max(2 * l.a * pxPerM, 3 * dpr), Math.max(2 * l.b * pxPerM, 3 * dpr), -l.angle, 0, 2 * Math.PI);
+      var col = css(LOC_COLOR[l.quality]);
+      ctx.strokeStyle = col; ctx.lineWidth = 1.5 * dpr; ctx.stroke();
+      ctx.globalAlpha = 0.12; ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha = 1;
+    }
+    if (poseSuggest && !poseSuggestDismissed && !l) {
+      ctx.setLineDash([4 * dpr, 3 * dpr]);
+      arrow(poseSuggest.x, poseSuggest.y, poseSuggest.yaw, css("--green"), 12, false);
+      ctx.setLineDash([]);
+    }
+  }
+
+  // ---- drawing ----
+  var scale = 1;   // canvas px per map cell (whole map fits)
+  var view = { z: 1, px: 0, py: 0 };   // zoom factor and pan (canvas px)
+  function resize() {
+    if (!map) return;
+    var dpr = window.devicePixelRatio || 1;
+    // icon columns left and right of the map; on phones they are rows (CSS)
+    var cssW = window.innerWidth <= 760 ? wrap.clientWidth - 12 : Math.max(120, wrap.clientWidth - 112);
+    var maxH = window.innerHeight * 0.75;
+    if (navLayout === "split" && window.innerWidth > 760) cssW = cssW / 2 - 4;
+    if (navLayout === "cam") { cssW = wrap.clientWidth * NAV_PIP[navPip] * (window.innerWidth <= 760 ? 1.4 : 1); maxH = 9999; }
+    var cssH = Math.min(cssW * map.h / map.w, maxH);
+    var cssWFit = cssH * map.w / map.h;
+    canvas.style.width = cssWFit + "px";
+    canvas.style.margin = "0 auto";
+    var cw = Math.round(cssWFit * dpr), ch = Math.round(cssH * dpr);
+    // keep zoom/pan when the map is only refreshed (SLAM: every 2 s)
+    if (cw !== canvas.width || ch !== canvas.height) {
+      canvas.width = cw; canvas.height = ch;
+      view = { z: 1, px: 0, py: 0 };
+    }
+    scale = canvas.width / map.w;
+    draw();
+    placeSmall();
+  }
+  window.addEventListener("resize", resize);
+
+  // The small view sits in the top-right corner of the big one (like Rijden),
+  // placed from the real positions so it also works with the phone layout.
+  function placeSmall() {
+    if (typeof navLayout === "undefined" || !pipBox) return;
+    var w = wrap.getBoundingClientRect();
+    if (navLayout === "map") {
+      var c = canvas.getBoundingClientRect();
+      var empty = document.getElementById("mapEmpty");
+      var base = map ? c : (empty.offsetParent ? empty.getBoundingClientRect() : w);
+      var pw = Math.max(110, base.width * NAV_PIP[navPip] * (window.innerWidth <= 760 ? 1.4 : 1));
+      pipBox.style.width = pw + "px";
+      pipBox.style.left = (base.right - w.left - pw - 8) + "px";
+      pipBox.style.top = (base.top - w.top + 8) + "px";
+      pipBox.style.right = "auto";
+    } else {
+      pipBox.style.width = pipBox.style.left = pipBox.style.top = pipBox.style.right = "";
+    }
+    var pad = document.getElementById("navPad");
+    if (pad && pad.style.display !== "none") {
+      var emptyEl = document.getElementById("mapEmpty");
+      var big = (navLayout === "cam" ? pipBox : map ? canvas : (emptyEl.offsetParent ? emptyEl : wrap)).getBoundingClientRect();
+      pad.style.left = (big.left - w.left + 8) + "px";
+      pad.style.top = (big.bottom - w.top - pad.offsetHeight - 8) + "px";
+    }
+    if (navLayout === "cam") {
+      var p = pipBox.getBoundingClientRect(), c2 = canvas.getBoundingClientRect();
+      canvas.style.left = (p.right - w.left - c2.width - 8) + "px";
+      canvas.style.top = (p.top - w.top + 8) + "px";
+      canvas.style.right = "auto";
+      mapSwap.style.left = (p.right - w.left - c2.width - 2) + "px";
+      mapSwap.style.top = (p.top - w.top + 14) + "px";
+    } else {
+      canvas.style.left = canvas.style.top = canvas.style.right = "";
+    }
+  }
+
+  function toCanvas(x, y) {
+    var k = scale * view.z;
+    return [(x - map.ox) / map.res * k + view.px, (map.h - (y - map.oy) / map.res) * k + view.py];
+  }
+  function toWorld(cx, cy) {
+    var k = scale * view.z;
+    return [map.ox + (cx - view.px) / k * map.res, map.oy + (map.h - (cy - view.py) / k) * map.res];
+  }
+
+  function arrow(x, y, yaw, color, size, filled) {
+    var p = toCanvas(x, y), s = size * (window.devicePixelRatio || 1);
+    ctx.save();
+    ctx.translate(p[0], p[1]);
+    ctx.rotate(-yaw);
+    ctx.beginPath();
+    ctx.moveTo(s, 0); ctx.lineTo(-s * 0.6, s * 0.6); ctx.lineTo(-s * 0.3, 0); ctx.lineTo(-s * 0.6, -s * 0.6); ctx.closePath();
+    ctx.fillStyle = color; ctx.strokeStyle = "#0008"; ctx.lineWidth = 1;
+    if (filled) ctx.fill(); ctx.stroke();
+    if (!filled) { ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke(); }
+    ctx.restore();
+  }
+
+  function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+  // ---- Geavanceerd: Nav2 parameters (live via rosbridge + saved overrides) ----
+  // [node, parameter, label, unit, integer, needs restart]
+  var ADV = [
+    ["Pure Pursuit & DWB"],
+    ["controller_server", "FollowPath.max_vel_x", "DWB: max snelheid", "m/s"],
+    ["controller_server", "FollowPath.max_vel_theta", "DWB: max draaisnelheid", "rad/s"],
+    ["controller_server", "RPP.desired_linear_vel", "Pure Pursuit: snelheid", "m/s"],
+    ["controller_server", "RPP.lookahead_dist", "Pure Pursuit: vooruitkijken", "m"],
+    ["MPPI"],
+    ["controller_server", "MPPI.vx_max", "max snelheid", "m/s"],
+    ["controller_server", "MPPI.wz_max", "max draaisnelheid", "rad/s"],
+    ["controller_server", "MPPI.batch_size", "trajecten per stap", "", true, true],
+    ["controller_server", "MPPI.time_steps", "stappen vooruit (x 0,1 s)", "", true, true],
+    ["controller_server", "MPPI.PathFollowCritic.cost_weight", "gewicht: pad volgen", ""],
+    ["controller_server", "MPPI.PathAlignCritic.cost_weight", "gewicht: op het pad blijven", ""],
+    ["controller_server", "MPPI.GoalCritic.cost_weight", "gewicht: naar het doel", ""],
+    ["controller_server", "MPPI.CostCritic.cost_weight", "gewicht: weg van obstakels", ""],
+    ["Costmaps (veiligheidsmarge)"],
+    ["local_costmap/local_costmap", "inflation_layer.inflation_radius", "local: marge", "m"],
+    ["local_costmap/local_costmap", "inflation_layer.cost_scaling_factor", "local: afname marge", ""],
+    ["global_costmap/global_costmap", "inflation_layer.inflation_radius", "global: marge", "m"],
+    ["global_costmap/global_costmap", "inflation_layer.cost_scaling_factor", "global: afname marge", ""],
+    ["Zones"],
+    ["nav_web_node", "lane_outside_cost", "voorkeurszone: kost erbuiten (0-99)", "", true],
+  ];
+  var advSaved = {};      // saved overrides (from /launch_status)
+  var advMsg = document.getElementById("advMsg");
+  function advId(node, name) { return "adv_" + (node + "_" + name).replace(/[^A-Za-z0-9]/g, "_"); }
+  function advBuild() {
+    var rows = ADV.map(function (r) {
+      if (r.length === 1) return '<tr><td colspan="2" class="grp">' + r[0] + "</td></tr>";
+      return "<tr><td>" + r[2] + (r[5] ? ' <span class="restart" title="werkt pas na herstart Navigatie">&#x21bb;</span>' : "") +
+        '</td><td><input type="number" step="any" id="' + advId(r[0], r[1]) + '"> ' + r[3] +
+        '<span class="saved" id="' + advId(r[0], r[1]) + '_s"></span></td></tr>';
+    });
+    document.getElementById("advTable").innerHTML = rows.join("");
+    ADV.forEach(function (r) {
+      if (r.length === 1) return;
+      document.getElementById(advId(r[0], r[1])).addEventListener("input", function (e) { e.target.classList.add("dirty"); });
+    });
+  }
+  function advNodes() {
+    var nodes = {};
+    ADV.forEach(function (r) { if (r.length > 1) (nodes[r[0]] = nodes[r[0]] || []).push(r); });
+    return nodes;
+  }
+  function paramValue(v) {
+    if (!v) return null;
+    if (v.type === 2) return v.integer_value;
+    if (v.type === 3) return v.double_value;
+    return null;
+  }
+  function advLoad() {
+    advMsg.textContent = "lezen...";
+    var nodes = advNodes(), pending = Object.keys(nodes).length, missing = [];
+    Object.keys(nodes).forEach(function (node) {
+      var rows = nodes[node];
+      new ROSLIB.Service({ ros: ros, name: "/" + node + "/get_parameters", serviceType: "rcl_interfaces/srv/GetParameters" })
+        .callService(new ROSLIB.ServiceRequest({ names: rows.map(function (r) { return r[1]; }) }), function (res) {
+          rows.forEach(function (r, i) {
+            var el = document.getElementById(advId(r[0], r[1]));
+            var v = paramValue(res.values && res.values[i]);
+            if (!el.classList.contains("dirty")) el.value = v === null ? "" : +v.toFixed(4);
+          });
+          if (--pending === 0) advMsg.textContent = missing.length ? "niet bereikbaar: " + missing.join(", ") + " (draait Navigatie?)" : "";
+        }, function () {
+          missing.push(node);
+          if (--pending === 0) advMsg.textContent = "niet bereikbaar: " + missing.join(", ") + " (draait Navigatie?)";
+        });
+    });
+  }
+  function advShowSaved() {
+    ADV.forEach(function (r) {
+      if (r.length === 1) return;
+      var el = document.getElementById(advId(r[0], r[1]) + "_s");
+      if (!el) return;
+      var v = advSaved[r[0]] && advSaved[r[0]][r[1]];
+      el.textContent = v !== undefined ? "bewaard: " + v : "";
+    });
+  }
+  function advDirty() {
+    var out = {};
+    ADV.forEach(function (r) {
+      if (r.length === 1) return;
+      var el = document.getElementById(advId(r[0], r[1]));
+      if (!el.classList.contains("dirty") || el.value === "") return;
+      var v = r[4] ? parseInt(el.value, 10) : parseFloat(el.value);
+      if (isNaN(v)) return;
+      (out[r[0]] = out[r[0]] || {})[r[1]] = { v: v, integer: !!r[4], el: el };
+    });
+    return out;
+  }
+  document.getElementById("advApply").addEventListener("click", function () {
+    var d = advDirty(), nodes = Object.keys(d), msgs = [], pending = nodes.length;
+    if (!pending) { advMsg.textContent = "niets gewijzigd"; return; }
+    advMsg.textContent = "toepassen...";
+    nodes.forEach(function (node) {
+      var names = Object.keys(d[node]);
+      var req = names.map(function (n) {
+        var x = d[node][n];
+        return { name: n, value: x.integer ? { type: 2, integer_value: x.v } : { type: 3, double_value: x.v } };
+      });
+      new ROSLIB.Service({ ros: ros, name: "/" + node + "/set_parameters", serviceType: "rcl_interfaces/srv/SetParameters" })
+        .callService(new ROSLIB.ServiceRequest({ parameters: req }), function (res) {
+          (res.results || []).forEach(function (r, i) {
+            if (r.successful) d[node][names[i]].el.classList.remove("dirty");
+            else msgs.push(names[i] + ": " + (r.reason || "geweigerd") + " - bewaar en herstart Navigatie");
+          });
+          if (--pending === 0) { advMsg.textContent = msgs.length ? msgs.join("; ") : "toegepast"; advLoad(); }
+        }, function (err) {
+          msgs.push(node + " niet bereikbaar");
+          if (--pending === 0) advMsg.textContent = msgs.join("; ");
+        });
+    });
+  });
+  var overridesTopic = new ROSLIB.Topic({ ros: ros, name: "/launch/nav2_overrides", messageType: "std_msgs/msg/String" });
+  document.getElementById("advSave").addEventListener("click", function () {
+    var d = advDirty(), merged = JSON.parse(JSON.stringify(advSaved));
+    Object.keys(d).forEach(function (node) {
+      Object.keys(d[node]).forEach(function (n) { (merged[node] = merged[node] || {})[n] = d[node][n].v; });
+    });
+    overridesTopic.publish(new ROSLIB.Message({ data: JSON.stringify({ overrides: merged }) }));
+    advMsg.textContent = "bewaard - geldt bij elke volgende start van Navigatie (Toepassen = ook nu al)";
+  });
+  document.getElementById("advReset").addEventListener("click", function () {
+    if (!confirm("Alle eigen Nav2-instellingen wissen? Vanaf de volgende start van Navigatie gelden weer de standaardwaarden.")) return;
+    overridesTopic.publish(new ROSLIB.Message({ data: JSON.stringify({ overrides: {} }) }));
+    advMsg.textContent = "eigen instellingen gewist - herstart Navigatie voor de standaardwaarden";
+  });
+  document.getElementById("advReload").addEventListener("click", function () {
+    document.querySelectorAll(".adv input.dirty").forEach(function (el) { el.classList.remove("dirty"); });
+    advLoad();
+  });
+  advBuild();
+  document.getElementById("advBox").addEventListener("toggle", function (e) { if (e.target.open) advLoad(); });
+
+  // ---- map management (launch_control_node /launch/map_cmd) ----
+  var mapCmd = new ROSLIB.Topic({ ros: ros, name: "/launch/map_cmd", messageType: "std_msgs/msg/String" });
+  var mapMsgT = 0;
+  function sendMapCmd(obj) { mapCmd.publish(new ROSLIB.Message({ data: JSON.stringify(obj) })); }
+  document.getElementById("mapRename").addEventListener("click", function () {
+    var n = mapSel.value, to = prompt("Nieuwe naam voor kaart '" + n + "' (letters, cijfers, - en _):", n);
+    if (to && to !== n) sendMapCmd({ cmd: "rename", name: n, to: to });
+  });
+  document.getElementById("mapCopy").addEventListener("click", function () {
+    var n = mapSel.value, to = prompt("Naam van de kopie van '" + n + "':", n + "_kopie");
+    if (to) sendMapCmd({ cmd: "copy", name: n, to: to });
+  });
+  document.getElementById("mapDelete").addEventListener("click", function () {
+    var n = mapSel.value;
+    if (confirm("Kaart '" + n + "' verwijderen, met haar zones en routes? Dit kan niet ongedaan gemaakt worden.")) sendMapCmd({ cmd: "delete", name: n });
+  });
+  document.getElementById("mapExport").addEventListener("click", function () {
+    var n = mapSel.value;
+    if (n && n !== "geen kaarten") window.location.href = "/api/map_export?name=" + encodeURIComponent(n);
+  });
+  document.getElementById("mapImport").addEventListener("change", function (e) {
+    var f = e.target.files[0];
+    if (!f) return;
+    var guess = f.name.replace(/\.tbmap\.json$|\.json$|\.zip$/, "");
+    var name = prompt("Importeren als kaart (letters, cijfers, - en _):", guess);
+    if (!name) { e.target.value = ""; return; }
+    f.arrayBuffer().then(function (buf) {
+      return fetch("/api/map_import?name=" + encodeURIComponent(name), { method: "POST", body: buf,
+                                                                        headers: { "Content-Type": "application/octet-stream" } });
+    }).then(function (x) { return x.json(); }).then(function (j) {
+      document.getElementById("mapMsg").textContent = j.message || ("Import mislukt: " + j.error);
+      e.target.value = "";
+    }).catch(function (err) { document.getElementById("mapMsg").textContent = "Import mislukt: " + err; });
+  });
+
+  function showMapMsg(st) {
+    var m = st.map_msg;
+    if (m && m.t !== mapMsgT) { mapMsgT = m.t; document.getElementById("mapMsg").textContent = m.text; }
+  }
+
+  // ---- routes per map (nav_web_node, state/maps/<map>.routes.json) ----
+  var savedRoutes = {};
+  function renderRoutes(r) {
+    var key = JSON.stringify(Object.keys(r).sort());
+    if (key === JSON.stringify(Object.keys(savedRoutes).sort()) && document.getElementById("routeLoad").options.length > 1) { savedRoutes = r; return; }
+    savedRoutes = r;
+    var sel = document.getElementById("routeLoad");
+    sel.innerHTML = '<option value="">bewaarde routes...</option>' + Object.keys(r).sort().map(function (n) {
+      return '<option value="' + escHtml(n) + '">' + escHtml(n) + " (" + r[n].poses.length + (r[n].loop ? ", lus" : "") + ")</option>";
+    }).join("");
+  }
+  document.getElementById("routeSave").addEventListener("click", function () {
+    var n = document.getElementById("routeName").value.trim();
+    if (!route.length) { alert("Eerst routepunten aanklikken."); return; }
+    if (!n) { alert("Geef de route een naam."); return; }
+    sendCmd({ cmd: "route_save", name: n, poses: route, loop: document.getElementById("routeLoop").checked });
+  });
+  document.getElementById("routeLoad").addEventListener("change", function (e) {
+    var r = savedRoutes[e.target.value];
+    if (!r) return;
+    route = r.poses.map(function (p) { var q = { x: p.x, y: p.y, yaw: p.yaw }; if (p.action) q.action = p.action; if (p.free) q.free = true; return q; });
+    document.getElementById("routeLoop").checked = !!r.loop;
+    document.getElementById("routeName").value = e.target.value;
+    updateRoute(); draw();
+  });
+  document.getElementById("routeDel").addEventListener("click", function () {
+    var n = document.getElementById("routeLoad").value;
+    if (n && confirm("Bewaarde route '" + n + "' verwijderen?")) sendCmd({ cmd: "route_delete", name: n });
+  });
+
+  // ---- map editor (nav_web_node map_edit: writes the pgm, reloads map_server) ----
+  var mapGrid = null, editGrid = null, editDirty = false, painting = false, editUndoStack = [], mapEdited = false;
+  var editSize = document.getElementById("editSize");
+  editSize.addEventListener("input", function () { document.getElementById("editSizeTxt").textContent = editSize.value; });
+  function editUi() {
+    var editMap = zoneMap === "_verkenning" ? null : zoneMap;   // during exploring there is no saved map yet
+    document.getElementById("editInfo").textContent = !editMap ? "kies een kaart onder Kaarten (of de kaart van de draaiende Navigatie)"
+      : "kaart " + editMap + (editDirty ? " - niet bewaard" : "") + (mapEdited ? " - al eens bewerkt" : "");
+    document.getElementById("editSave").disabled = !editDirty || !editMap;
+    document.getElementById("editDiscard").disabled = !editDirty;
+    document.getElementById("editUndo").disabled = !editUndoStack.length;
+    document.getElementById("editRestore").disabled = !mapEdited || !editMap;
+  }
+  function editStart() {
+    if (!mapGrid) return;
+    if (!editGrid) editGrid = Int8Array.from(mapGrid.data);
+    editUndoStack.push(Int8Array.from(editGrid));
+    if (editUndoStack.length > 20) editUndoStack.shift();
+  }
+  function renderGrid(g) {
+    var w = mapGrid.w, h = mapGrid.h, mctx = mapImg.getContext("2d"), img = mctx.createImageData(w, h);
+    for (var i = 0; i < w * h; i++) {
+      var v = g[i], gv = v < 0 ? 58 : (v > 65 ? 20 : 235 - Math.round(v * 1.5));
+      var di = ((h - 1 - Math.floor(i / w)) * w + (i % w)) * 4;
+      img.data[di] = gv; img.data[di + 1] = gv; img.data[di + 2] = gv + (v < 0 ? 6 : 0); img.data[di + 3] = 255;
+    }
+    mctx.putImageData(img, 0, 0);
+  }
+  function editPaint(w) {
+    if (!mapGrid || !editGrid) return;
+    var cx = Math.floor((w[0] - map.ox) / map.res), cy = Math.floor((w[1] - map.oy) / map.res);
+    var r = parseInt(editSize.value, 10) / 2, val = parseInt(document.getElementById("editBrush").value, 10);
+    for (var y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++)
+      for (var x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) {
+        if (x < 0 || y < 0 || x >= mapGrid.w || y >= mapGrid.h) continue;
+        if ((x - cx) * (x - cx) + (y - cy) * (y - cy) > r * r + 0.25) continue;
+        editGrid[y * mapGrid.w + x] = val;
+      }
+    editDirty = true;
+    renderGrid(editGrid); draw(); editUi();
+  }
+  document.getElementById("editUndo").addEventListener("click", function () {
+    if (!editUndoStack.length) return;
+    editGrid = editUndoStack.pop();
+    renderGrid(editGrid); draw(); editUi();
+  });
+  document.getElementById("editDiscard").addEventListener("click", function () {
+    editGrid = null; editDirty = false; editUndoStack = [];
+    if (mapGrid) renderGrid(mapGrid.data);
+    draw(); editUi();
+  });
+  document.getElementById("editSave").addEventListener("click", function () {
+    if (!editGrid || !confirm("Kaart " + zoneMap + " overschrijven met je wijzigingen? (het origineel blijft bewaard)")) return;
+    var bytes = new Uint8Array(editGrid.length);
+    for (var i = 0; i < editGrid.length; i++) bytes[i] = editGrid[i] < 0 ? 255 : (editGrid[i] >= 65 ? 100 : 0);
+    var bin = "";
+    for (var j = 0; j < bytes.length; j += 8192) bin += String.fromCharCode.apply(null, bytes.subarray(j, j + 8192));
+    sendCmd({ cmd: "map_edit", map: zoneMap, width: mapGrid.w, height: mapGrid.h, data: btoa(bin) });
+    mapGrid.data = Int8Array.from(editGrid);
+    editGrid = null; editDirty = false; editUndoStack = [];
+    editUi();
+  });
+  document.getElementById("editRestore").addEventListener("click", function () {
+    if (!confirm("Kaart " + zoneMap + " terugzetten naar het origineel (zoals SLAM ze bewaarde)? Alle bewerkingen gaan verloren.")) return;
+    editGrid = null; editDirty = false; editUndoStack = [];
+    sendCmd({ cmd: "map_restore", map: zoneMap });
+    if (fileMap) setTimeout(function () { syncFileMap(true); }, 1500);   // the restored file
+    else { map = null; setTimeout(fetchMap, 2500); }                     // fetch the restored map
+  });
+  editUi();
+
+  // ---- zones (Nav2 keepout filters, nav_web_node rasterizes them) ----
+  // Saved per map on the robot (state/maps/<map>.zones.json); /web/zones
+  // tells which map Navigation runs with and its zones.
+  var zones = [], zoneCur = [], zoneDirty = false, zoneMap = null;
+  var ZONE_STYLE = { nogo: ["#e5484d", "rgba(229,72,77,0.28)"], wall: ["#e5484d", null], lane: ["#3fb950", "rgba(63,185,80,0.18)"],
+                     speed: ["#4ea1ff", "rgba(78,161,255,0.2)"], area: ["#e3b341", "rgba(227,179,65,0.08)"] };
+  var zoneTypeSel = document.getElementById("zoneType");
+  zoneTypeSel.addEventListener("change", function () {
+    document.getElementById("zoneSpeedBox").style.display = zoneTypeSel.value === "speed" ? "" : "none";
+  });
+  new ROSLIB.Topic({ ros: ros, name: "/web/zones", messageType: "std_msgs/msg/String" })
+    .subscribe(function (msg) {
+      var d;
+      try { d = JSON.parse(msg.data); } catch (e) { return; }
+      if (fileMap && !d.map) return;   // a saved map from its files (t83): keep its zones
+      zoneMap = d.map;
+      if (!zoneDirty) { zones = d.zones || []; draw(); }
+      zoneUi();
+      renderRoutes(d.routes || {});
+      mapEdited = !!d.map_edited;
+      editUi();
+    });
+  function zoneUi() {
+    var n = zones.length;
+    document.getElementById("zoneInfo").textContent =
+      (zoneMap === "_verkenning" ? "verkenning (nog geen kaart - gaan mee bij Kaart opslaan; liggen ze verkeerd? de robot vertrok elders: Wis alle): "
+        : zoneMap ? "kaart " + zoneMap + (fileMap ? " (bestand, Navigatie uit)" : "") + ": " : "kies een kaart onder Kaarten - ") + n + (n === 1 ? " zone" : " zones") +
+      (zoneCur.length ? ", tekenen: " + zoneCur.length + " punt(en)" : "") + (zoneDirty ? " (niet bewaard)" : "");
+    document.getElementById("zoneSave").disabled = !zoneMap;
+  }
+  // ---- a saved map from its files, without Navigation (t83) ----
+  // Mappen with neither Navigation nor SLAM running: the map chosen under
+  // Kaarten comes from /api/map_file (status_page_server reads its yaml/pgm,
+  // zones and routes); map edits and zones go with "map" to nav_web_node,
+  // which then only writes that map's files (backups as usual).
+  var fileMap = null, fileMapBusy = false;
+  function fileMapWanted() {
+    var st = lastLaunch;
+    return isMaps() && st && !st.navigation && !st.slam && (st.maps || []).indexOf(mapLib.value) > -1 ? mapLib.value : null;
+  }
+  function syncFileMap(force) {
+    var want = fileMapWanted();
+    if (!want) { fileMap = null; return; }
+    if ((want === fileMap && !force) || fileMapBusy || editDirty || zoneDirty) return;
+    fileMapBusy = true;
+    fetch("/api/map_file?name=" + encodeURIComponent(want), { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        fileMapBusy = false;
+        if (j.error || fileMapWanted() !== want || editDirty || zoneDirty) return;
+        var bin = atob(j.data_b64), data = new Int8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) data[i] = bin.charCodeAt(i) << 24 >> 24;
+        fileMap = want;
+        showMap({ info: j.info, data: data });
+        zoneMap = want; zones = j.zones || []; mapEdited = !!j.edited;
+        renderRoutes(j.routes || {});
+        zoneUi(); editUi(); draw();
+      }, function () { fileMapBusy = false; });
+  }
+  function zoneFinish() {
+    // a double click also added the same point twice
+    while (zoneCur.length > 1) {
+      var a = zoneCur[zoneCur.length - 1], b = zoneCur[zoneCur.length - 2];
+      if (Math.hypot(a[0] - b[0], a[1] - b[1]) > 0.03) break;
+      zoneCur.pop();
+    }
+    var type = document.getElementById("zoneType").value;
+    if (zoneCur.length >= (type === "wall" ? 2 : 3)) {
+      var zn = { type: type, points: zoneCur };
+      if (type === "speed") zn.percent = Math.min(100, Math.max(5, parseInt(document.getElementById("zoneSpeed").value, 10) || 40));
+      zones.push(zn);
+      zoneDirty = true;
+    }
+    zoneCur = [];
+    zoneUi(); draw();
+  }
+  document.getElementById("zoneDone").addEventListener("click", zoneFinish);
+  canvas.addEventListener("dblclick", function () { if (mode === "zones") zoneFinish(); });
+  document.getElementById("zoneUndo").addEventListener("click", function () { zoneCur.pop(); zoneUi(); draw(); });
+  document.getElementById("zoneDelLast").addEventListener("click", function () { zones.pop(); zoneDirty = true; zoneUi(); draw(); });
+  document.getElementById("zoneClear").addEventListener("click", function () {
+    if (!zones.length || confirm("Alle zones van deze kaart wissen? (pas na Bewaar & toepassen)")) { zones = []; zoneCur = []; zoneDirty = true; zoneUi(); draw(); }
+  });
+  document.getElementById("zoneSave").addEventListener("click", function () {
+    if (zoneCur.length) zoneFinish();
+    sendCmd({ cmd: "zones", map: zoneMap, zones: zones });
+    zoneDirty = false;
+    zoneUi();
+  });
+  function drawZones() {
+    var dpr = window.devicePixelRatio || 1;
+    function path(pts, close) {
+      ctx.beginPath();
+      pts.forEach(function (p, i) { var c = toCanvas(p[0], p[1]); if (i) ctx.lineTo(c[0], c[1]); else ctx.moveTo(c[0], c[1]); });
+      if (close) ctx.closePath();
+    }
+    zones.forEach(function (z) {
+      var st = ZONE_STYLE[z.type] || ZONE_STYLE.nogo;
+      ctx.save();
+      if (z.type === "wall") {
+        path(z.points, false);
+        ctx.strokeStyle = st[0];
+        ctx.lineWidth = Math.max(3 * dpr, 0.1 / map.res * scale * view.z);
+        ctx.lineCap = "round";
+        ctx.stroke();
+      } else {
+        path(z.points, true);
+        ctx.fillStyle = st[1]; ctx.fill();
+        ctx.strokeStyle = st[0]; ctx.lineWidth = 1.5 * dpr;
+        if (z.type === "lane" || z.type === "speed" || z.type === "area") ctx.setLineDash([6 * dpr, 4 * dpr]);
+        ctx.stroke();
+        if (z.type === "speed") {   // label "40%" in the middle
+          var mx = 0, my = 0;
+          z.points.forEach(function (p) { mx += p[0]; my += p[1]; });
+          var c = toCanvas(mx / z.points.length, my / z.points.length), label = z.percent + "%";
+          ctx.setLineDash([]);
+          ctx.font = "bold " + (12 * dpr) + "px sans-serif";
+          var tw = ctx.measureText(label).width;
+          ctx.fillStyle = "#000a"; ctx.fillRect(c[0] - tw / 2 - 3 * dpr, c[1] - 10 * dpr, tw + 6 * dpr, 14 * dpr);
+          ctx.fillStyle = st[0]; ctx.fillText(label, c[0] - tw / 2, c[1] + 1 * dpr);
+        }
+      }
+      ctx.restore();
+    });
+    if (zoneCur.length && mode === "zones") {
+      ctx.save();
+      path(zoneCur, false);
+      ctx.setLineDash([5 * dpr, 4 * dpr]);
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5 * dpr; ctx.stroke();
+      ctx.setLineDash([]); ctx.fillStyle = "#fff";
+      zoneCur.forEach(function (p) { var c = toCanvas(p[0], p[1]); ctx.beginPath(); ctx.arc(c[0], c[1], 3 * dpr, 0, 2 * Math.PI); ctx.fill(); });
+      ctx.restore();
+    }
+  }
+  zoneUi();
+
+  // ---- laser scan (optional overlay) ----
+  // /scan is in base_scan; on the Burger that frame is 3.2 cm behind
+  // base_footprint, not rotated. Placed with the robot pose (map frame).
+  var SCAN_X = -0.032;
+  var scanPts = null;   // [[x, y], ...] in base_scan
+  var scanTopic = new ROSLIB.Topic({ ros: ros, name: "/scan", messageType: "sensor_msgs/msg/LaserScan",
+                                     throttle_rate: 200, queue_length: 1 });
+  function onScan(msg) {
+    var pts = [], a = msg.angle_min;
+    for (var i = 0; i < msg.ranges.length; i++, a += msg.angle_increment) {
+      var r = msg.ranges[i];
+      if (r === null || !(r > 0.12) || r > 8.0) continue;   // LDS: 0.16-8 m, 0 = no echo
+      pts.push([r * Math.cos(a), r * Math.sin(a)]);
+    }
+    scanPts = pts;
+    draw();
+  }
+  function drawScan() {
+    if (!scanPts || !robot) return;
+    var dpr = window.devicePixelRatio || 1, sz = Math.max(2, 1.6 * dpr * Math.sqrt(view.z));
+    var c = Math.cos(robot.yaw), s = Math.sin(robot.yaw);
+    ctx.fillStyle = "#ff4d6d";
+    for (var i = 0; i < scanPts.length; i++) {
+      var bx = SCAN_X + scanPts[i][0], by = scanPts[i][1];
+      var p = toCanvas(robot.x + c * bx - s * by, robot.y + s * bx + c * by);
+      ctx.fillRect(p[0] - sz / 2, p[1] - sz / 2, sz, sz);
+    }
+  }
+  // On by default in Mappen (see the walls appear while mapping), off in
+  // Navigatie; remembered per view (applyView calls setScan).
+  var scanBox = document.getElementById("showScan"), scanOn = false;
+  function setScan(on) {
+    scanBox.checked = on;
+    if (on && !scanOn) scanTopic.subscribe(onScan);
+    else if (!on && scanOn) { scanTopic.unsubscribe(); scanPts = null; draw(); }
+    scanOn = on;
+    showLayers();
+  }
+  scanBox.addEventListener("change", function () {
+    lsSet(location.hash === "#mappen" ? "mapScan" : "navScan", scanBox.checked ? "1" : "0");
+    setScan(scanBox.checked);
+  });
+
+  // ---- costmaps (optional overlays) ----
+  // nav_msgs/OccupancyGrid from Nav2's costmaps: 0 free, 1-98 inflation
+  // (safety margin, the closer to an obstacle the higher), 99 inscribed
+  // (robot would touch), 100 lethal (obstacle), -1 unknown. Local costmap in
+  // the odom frame (rolling window around the robot), placed on the map with
+  // map->odom (/web/map_odom); global costmap in the map frame.
+  var costmaps = { local: null, global: null };
+  var mapOdom = null;   // {x, y, yaw} of odom in map
+  function costmapImage(msg, rgb) {
+    var w = msg.info.width, h = msg.info.height, data = msg.data;
+    var c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    var cctx = c.getContext("2d"), img = cctx.createImageData(w, h);
+    for (var i = 0; i < w * h; i++) {
+      var v = data[i];
+      if (v <= 0) continue;
+      var row = h - 1 - Math.floor(i / w), di = (row * w + (i % w)) * 4;
+      var lethal = v >= 99;
+      img.data[di] = lethal ? rgb[3] : rgb[0];
+      img.data[di + 1] = lethal ? rgb[4] : rgb[1];
+      img.data[di + 2] = lethal ? rgb[5] : rgb[2];
+      img.data[di + 3] = lethal ? 200 : Math.round(30 + v * 1.4);
+    }
+    cctx.putImageData(img, 0, 0);
+    var q = msg.info.origin.orientation;
+    return { img: c, w: w, h: h, res: msg.info.resolution,
+             ox: msg.info.origin.position.x, oy: msg.info.origin.position.y, oyaw: yawOf(q) };
+  }
+  function drawCostmap(cm, frame) {
+    if (!cm) return;
+    var f = frame || { x: 0, y: 0, yaw: 0 };
+    if (frame === null && cm === costmaps.local) return;
+    // costmap origin from its own frame into the map frame
+    var cos = Math.cos(f.yaw), sin = Math.sin(f.yaw);
+    var x = f.x + cos * cm.ox - sin * cm.oy, y = f.y + sin * cm.ox + cos * cm.oy;
+    var p = toCanvas(x, y), k = cm.res / map.res * scale * view.z;
+    ctx.save();
+    ctx.translate(p[0], p[1]);
+    ctx.rotate(-(f.yaw + cm.oyaw));
+    ctx.scale(k, k);
+    ctx.drawImage(cm.img, 0, -cm.h);
+    ctx.restore();
+  }
+  var cmTopics = {
+    local: new ROSLIB.Topic({ ros: ros, name: "/local_costmap/costmap", messageType: "nav_msgs/msg/OccupancyGrid",
+                              throttle_rate: 500, queue_length: 1 }),
+    global: new ROSLIB.Topic({ ros: ros, name: "/global_costmap/costmap", messageType: "nav_msgs/msg/OccupancyGrid",
+                               throttle_rate: 2000, queue_length: 1 }),
+  };
+  var cmColors = { local: [255, 170, 0, 230, 40, 40], global: [90, 140, 255, 150, 60, 230] };
+  var mapOdomTopic = new ROSLIB.Topic({ ros: ros, name: "/web/map_odom", messageType: "geometry_msgs/msg/PoseStamped",
+                                        throttle_rate: 200, queue_length: 1 });
+  function setCostmap(which, on) {
+    var t = cmTopics[which];
+    if (on) {
+      t.subscribe(function (msg) { costmaps[which] = costmapImage(msg, cmColors[which]); draw(); });
+      if (which === "local")
+        mapOdomTopic.subscribe(function (msg) {
+          mapOdom = { x: msg.pose.position.x, y: msg.pose.position.y, yaw: yawOf(msg.pose.orientation) };
+        });
+    } else {
+      t.unsubscribe();
+      if (which === "local") { mapOdomTopic.unsubscribe(); mapOdom = null; }
+      costmaps[which] = null;
+      draw();
+    }
+  }
+  [["local", "showLocalCm", "navLocalCm"], ["global", "showGlobalCm", "navGlobalCm"]].forEach(function (c) {
+    var box = document.getElementById(c[1]);
+    box.checked = lsGet(c[2], "0") === "1";
+    if (box.checked) setCostmap(c[0], true);
+    box.addEventListener("change", function () { lsSet(c[2], box.checked ? "1" : "0"); setCostmap(c[0], box.checked); });
+  });
+
+  function draw() {
+    if (!map) return;
+    var dpr = window.devicePixelRatio || 1;
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(mapImg, view.px, view.py, canvas.width * view.z, canvas.height * view.z);
+    drawCostmap(costmaps.global, null);
+    drawCostmap(costmaps.local, mapOdom);
+    drawScan();
+
+    // 1 m grid ticks along the edges would clutter small maps; a scale bar instead
+    var mPx = 1 / map.res * scale * view.z;
+    ctx.fillStyle = "#fffc"; ctx.fillRect(10 * dpr, canvas.height - 14 * dpr, mPx, 3 * dpr);
+    ctx.font = (11 * dpr) + "px sans-serif"; ctx.fillText("1 m", 10 * dpr, canvas.height - 18 * dpr);
+
+    if (plan.length > 1) {
+      // The plan arrives ~1x/s (Nav2 replans at 1 Hz), the robot pose 5x/s:
+      // draw it from the robot's current position onwards (closest plan
+      // point in the first 1 m), not from where the robot was at plan time.
+      var pts = plan, start = 0;
+      if (robot) {
+        var best = Infinity;
+        for (var k = 0; k < plan.length; k++) {
+          var dx = plan[k][0] - robot.x, dy = plan[k][1] - robot.y, d = dx * dx + dy * dy;
+          if (d < best) { best = d; start = k; }
+          if (Math.abs(plan[k][0] - plan[0][0]) + Math.abs(plan[k][1] - plan[0][1]) > 1.0) break;
+        }
+        pts = [[robot.x, robot.y]].concat(plan.slice(start + 1));
+      }
+      ctx.beginPath();
+      pts.forEach(function (pt, i) { var c = toCanvas(pt[0], pt[1]); if (i) ctx.lineTo(c[0], c[1]); else ctx.moveTo(c[0], c[1]); });
+      ctx.strokeStyle = css("--accent"); ctx.lineWidth = 2.5 * dpr; ctx.stroke();
+    }
+    drawZones();
+    if (route.length) {
+      ctx.beginPath();
+      route.forEach(function (pt, i) { var c = toCanvas(pt.x, pt.y); if (i) ctx.lineTo(c[0], c[1]); else ctx.moveTo(c[0], c[1]); });
+      if (document.getElementById("routeLoop").checked && route.length > 2) ctx.closePath();
+      ctx.setLineDash([6 * dpr, 4 * dpr]); ctx.strokeStyle = css("--purple"); ctx.lineWidth = 1.5 * dpr; ctx.stroke(); ctx.setLineDash([]);
+      route.forEach(function (pt, i) {
+        arrow(pt.x, pt.y, pt.yaw, css("--purple"), 9, true);
+        var c = toCanvas(pt.x, pt.y);
+        ctx.fillStyle = "#fff"; ctx.font = "bold " + (11 * dpr) + "px sans-serif";
+        ctx.fillText(String(i + 1) + actionMark(pt.action), c[0] + 8 * dpr, c[1] - 8 * dpr);
+      });
+    }
+    if (goal) arrow(goal.x, goal.y, goal.yaw, css("--orange"), 11, true);
+    drawLoc();
+    if (robot) {
+      var c = toCanvas(robot.x, robot.y);
+      ctx.beginPath(); ctx.arc(c[0], c[1], 0.105 / map.res * scale * view.z, 0, 2 * Math.PI);   // burger footprint r ~0.105 m
+      ctx.fillStyle = "#2ecc7140"; ctx.fill();
+      arrow(robot.x, robot.y, robot.yaw, css("--green"), 11, true);
+    }
+    if (drag) {
+      var a = toCanvas(drag.x, drag.y), b = toCanvas(drag.x2, drag.y2);
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5 * dpr; ctx.stroke();
+      var color = mode === "initialpose" ? css("--green") : (mode === "goal" ? css("--orange") : css("--purple"));
+      arrow(drag.x, drag.y, dragYaw(), color, 12, false);
+    }
+    drawMeasure();
+  }
+
+  // ---- interaction ----
+  var MODE_HINT = {
+    view: "",
+    initialpose: "Klik waar de robot staat en sleep in de richting waarin hij kijkt.",
+    goal: "Klik op het doel. Sleep om de richting te kiezen waarin de robot moet eindigen.",
+    route: "Klik de punten na elkaar aan (slepen = richting). Daarna: Rij route.",
+    edit: "Teken op de kaart (slepen). Bewaar kaart = opslaan + map_server laadt ze meteen opnieuw. Het origineel blijft bewaard.",
+    zones: "Kies de soort (snelheidszone: met %), klik de hoekpunten aan (muur: 2 of meer punten), Klaar of dubbelklik. Daarna: Bewaar & toepassen.",
+    measure: "Sleep van punt A naar punt B. Zoomen: muiswiel of knijpen; in Kijken: slepen = verschuiven.",
+  };
+  function setMode(m) {
+    mode = m;
+    document.querySelectorAll(".btn.mode").forEach(function (b) { b.classList.toggle("active", b.dataset.mode === m); });
+    document.getElementById("routeBar").style.display = m === "route" || route.length ? "" : "none";
+    renderRoutePoints();
+    document.getElementById("zoneBar").style.display = m === "zones" ? "" : "none";
+    document.getElementById("editBar").style.display = m === "edit" ? "" : "none";
+    document.getElementById("modeHint").textContent = MODE_HINT[m];
+    canvas.style.cursor = m === "view" ? "grab" : "crosshair";
+    if (m === "measure" && measure) showMeasure();
+    if (typeof draw === "function") draw();
+  }
+  document.querySelectorAll(".btn.mode").forEach(function (b) {
+    b.addEventListener("click", function () {
+      // the measure icon on the map toggles: a second click = back to Kijken
+      setMode(b.dataset.mode === "measure" && mode === "measure" ? "view" : b.dataset.mode);
+    });
+  });
+  setMode("view");
+
+  function eventWorld(ev) {
+    var r = canvas.getBoundingClientRect();
+    var cx = (ev.clientX - r.left) * canvas.width / r.width;
+    var cy = (ev.clientY - r.top) * canvas.height / r.height;
+    return toWorld(cx, cy);
+  }
+  function dragYaw() {
+    var dx = drag.x2 - drag.x, dy = drag.y2 - drag.y;
+    if (Math.hypot(dx, dy) > 0.08) return Math.atan2(dy, dx);
+    // no drag: face away from where the robot comes from
+    var from = mode === "route" && route.length ? route[route.length - 1] : robot;
+    if (from) return Math.atan2(drag.y - from.y, drag.x - from.x);
+    return 0;
+  }
+
+  // ---- zoom / pan / measure ----
+  // Wheel or pinch = zoom around that point, drag in "Kijken" = pan,
+  // "Passend" = whole map again. "Meten": drag from A to B.
+  var pointers = {}, pinch = null, pan = null, measure = null, measuring = false;
+  function canvasXY(ev) {
+    var r = canvas.getBoundingClientRect();
+    return [(ev.clientX - r.left) * canvas.width / r.width, (ev.clientY - r.top) * canvas.height / r.height];
+  }
+  function clampView() {
+    view.z = Math.min(Math.max(view.z, 1), 16);
+    view.px = Math.min(0, Math.max(view.px, canvas.width * (1 - view.z)));
+    view.py = Math.min(0, Math.max(view.py, canvas.height * (1 - view.z)));
+  }
+  function zoomAt(cx, cy, z) {
+    z = Math.min(Math.max(z, 1), 16);
+    view.px = cx - (cx - view.px) * z / view.z;
+    view.py = cy - (cy - view.py) * z / view.z;
+    view.z = z;
+    clampView();
+    draw();
+  }
+  canvas.addEventListener("wheel", function (ev) {
+    if (!map) return;
+    ev.preventDefault();
+    var c = canvasXY(ev);
+    zoomAt(c[0], c[1], view.z * Math.exp(-ev.deltaY * 0.0015));
+  }, { passive: false });
+  document.getElementById("zoomIn").addEventListener("click", function () { zoomAt(canvas.width / 2, canvas.height / 2, view.z * 1.5); });
+  document.getElementById("zoomOut").addEventListener("click", function () { zoomAt(canvas.width / 2, canvas.height / 2, view.z / 1.5); });
+  document.getElementById("zoomFit").addEventListener("click", function () { view = { z: 1, px: 0, py: 0 }; draw(); });
+
+  function pinchState() {
+    var ids = Object.keys(pointers), a = pointers[ids[0]], b = pointers[ids[1]];
+    return { d: Math.hypot(a[0] - b[0], a[1] - b[1]), mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2 };
+  }
+
+  canvas.addEventListener("pointerdown", function (ev) {
+    if (!map) return;
+    pointers[ev.pointerId] = canvasXY(ev);
+    canvas.setPointerCapture(ev.pointerId);
+    if (Object.keys(pointers).length === 2) {   // second finger: pinch instead
+      drag = null; pan = null; measuring = false;
+      pinch = pinchState();
+      draw();
+      return;
+    }
+    var c = pointers[ev.pointerId];
+    if (mode === "view") { pan = { cx: c[0], cy: c[1], px: view.px, py: view.py }; return; }
+    var w = toWorld(c[0], c[1]);
+    if (mode === "zones") { zoneCur.push([w[0], w[1]]); zoneDirty = true; zoneUi(); draw(); return; }
+    if (mode === "edit") { editStart(); editPaint(w); painting = true; return; }
+    if (mode === "measure") { measure = { x: w[0], y: w[1], x2: w[0], y2: w[1] }; measuring = true; draw(); return; }
+    drag = { x: w[0], y: w[1], x2: w[0], y2: w[1] };
+    draw();
+  });
+  canvas.addEventListener("pointermove", function (ev) {
+    if (!(ev.pointerId in pointers)) return;
+    pointers[ev.pointerId] = canvasXY(ev);
+    if (pinch && Object.keys(pointers).length === 2) {
+      var n = pinchState();
+      view.px += n.mx - pinch.mx; view.py += n.my - pinch.my;
+      zoomAt(n.mx, n.my, view.z * n.d / Math.max(pinch.d, 1));
+      pinch = n;
+      return;
+    }
+    var c = pointers[ev.pointerId];
+    if (pan) {
+      view.px = pan.px + c[0] - pan.cx; view.py = pan.py + c[1] - pan.cy;
+      clampView(); draw();
+      return;
+    }
+    var w = toWorld(c[0], c[1]);
+    if (painting) { editPaint(w); return; }
+    if (measuring) { measure.x2 = w[0]; measure.y2 = w[1]; showMeasure(); draw(); return; }
+    if (!drag) return;
+    drag.x2 = w[0]; drag.y2 = w[1];
+    draw();
+  });
+  function pointerEnd(ev) {
+    delete pointers[ev.pointerId];
+    if (pinch) { if (Object.keys(pointers).length < 2) pinch = null; return; }
+    if (pan) { pan = null; return; }
+    if (painting) { painting = false; return; }
+    if (measuring) { measuring = false; showMeasure(); draw(); return; }
+    if (!drag) return;
+    if (ev.type === "pointercancel") { drag = null; draw(); return; }
+    var pose = { x: drag.x, y: drag.y, yaw: dragYaw() };
+    var dragged = Math.hypot(drag.x2 - drag.x, drag.y2 - drag.y) > 0.08;
+    drag = null;
+    if (mode === "initialpose") {
+      sendCmd({ cmd: "initialpose", x: pose.x, y: pose.y, yaw: pose.yaw });
+      setMode("view");
+    } else if (mode === "goal") {
+      if (!exploreOk()) { setMode("view"); draw(); return; }
+      goal = pose; route = []; updateRoute();
+      sendCmd(Object.assign({ cmd: "goal", x: pose.x, y: pose.y, yaw: pose.yaw }, algo()));
+      setMode("view");
+    } else if (mode === "route") {
+      if (!dragged) pose.free = true;   // no heading chosen: nav_web_node faces the travel direction
+      route.push(pose); updateRoute();
+    }
+    draw();
+  }
+  canvas.addEventListener("pointerup", pointerEnd);
+  canvas.addEventListener("pointercancel", pointerEnd);
+
+  function measureText() {
+    var dx = measure.x2 - measure.x, dy = measure.y2 - measure.y;
+    return Math.hypot(dx, dy).toFixed(2) + " m  (dx " + dx.toFixed(2) + ", dy " + dy.toFixed(2) + ", " +
+      Math.round(Math.atan2(dy, dx) * 180 / Math.PI) + "\u00b0)";
+  }
+  function showMeasure() {
+    if (measure) document.getElementById("modeHint").textContent = "Gemeten: " + measureText();
+  }
+  function drawMeasure() {
+    if (!measure || mode !== "measure") return;
+    var dpr = window.devicePixelRatio || 1;
+    var a = toCanvas(measure.x, measure.y), b = toCanvas(measure.x2, measure.y2);
+    ctx.save();
+    ctx.setLineDash([6 * dpr, 4 * dpr]);
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 2 * dpr;
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = "#fff";
+    [a, b].forEach(function (p) { ctx.beginPath(); ctx.arc(p[0], p[1], 3.5 * dpr, 0, 2 * Math.PI); ctx.fill(); });
+    var label = Math.hypot(measure.x2 - measure.x, measure.y2 - measure.y).toFixed(2) + " m";
+    ctx.font = "bold " + (12 * dpr) + "px sans-serif";
+    var tw = ctx.measureText(label).width, mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2 - 10 * dpr;
+    ctx.fillStyle = "#000b"; ctx.fillRect(mx - tw / 2 - 4 * dpr, my - 12 * dpr, tw + 8 * dpr, 16 * dpr);
+    ctx.fillStyle = "#fff"; ctx.fillText(label, mx - tw / 2, my);
+    ctx.restore();
+  }
+
+  var ACTIONS = [["", "rij door"], ["wait:5", "wacht 5 s"], ["wait:10", "wacht 10 s"], ["wait:30", "wacht 30 s"],
+                 ["beep", "piep"], ["photo", "foto"], ["spin", "360\u00b0 draaien"], ["hold", "wacht op Verder"]];
+  function actionMark(a) {
+    if (!a) return "";
+    if (a.indexOf("wait:") === 0) return " " + a.slice(5) + "s";
+    return " " + ({ beep: "\u266a", photo: "foto", spin: "\u27f3", hold: "\u23f8" }[a] || "");
+  }
+  function renderRoutePoints() {
+    var box = document.getElementById("routePoints");
+    box.style.display = route.length && (mode === "route" || route.some(function (p) { return p.action; })) ? "" : "none";
+    box.innerHTML = '<span class="sub">Bij punt:</span>' + route.map(function (p, i) {
+      return '<label class="sub">' + (i + 1) + ' <select data-pt="' + i + '">' + ACTIONS.map(function (a) {
+        return '<option value="' + a[0] + '"' + ((p.action || "") === a[0] ? " selected" : "") + ">" + a[1] + "</option>";
+      }).join("") + "</select></label>";
+    }).join("");
+    box.querySelectorAll("select").forEach(function (sel) {
+      sel.addEventListener("change", function () {
+        var p = route[+sel.dataset.pt];
+        if (sel.value) p.action = sel.value; else delete p.action;
+        draw();
+      });
+    });
+  }
+  function updateRoute() {
+    renderRoutePoints();
+    document.getElementById("routeCount").textContent = route.length + (route.length === 1 ? " punt" : " punten");
+    document.getElementById("routeGo").disabled = route.length === 0;
+    document.getElementById("routeBar").style.display = mode === "route" || route.length ? "" : "none";
+  }
+  updateRoute();
+  document.getElementById("routeGo").addEventListener("click", function () {
+    if (!route.length || !exploreOk()) return;
+    goal = null;
+    sendCmd(Object.assign({ cmd: "route", poses: route, loop: document.getElementById("routeLoop").checked,
+                            via_tolerance: routeViaLoose.checked ? "ruim" : null }, algo()));
+    setMode("view");
+  });
+  document.getElementById("routeLoop").addEventListener("change", draw);
+  document.getElementById("routeUndo").addEventListener("click", function () { route.pop(); updateRoute(); draw(); });
+  document.getElementById("routeClear").addEventListener("click", function () { route = []; updateRoute(); draw(); });
+  document.getElementById("cancelBtn").addEventListener("click", function () { sendCmd({ cmd: "cancel" }); });
+  document.getElementById("pauseBtn").addEventListener("click", function () { sendCmd({ cmd: "pause" }); });
+  document.getElementById("resumeBtn").addEventListener("click", function () { sendCmd({ cmd: "resume" }); });
+  // Exploring sends its own goals to the same Nav2: nav_web_node pauses it for ours
+  function exploreOk() {
+    return !(navStatus && navStatus.explore === "running") ||
+      confirm("Verkennen loopt en stuurt zelf doelen naar Nav2.\n\nVerkennen pauzeren en jouw doel/route rijden?\n(Daarna: 'Verkennen hervatten'.)");
+  }
+  document.getElementById("exploreResumeBtn").addEventListener("click", function () { sendCmd({ cmd: "explore_resume" }); });
+
+  // ---- launch buttons (same services as system.html) ----
+  document.querySelectorAll("[data-launch]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var name = btn.dataset.launch;
+      btn.disabled = true;
+      setLaunchMsg("...");
+      new ROSLIB.Service({ ros: ros, name: "/launch/" + name, serviceType: "std_srvs/srv/Trigger" })
+        .callService(new ROSLIB.ServiceRequest({}), function (r) {
+          btn.disabled = false;
+          setLaunchMsg((r.success ? "OK: " : "Fout: ") + r.message);
+          if (r.success && name.indexOf("stop") === 0) { plan = []; draw(); }
+        }, function (err) { btn.disabled = false; setLaunchMsg("Fout: " + err); });
+    });
+  });
+
+  // robot pose goes stale when TF stops (e.g. navigation stopped)
+  setInterval(function () {
+    if (robot && Date.now() - robot.t > 3000) { robot = null; document.getElementById("nsPose").textContent = "--"; draw(); }
+    // map shown but no pose: with Navigation, AMCL still needs the initial pose
+    document.getElementById("poseHint").style.display =
+      map && !robot && lastLaunch && lastLaunch.navigation ? "" : "none";
+  }, 1000);
+
+  // ---- Teleop on Navigatie (bijsturen) ----
+  // Same topic and speeds as Rijden (localStorage teleopLin / teleopAng).
+  var padEl = document.getElementById("navPad"), padBtn = document.getElementById("navPadBtn");
+  [["up", "up"], ["left", "left"], ["right", "right"], ["down", "down"]].forEach(function (p) {
+    padEl.querySelector("." + p[0]).innerHTML = fxIcon(p[1], 22, 2.5);
+  });
+  padEl.querySelector(".stop").innerHTML = fxIcon("square", 18);
+  var teleTopic = new ROSLIB.Topic({ ros: ros, name: "/cmd_vel_web", messageType: "geometry_msgs/msg/TwistStamped" });
+  var teleDir = null, teleTimer = null;
+  function teleTwist(dir) {
+    var v = parseFloat(lsGet("teleopLin", "0.12")), a = parseFloat(lsGet("teleopAng", "1.0"));
+    return { header: { frame_id: "base_link" },
+             twist: { linear: { x: dir === "fwd" ? v : dir === "back" ? -v : 0, y: 0, z: 0 },
+                      angular: { x: 0, y: 0, z: dir === "left" ? a : dir === "right" ? -a : 0 } } };
+  }
+  function teleStart(dir) {
+    if (dir === "stop") { teleStop(); return; }
+    if (document.body.classList.contains("fx-offline")) return;   // no connection (t80)
+    teleDir = dir;
+    padEl.querySelectorAll("button").forEach(function (b) { b.classList.toggle("active", b.dataset.dir === dir); });
+    teleTopic.publish(new ROSLIB.Message(teleTwist(dir)));
+    if (teleTimer) clearInterval(teleTimer);
+    teleTimer = setInterval(function () { teleTopic.publish(new ROSLIB.Message(teleTwist(teleDir))); }, 150);
+  }
+  function teleStop() {
+    var was = teleDir;
+    teleDir = null;
+    padEl.querySelectorAll("button").forEach(function (b) { b.classList.remove("active"); });
+    if (teleTimer) { clearInterval(teleTimer); teleTimer = null; }
+    // one zero twist so the robot stops now; then twist_mux falls back to Nav2
+    if (was !== null) teleTopic.publish(new ROSLIB.Message(teleTwist("stop")));
+  }
+  padEl.querySelectorAll("button").forEach(function (b) {
+    var dir = b.dataset.dir;
+    b.addEventListener("mousedown", function (e) { e.preventDefault(); e.stopPropagation(); teleStart(dir); });
+    b.addEventListener("touchstart", function (e) { e.preventDefault(); e.stopPropagation(); teleStart(dir); });
+    ["mouseup", "touchend", "touchcancel"].forEach(function (ev) { b.addEventListener(ev, teleStop); });
+    b.addEventListener("mouseleave", function () { if (teleDir === dir) teleStop(); });
+  });
+  ["click", "wheel"].forEach(function (ev) { padEl.addEventListener(ev, function (e) { e.stopPropagation(); }); });
+  var TELE_KEYS = { ArrowUp: "fwd", ArrowDown: "back", ArrowLeft: "left", ArrowRight: "right",
+                    w: "fwd", s: "back", a: "left", d: "right", W: "fwd", S: "back", A: "left", D: "right", " ": "stop" };
+  function teleTyping(e) { return e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName); }
+  document.addEventListener("keydown", function (e) {
+    if (padEl.style.display === "none" || teleTyping(e) || !TELE_KEYS[e.key]) return;
+    e.preventDefault();
+    if (teleDir !== TELE_KEYS[e.key]) teleStart(TELE_KEYS[e.key]);
+  });
+  document.addEventListener("keyup", function (e) {
+    if (padEl.style.display === "none" || teleTyping(e) || !TELE_KEYS[e.key]) return;
+    e.preventDefault(); teleStop();
+  });
+  window.addEventListener("blur", teleStop);
+  // same as Rijden: stop when the tab is hidden or the connection is gone
+  document.addEventListener("visibilitychange", function () { if (document.hidden) teleStop(); });
+  window.addEventListener("pagehide", teleStop);
+  ros.on("close", function () { if (teleDir) teleStop(); });
+  ros.on("fx-offline", function () { if (teleDir) teleStop(); });   // heartbeat lost, socket maybe still open
+  function setPad(on) {
+    padEl.style.display = on ? "grid" : "none";
+    padBtn.classList.toggle("active", on);
+    lsSet(isMaps() ? "mapPad" : "navPad", on ? "1" : "0");
+    if (!on) teleStop();
+    setTimeout(placeSmall, 0);
+  }
+  padBtn.addEventListener("click", function (e) { e.stopPropagation(); setPad(padEl.style.display === "none"); });
+
+  // ---- Mappen / Navigatie: same page, other tools (#mappen) ----
+  function isMaps() { return location.hash === "#mappen"; }
+  var MAPS_MODES = { zones: 1, edit: 1 }, NAV_MODES = { initialpose: 1, goal: 1, route: 1 };
+  function applyView() {
+    var maps = isMaps();
+    document.body.classList.toggle("view-maps", maps);
+    document.body.classList.toggle("view-nav", !maps);
+    if ((maps && NAV_MODES[mode]) || (!maps && MAPS_MODES[mode])) setMode("view");
+    // drive arrows: shown by default in Mappen (driving while mapping), remembered per view
+    setPad(lsGet(maps ? "mapPad" : "navPad", maps ? "1" : "0") === "1");
+    setScan(lsGet(maps ? "mapScan" : "navScan", maps ? "1" : "0") === "1");
+    if (typeof syncFileMap === "function") syncFileMap();
+  }
+  window.addEventListener("hashchange", applyView);
+  applyView();
+
+  // ---- Kaart maken (SLAM, Cartographer) - was on Rijden until 0.19.0 ----
+  var slamBtn = document.getElementById("slamBtn"), saveMapBtn = document.getElementById("saveMapBtn");
+  var mapNameEl = document.getElementById("mapName"), slamMsg = document.getElementById("slamMsg");
+  var slamText = "", slamUntil = 0;
+  function slamSay(t, ms) { slamText = t; slamUntil = Date.now() + (ms || 8000); renderSlam(); }
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+  var d0 = new Date();
+  mapNameEl.value = "kaart_" + d0.getFullYear() + pad2(d0.getMonth() + 1) + pad2(d0.getDate()) + "_" + pad2(d0.getHours()) + pad2(d0.getMinutes());
+  function slamOn() { return !!(lastLaunch && lastLaunch.slam); }
+  function renderSlam() {
+    if (!slamBtn) return;
+    var on = slamOn();
+    slamBtn.innerHTML = fxIcon(on ? "square" : "play", 14) + "<span>" + (on ? "Stop kaart maken" : "Kaart maken") + "</span>";
+    slamBtn.classList.toggle("stop", on);
+    saveMapBtn.disabled = !on; mapNameEl.disabled = !on;
+    slamMsg.textContent = Date.now() < slamUntil ? slamText
+      : on ? "Kaart in opbouw - rij rustig rond, sla op als alles grijs/wit is." : "";
+  }
+  slamBtn.addEventListener("click", function () {
+    var on = slamOn();
+    if (on && !confirm("Kaart maken stoppen? Een niet-opgeslagen kaart is dan weg.")) return;
+    if (!on && lastLaunch && lastLaunch.navigation && !confirm("Navigatie (geopende kaart) stoppen en een nieuwe kaart maken?")) return;
+    slamBtn.disabled = true;
+    slamSay(on ? "stoppen..." : "starten (bringup + Cartographer, ~10 s)...");
+    var go = function () {
+      new ROSLIB.Service({ ros: ros, name: on ? "/launch/stop_slam" : "/launch/slam", serviceType: "std_srvs/srv/Trigger" })
+        .callService(new ROSLIB.ServiceRequest({}), function (r) {
+          slamBtn.disabled = false; slamSay((r.success ? "" : "Fout: ") + r.message);
+          if (r.success && !on) { map = null; }   // the SLAM map replaces the opened map
+        }, function (err) { slamBtn.disabled = false; slamSay("Fout: " + err); });
+    };
+    if (!on && lastLaunch && lastLaunch.navigation) {
+      new ROSLIB.Service({ ros: ros, name: "/launch/stop_navigation", serviceType: "std_srvs/srv/Trigger" })
+        .callService(new ROSLIB.ServiceRequest({}), go, go);
+    } else go();
+  });
+  var slamNavCmd = new ROSLIB.Topic({ ros: ros, name: "/web/nav_cmd", messageType: "std_msgs/msg/String" });
+  saveMapBtn.addEventListener("click", function () {
+    var name = mapNameEl.value.trim();
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(name)) { slamSay("Ongeldige naam - enkel letters, cijfers, - en _"); return; }
+    saveMapBtn.disabled = true;
+    slamSay("kaart '" + name + "' opslaan...");
+    new ROSLIB.Service({ ros: ros, name: "/map_saver/save_map", serviceType: "nav2_msgs/srv/SaveMap" })
+      .callService(new ROSLIB.ServiceRequest({
+        map_topic: "/map", map_url: "/root/turtlebot_state/maps/" + name, image_format: "pgm",
+        map_mode: "trinary", free_thresh: 0.196, occupied_thresh: 0.65,   // 0.196: grey 205 loads as unknown again
+      }), function (r) {
+        saveMapBtn.disabled = !slamOn();
+        if (r.result) {
+          navOptions.publish(new ROSLIB.Message({ data: JSON.stringify({ map: name }) }));
+          slamNavCmd.publish(new ROSLIB.Message({ data: JSON.stringify({ cmd: "zones_adopt", map: name }) }));
+          slamSay("Kaart '" + name + "' opgeslagen en gekozen - stop kaart maken, open ze bij Kaarten of start Navigatie", 20000);
+        } else slamSay("Opslaan mislukt (draait kaart maken wel?)");
+      }, function (err) { saveMapBtn.disabled = !slamOn(); slamSay("Fout: " + err); });
+  });
+  setInterval(renderSlam, 2000);
+  renderSlam();
+
+  // ---- View presets (state used by resize(); buttons wired below) ----
+  var NAV_PIP = { S: 0.22, M: 0.30, L: 0.42 };
+  var navLayout = lsGet("navLayout", "map"), navPip = lsGet("navPipSize", "M");
+
+  // ---- Camera picture-in-picture (Fenix step 2) ----
+  // Only subscribed while visible (~40 KB per frame over wifi); 5 fps.
+  var pipBox = document.getElementById("camPip"), pipImg = document.getElementById("camPipImg");
+  var pipMsg = document.getElementById("camPipMsg"), pipBtn = document.getElementById("camPipBtn");
+  pipBtn.innerHTML = fxIcon("camera", 16);
+  document.getElementById("camPipClose").innerHTML = fxIcon("x", 12, 3);
+  var pipTopic = null, pipOn = lsGet("navPip", "1") === "1", pipSeen = 0, pipStatus = null;
+  function onPipImage(msg) {
+    pipSeen = Date.now();
+    pipImg.src = "data:image/jpeg;base64," + msg.data;
+    pipImg.style.display = "block"; pipMsg.style.display = "none";
+  }
+  function setPip(on) {
+    if (navLayout === "map") { pipOn = on; lsSet("navPip", on ? "1" : "0"); }
+    pipBox.style.display = on ? "block" : "none";
+    if (on) setTimeout(placeSmall, 0);
+    pipBtn.classList.toggle("active", on);
+    if (pipTopic) { pipTopic.unsubscribe(onPipImage); pipTopic = null; }
+    if (on) {
+      pipTopic = new ROSLIB.Topic({ ros: ros, name: "/camera/image_raw/compressed", messageType: "sensor_msgs/msg/CompressedImage",
+                                    compression: "none", throttle_rate: 200, queue_length: 1 });
+      pipTopic.subscribe(onPipImage);
+    }
+  }
+  new ROSLIB.Topic({ ros: ros, name: "/launch_status", messageType: "std_msgs/msg/String", throttle_rate: 2000, queue_length: 1 })
+    .subscribe(function (m) { try { pipStatus = JSON.parse(m.data); } catch (e) {} });
+  setInterval(function () {
+    if (!pipOn || Date.now() - pipSeen < 4000) return;
+    var t = !pipStatus ? "camera..." : !pipStatus.camera_sensor ? "geen camera aangesloten"
+          : !pipStatus.camera_enabled ? "camera uitgeschakeld (aanzetten op Rijden)" : "wachten op beeld...";
+    pipImg.style.display = "none"; pipMsg.style.display = ""; pipMsg.textContent = t;
+  }, 1000);
+  pipBtn.addEventListener("click", function (e) { e.stopPropagation(); setPip(!pipOn); });
+  document.getElementById("camPipClose").addEventListener("click", function (e) { e.stopPropagation(); setPip(false); });
+  ["mousedown", "touchstart", "wheel", "click"].forEach(function (ev) {
+    pipBox.addEventListener(ev, function (e) { e.stopPropagation(); });   // no map goals through the camera window
+  });
+  // as on Rijden: click the small camera = camera big
+  pipBox.addEventListener("click", function (e) {
+    if (navLayout !== "map" || e.target.closest("#camPipClose")) return;
+    navLayout = "cam"; lsSet("navLayout", navLayout); applyNavLayout();
+  });
+  setPip(pipOn);
+
+  document.getElementById("nlySwap").innerHTML = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4L3 8l4 4"/><path d="M3 8h14"/><path d="M17 12l4 4-4 4"/><path d="M21 16H7"/></svg>';
+  document.getElementById("nlySplit").innerHTML = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg>';
+  function applyNavLayout() {
+    wrap.classList.toggle("ly-cam", navLayout === "cam");
+    wrap.classList.toggle("ly-split", navLayout === "split");
+    document.getElementById("nlySplit").classList.toggle("on", navLayout === "split");
+    var ps = document.getElementById("npipSize");
+    ps.textContent = navPip; ps.disabled = navLayout === "split";
+    // camera needed whenever it is shown big or side by side
+    if (navLayout !== "map" && !pipTopic) setPip(true);
+    if (navLayout === "map") setPip(pipOn);
+    canvas.style.width = ""; resize();
+    placeSmall(); setTimeout(placeSmall, 50);
+  }
+  var mapSwap = document.getElementById("mapSwap");
+  mapSwap.innerHTML = fxIcon("fit", 15);
+  window.addEventListener("resize", placeSmall);
+  mapSwap.addEventListener("click", function (e) {
+    e.stopPropagation(); navLayout = "map"; lsSet("navLayout", navLayout); applyNavLayout();
+  });
+  // one swap button: map <-> camera (from side by side: map big)
+  document.getElementById("nlySwap").addEventListener("click", function () {
+    navLayout = navLayout === "map" ? "cam" : "map"; lsSet("navLayout", navLayout);
+    if (navLayout === "map") { pipOn = true; lsSet("navPip", "1"); }
+    applyNavLayout();
+  });
+  document.querySelectorAll("[data-nlayout]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      navLayout = navLayout === b.dataset.nlayout ? "map" : b.dataset.nlayout; lsSet("navLayout", navLayout);
+      if (navLayout === "map") { pipOn = true; lsSet("navPip", "1"); }   // "kaart groot" = with the small camera
+      applyNavLayout();
+    });
+  });
+  document.getElementById("npipSize").addEventListener("click", function () {
+    navPip = navPip === "S" ? "M" : navPip === "M" ? "L" : "S"; lsSet("navPipSize", navPip); applyNavLayout();
+  });
+  applyNavLayout();
+})();
+</script>
+</body>
+</html>

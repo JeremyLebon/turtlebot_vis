@@ -1,0 +1,42 @@
+# twist_mux: kiest welke stuurbron de robot bestuurt. De ingang met de hoogste
+# prioriteit die de laatste `timeout` seconden nog publiceerde, wint; valt ze
+# stil, dan neemt de volgende het over. Uitgang: /cmd_vel_mux -> cmd_vel_guard
+# -> /cmd_vel_out -> turtlebot3_node (remap in turtlebot3_bringup/launch/
+# robot.launch.py).
+#
+#   joystick (F710, teleop_twist_joy)          /cmd_vel_joy   100
+#   statuspagina (webteleop)                   /cmd_vel_web    50
+#   /cmd_vel: Nav2 (ook via Simple Commander),
+#     teleop_keyboard, eigen code van studenten /cmd_vel       10
+#
+# Zo kan de joystick of de webpagina altijd ingrijpen, terwijl studenten
+# gewoon op /cmd_vel blijven publiceren zoals in de standaard-tutorials.
+# Alles geometry_msgs/TwistStamped (Jazzy, zoals de simulatie); Lichtblick-
+# Teleop (Twist) komt via cmd_vel_guard op /cmd_vel_web.
+twist_mux:
+  ros__parameters:
+    use_stamped: true
+    topics:
+      joystick:
+        topic: cmd_vel_joy
+        timeout: 0.5
+        priority: 100
+      web:
+        topic: cmd_vel_web
+        timeout: 0.5
+        priority: 50
+      navigation:
+        topic: cmd_vel
+        timeout: 0.5
+        priority: 10
+
+# cmd_vel_guard (cmd_vel_guard.py): stopt de robot als er `timeout` s geen
+# stuurcommando meer binnenkomt (twist_mux doet dat zelf niet), en begrenst de
+# snelheid. 1,5 s: `ros2 topic pub` publiceert standaard aan 1 Hz.
+# max_linear/max_angular zijn de standaard; wat de docent in Beheer kiest,
+# staat in state/speed_limit.json en gaat voor.
+cmd_vel_guard:
+  ros__parameters:
+    timeout: 1.5
+    max_linear: 0.21
+    max_angular: 2.84

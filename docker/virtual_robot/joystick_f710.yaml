@@ -1,0 +1,30 @@
+# Logitech F710 (XInput-modus, schakelaar achteraan op "X") -> /cmd_vel_joy,
+# de ingang met de hoogste prioriteit van twist_mux (zie twist_mux.yaml).
+# Gestart via de joystick-knop op de statuspagina (launch_control_node).
+#
+#   LB ingedrukt houden   dodemansknop: enkel dan rijdt de robot
+#   RB erbij              sneller (turbo)
+#   linker stick op/neer  vooruit/achteruit
+#   rechter stick l/r     draaien
+#
+# Snelheden binnen de grenzen van een TurtleBot3 burger (0,21 m/s, 2,84 rad/s;
+# op 0,22 m/s weigeren de motoren het commando, t78). De scale-waarden hieronder
+# gelden enkel de eerste seconde: cmd_vel_guard zet scale_* op de sliders van
+# Rijden en scale_*_turbo op het maximum uit Beheer (t76).
+teleop_twist_joy_node:
+  ros__parameters:
+    require_enable_button: true
+    enable_button: 4         # LB
+    enable_turbo_button: 5   # RB
+    axis_linear:
+      x: 1                   # linker stick verticaal
+    scale_linear:
+      x: 0.1
+    scale_linear_turbo:
+      x: 0.21
+    axis_angular:
+      yaw: 3                 # rechter stick horizontaal
+    scale_angular:
+      yaw: 1.0
+    scale_angular_turbo:
+      yaw: 2.0

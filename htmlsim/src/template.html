@@ -789,7 +789,7 @@ const OUT = {
   "/sim/gas_value": "std_msgs/msg/Float32", "/sim/temperature": "sensor_msgs/msg/Temperature", "/sim/humidity": "sensor_msgs/msg/RelativeHumidity", "/sim/illuminance": "sensor_msgs/msg/Illuminance", "/joy": "sensor_msgs/msg/Joy",
 };
 const IN = {   // topic: [type, throttle ms]
-  "/cmd_vel": ["", 0], "/joint_commands": ["sensor_msgs/msg/JointState", 0], "/map": ["nav_msgs/msg/OccupancyGrid", 1000],
+  "/cmd_vel": ["", 0], "/cmd_vel_out": ["geometry_msgs/msg/TwistStamped", 0], "/joint_commands": ["sensor_msgs/msg/JointState", 0], "/map": ["nav_msgs/msg/OccupancyGrid", 1000],
   "/global_costmap/costmap": ["nav_msgs/msg/OccupancyGrid", 1000], "/local_costmap/costmap": ["nav_msgs/msg/OccupancyGrid", 500],
   "/plan": ["nav_msgs/msg/Path", 250], "/local_plan": ["nav_msgs/msg/Path", 250], "/robot_description": ["std_msgs/msg/String", 0],
   "/rosout": ["rcl_interfaces/msg/Log", 0],
@@ -804,7 +804,9 @@ const stamp = () => { const t = sim.simTime, sec = Math.floor(t); return { sec, 
 const Z36 = new Array(36).fill(0), Z9 = new Array(9).fill(0);
 const IMU_COV_G = [4e-6, 0, 0, 0, 4e-6, 0, 0, 0, 4e-6], IMU_COV_A = [4e-4, 0, 0, 0, 4e-4, 0, 0, 0, 4e-4];
 const tfMsg = (p, c, T, st) => ({ header: { stamp: st, frame_id: p }, child_frame_id: c, transform: { translation: T.p, rotation: T.q } });
-let rosCmd = { v: 0, w: 0, t: -1 }, mapOdom = null, wantDescription = false;
+// outCmd: uitgang van twist_mux + cmd_vel_guard van de virtuele robot (`robot virtueel`), zoals de motoren
+// van de echte robot. Komt die binnen, dan rijdt de simulator enkel daarop (anders telde /cmd_vel dubbel).
+let rosCmd = { v: 0, w: 0, t: -1 }, outCmd = { v: 0, w: 0, t: -1, seen: 0 }, mapOdom = null, wantDescription = false;
 function setStatus(kind, text) { $("dot").className = "dot " + kind; $("statusText").textContent = text; }
 
 function advertiseAll() {
@@ -842,6 +844,7 @@ function connect() {
     const t = m.topic, msg = m.msg;
     if (stats[t + " "]) stats[t + " "].n++;
     if (t === "/cmd_vel") { const tw = msg.twist || msg; rosCmd = { v: tw.linear.x, w: tw.angular.z, t: sim.simTime }; cmdState.lastMsg = performance.now(); }
+    else if (t === "/cmd_vel_out") { const tw = msg.twist || msg; outCmd = { v: tw.linear.x, w: tw.angular.z, t: sim.simTime, seen: performance.now() }; }
     else if (t === "/joint_commands") msg.name.forEach((n, i) => {
       const o = sim.robot.byName[n]; if (!o || msg.position[i] == null) return;
       o.target = msg.position[i]; const inp = document.querySelector(`#jointBox input[data-j="${n}"]`); if (inp) inp.value = o.target;
@@ -902,11 +905,16 @@ function odomWorld() {
   const c = Math.cos(odomOrigin.th), s = Math.sin(odomOrigin.th), o = sim.odom;
   return { x: odomOrigin.x + c * o.x - s * o.y, y: odomOrigin.y + s * o.x + c * o.y, th: odomOrigin.th + o.th };
 }
+const virtualRobot = () => outCmd.seen && performance.now() - outCmd.seen < 10000;
 function currentCmd() {
   if (bat.dead) { cmdSrc = "batterij leeg (< 11,0 V): motoren uit"; return { v: 0, w: 0 }; }
   if (keyCmd) { cmdSrc = "toetsenbord"; return keyCmd; }
   if (padCmd) { cmdSrc = "knoppen in beeld"; return padCmd; }
   if (joyCmd) { cmdSrc = "gamepad (LB)"; return joyCmd; }
+  if (virtualRobot()) {
+    if (sim.simTime - outCmd.t < 0.5) { cmdSrc = "virtuele robot (/cmd_vel_out)"; return outCmd; }
+    cmdSrc = "virtuele robot: geen commando"; return { v: 0, w: 0 };
+  }
   if (rosCmd.t >= 0 && sim.simTime - rosCmd.t < 0.5) { cmdSrc = "/cmd_vel"; return rosCmd; }   // time-out in sim-tijd
   cmdSrc = rosCmd.t >= 0 ? "/cmd_vel time-out" : "–"; return { v: 0, w: 0 };
 }
