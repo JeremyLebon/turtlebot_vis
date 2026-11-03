@@ -1,6 +1,6 @@
 {
   "name": "tb3-lite-sim",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "private": true,
   "description": "TurtleBot3 3D-simulator in de browser (Rapier + three.js) met rosbridge-koppeling en automatische taaktests",
   "scripts": {

@@ -390,6 +390,16 @@ camera.up.set(0, 0, 1); camera.position.set(-3.6, -2.4, 2.2);
 camera.layers.enable(1);                                  // laag 1 = hulpweergave, niet voor de robotcamera
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(START.x, START.y, 0.1); controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.49;
+// Zoomgrenzen: zonder minDistance zoomde het scrollwiel tot in het doelpunt (alles binnen near = 0,05,
+// beeld leeg, en terug uitzoomen duurde eindeloos); zonder maxDistance verdween alles achter far = 80 m.
+controls.minDistance = 0.3; controls.maxDistance = 40;
+controls.zoomToCursor = false;
+// Dubbelklik in het 3D-beeld: camera terug naar het standaardbeeld achter de robot
+renderer.domElement.addEventListener("dblclick", () => {
+  if (!controls.enabled) return;   // niet tijdens Startpositie/Doel/Doos zetten
+  const p = sim.truthPose();
+  controls.target.set(p.x, p.y, 0.1); camera.position.set(p.x - 3.6, p.y - 2.4, 2.2); controls.update();
+});
 
 scene.add(new THREE.HemisphereLight(0xffffff, 0x445048, 1.1));
 const sun = new THREE.DirectionalLight(0xffffff, 1.6);
