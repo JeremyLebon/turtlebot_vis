@@ -81,9 +81,8 @@ export ZENOH_CONFIG_OVERRIDE='mode=\"client\";connect/endpoints=[\"tcp/$(robot_h
 # `robot`       opnieuw zoeken
 # `robot <nr>`  vast robotnummer
 # `robot sim`   simulatie (Gazebo in deze container)
-# `robot htmlsim` HTML-simulator in de browser (http://localhost:8080/sim/, rosbridge) +
-#                 de software van de robot: Fenix-pagina op http://localhost:8090 (SLAM,
-#                 Navigatie, zones) - ook de back-up als de echte robots niet werken
+# `robot htmlsim` HTML-simulator in de browser (http://localhost:8080/sim/, rosbridge);
+#                 met `fenix start` ook de virtuele robot (zie hieronder)
 robot() {
     if [ -n "$1" ]; then
         [[ $1 =~ ^([0-9]+|sim|htmlsim)$ ]] || { echo "gebruik: robot [nummer|sim|htmlsim]"; return 1; }
@@ -107,6 +106,27 @@ robot() {
     return 0
 }
 
+# `fenix start|stop`: virtuele robot bij de HTML-simulator - de software van de echte
+# TurtleBot met de Fenix-pagina op http://localhost:8090 (SLAM, Navigatie, zones), de
+# back-up als de echte robots niet werken. Niet automatisch: ~0,4 GB geheugen, en
+# /cmd_vel gaat dan door twist_mux en cmd_vel_guard zoals op de robot.
+fenix() {
+    case $1 in
+        start)
+            [ "$TB_NR" = htmlsim ] || { echo "De virtuele robot werkt enkel met de HTML-simulator: eerst robot htmlsim"; return 1; }
+            setsid /root/virtual_robot_start.sh start < /dev/null
+            local i
+            for i in $(seq 1 30); do (exec 3<>/dev/tcp/127.0.0.1/${VR_PORT:-8090}) 2>/dev/null && break; sleep 0.5; done
+            echo "Virtuele robot gestart. Fenix-pagina: http://localhost:${VR_PORT:-8090} (ook de knop Fenix-pagina in de simulator). Stoppen: fenix stop"
+            ;;
+        stop)
+            /root/virtual_robot_start.sh stop
+            echo "Virtuele robot gestopt."
+            ;;
+        *) echo "gebruik: fenix start|stop"; return 2 ;;
+    esac
+}
+
 # `check`: draait alles en praat de container met de robot? (vis_check.py)
 # Ook vanzelf bij de eerste shell na het starten van de container.
 check() {
@@ -116,8 +136,8 @@ check() {
 
 _robot_banner() {
     if [ "$TB_NR" = htmlsim ]; then
-        echo "HTML-simulator + virtuele robot  (ROS_DOMAIN_ID=0, Zenoh-router en rosbridge in deze container)"
-        echo "Simulator: http://localhost:8080/sim/   Fenix-pagina (SLAM, Navigatie): http://localhost:8090   Lichtblick: http://localhost:8080   Echte robot: robot"
+        echo "HTML-simulator  (ROS_DOMAIN_ID=0, Zenoh-router en rosbridge in deze container)"
+        echo "Simulator: http://localhost:8080/sim/   Lichtblick: http://localhost:8080   Virtuele robot (Fenix-pagina): fenix start   Echte robot: robot"
     elif [ "$TB_NR" = sim ]; then
         echo "Simulatie  (ROS_DOMAIN_ID=0, Zenoh-router in deze container)"
         echo "Gazebo starten: ros2 launch turtlebot3_gazebo turtlebot3_world.launch.py"

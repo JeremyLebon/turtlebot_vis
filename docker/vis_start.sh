@@ -14,7 +14,8 @@
 # Welke robot: automatisch, zie robot_select.sh. Met `robot sim` de
 # simulatie: eigen Zenoh-router, de bridge op simulatietijd en
 # sim_teleop_relay.py voor het Teleop-paneel. `robot htmlsim`: hetzelfde plus
-# rosbridge (ws://localhost:9090) voor de HTML-simulator op /sim/.
+# rosbridge (ws://localhost:9090) voor de HTML-simulator op /sim/. De virtuele
+# robot (Fenix-pagina) start enkel met `fenix start` (robot_select.sh).
 # Logs: /tmp/vis_services/.
 
 LOG=/tmp/vis_services
@@ -103,7 +104,7 @@ PY
         source "$ROBOT_ENV"
         SIM=false
         stop_bridges    # restjes van een vorige ronde: één bridge per poort
-        # virtuele robot (software van de robot, ~0,3 GB) enkel bij de HTML-simulator
+        # virtuele robot (software van de robot, ~0,4 GB, `fenix start`) enkel bij de HTML-simulator
         [ "$NR" = htmlsim ] || /root/virtual_robot_start.sh stop
         if [ "$NR" = sim ] || [ "$NR" = htmlsim ]; then
             SIM=true
@@ -111,8 +112,7 @@ PY
             # Lichtblick-Teleop: bij de HTML-simulator doet cmd_vel_guard dat, zoals op de robot
             [ "$NR" = htmlsim ] || python3 /root/sim_teleop_relay.py >> "$LOG/sim_teleop_relay.log" 2>&1 &
             if [ "$NR" = htmlsim ]; then
-                echo "$(date +%T) virtuele robot start: Fenix-pagina op http://localhost:${VR_PORT:-8090}"
-                /root/virtual_robot_start.sh start
+                # virtuele robot (Fenix-pagina): niet automatisch (~0,4 GB), enkel met `fenix start`
                 # HTML-simulator (http://localhost:8080/sim/) praat via rosbridge
                 echo "$(date +%T) rosbridge start op ws://localhost:9090"
                 ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9090 \

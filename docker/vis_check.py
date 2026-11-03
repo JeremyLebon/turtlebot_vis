@@ -197,9 +197,13 @@ def main():
                 line(OK if rb else BAD, "rosbridge", "ws://localhost:9090" + ("" if rb else
                      " luistert niet - zie /tmp/vis_services/rosbridge.log (of: robot %s)" % nr))
             if html:
-                vr = http_ok("http://127.0.0.1:%s/" % os.environ.get("VR_PORT", "8090"))
-                line(OK if vr else BAD, "Fenix-pagina", "virtuele robot http://localhost:%s" % os.environ.get("VR_PORT", "8090")
-                     + ("" if vr else " antwoordt niet - zie /tmp/vis_services/vr_*.log (of: robot htmlsim)"))
+                port = os.environ.get("VR_PORT", "8090")
+                if subprocess.run(["pgrep", "-f", "status_page_server.py"], capture_output=True).returncode != 0:
+                    line(OK, "Fenix-pagina", "virtuele robot niet gestart (enkel nodig als back-up: fenix start)")
+                else:
+                    vr = http_ok("http://127.0.0.1:%s/" % port)
+                    line(OK if vr else BAD, "Fenix-pagina", "virtuele robot http://localhost:%s" % port
+                         + ("" if vr else " antwoordt niet - zie /tmp/vis_services/vr_*.log (of: fenix stop; fenix start)"))
             try:
                 ros_checks(sim, html)
             except Exception as exc:     # never a traceback for the student

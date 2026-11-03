@@ -805,7 +805,7 @@ const stamp = () => { const t = sim.simTime, sec = Math.floor(t); return { sec, 
 const Z36 = new Array(36).fill(0), Z9 = new Array(9).fill(0);
 const IMU_COV_G = [4e-6, 0, 0, 0, 4e-6, 0, 0, 0, 4e-6], IMU_COV_A = [4e-4, 0, 0, 0, 4e-4, 0, 0, 0, 4e-4];
 const tfMsg = (p, c, T, st) => ({ header: { stamp: st, frame_id: p }, child_frame_id: c, transform: { translation: T.p, rotation: T.q } });
-// outCmd: uitgang van twist_mux + cmd_vel_guard van de virtuele robot (`robot virtueel`), zoals de motoren
+// outCmd: uitgang van twist_mux + cmd_vel_guard van de virtuele robot (`fenix start`), zoals de motoren
 // van de echte robot. Komt die binnen, dan rijdt de simulator enkel daarop (anders telde /cmd_vel dubbel).
 let rosCmd = { v: 0, w: 0, t: -1 }, outCmd = { v: 0, w: 0, t: -1, seen: 0 }, mapOdom = null, wantDescription = false;
 function setStatus(kind, text) { $("dot").className = "dot " + kind; $("statusText").textContent = text; }

@@ -4,8 +4,9 @@
 #   ./start.sh             starten, check, shell in de container
 #   ./start.sh --no-shell  enkel starten en check
 #   ./start.sh --pull      eerst de nieuwste image ophalen (internet nodig)
-#   ./start.sh --htmlsim   HTML-simulator: http://localhost:8080/sim/ (thuis, huiswerk), met de
-#                          Fenix-pagina van de virtuele robot op http://localhost:8090
+#   ./start.sh --htmlsim   HTML-simulator: http://localhost:8080/sim/ (thuis, huiswerk)
+#   ./start.sh --fenix     HTML-simulator + virtuele robot: Fenix-pagina op http://localhost:8090
+#                          (SLAM, Navigatie; back-up als de echte robots niet werken)
 #   ./start.sh --sim       Gazebo-simulatie in de container
 #
 # Met de laptop op de wifi van de robot (TB-AP-<nr>). Verlaat de shell met
@@ -14,14 +15,15 @@
 set -e
 cd "$(dirname "$0")"
 
-OPEN_SHELL=true PULL=false MODE=
+OPEN_SHELL=true PULL=false MODE= FENIX=false
 for arg in "$@"; do
     case $arg in
         --no-shell) OPEN_SHELL=false ;;
         --pull) PULL=true ;;
         --htmlsim) MODE=htmlsim ;;
+        --fenix) MODE=htmlsim FENIX=true ;;
         --sim) MODE=sim ;;
-        -h|--help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "onbekende optie: $arg (zie ./start.sh --help)"; exit 1 ;;
     esac
 done
@@ -42,6 +44,10 @@ if [ -n "$MODE" ]; then
     if [ "$MODE" = htmlsim ]; then
         echo "HTML-simulator starten (rosbridge)..."
         docker exec turtlebot-vis bash -c 'for i in $(seq 1 40); do (exec 3<>/dev/tcp/127.0.0.1/9090) 2>/dev/null && exit 0; sleep 0.5; done' || true
+    fi
+    if $FENIX; then
+        echo "Virtuele robot starten..."
+        docker exec turtlebot-vis bash -ic "fenix start" 2>/dev/null | tail -1 || true
     fi
 fi
 docker exec $TTY turtlebot-vis bash -ic check || true

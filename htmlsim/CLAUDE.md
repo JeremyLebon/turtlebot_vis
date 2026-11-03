@@ -76,7 +76,7 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
   `setPointerCapture` na het registreren van de knop en in try (gooit bij nagebootste klikken).
 - **LDS-02-preset:** `LIDAR.nRange = [220, 230]`: elke scan een willekeurig aantal punten, zoals de echte lidar.
 - **Geen toestelherkenning:** toestel-ID en browser-/computervingerafdruk zijn eruit (GDPR, 23-10); niet terugzetten.
-- **Virtuele robot (`robot htmlsim`, Fenix-pagina op :8090):** de simulator abonneert ook `/cmd_vel_out` (uitgang van twist_mux + cmd_vel_guard van de
+- **Virtuele robot (`fenix start` bij `robot htmlsim`, of `./start.sh --fenix`; Fenix-pagina op :8090):** de simulator abonneert ook `/cmd_vel_out` (uitgang van twist_mux + cmd_vel_guard van de
   robotsoftware in turtlebot-vis). Komt daar iets binnen (laatste 10 s), dan rijdt hij enkel daarop, zoals de motoren van de echte robot;
   `/cmd_vel` gaat dan via twist_mux (prioriteiten, snelheidslimiet); een Twist-script rijdt nog rechtstreeks (gaat niet door twist_mux).
   De opdrachten blijven `/cmd_vel` meten. Knop Fenix-pagina zodra :8090 antwoordt.

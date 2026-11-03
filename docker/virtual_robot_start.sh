@@ -1,5 +1,5 @@
 #!/bin/bash
-# Virtuele robot (`robot htmlsim`): de software van de echte TurtleBot - statuspagina
+# Virtuele robot (`fenix start` bij `robot htmlsim`): de software van de echte TurtleBot - statuspagina
 # (http://localhost:8090), knoppen Bringup/SLAM/Navigatie, kaarten, zones, twist_mux en
 # cmd_vel_guard - op de laptop, met de HTML-simulator (http://localhost:8080/sim/) als
 # hardware. Back-up voor als de robots niet werken. De bestanden komen uit turtlebot_docker
@@ -7,7 +7,8 @@
 # simulatietijd.
 #
 #   virtual_robot_start.sh start | stop
-# Gestart en gestopt door vis_start.sh bij het wisselen van modus. Logs: /tmp/vis_services/vr_*.log
+# Gestart met `fenix start` (robot_select.sh, enkel bij `robot htmlsim`), gestopt met `fenix stop`
+# en door vis_start.sh bij het wisselen naar een andere modus. Logs: /tmp/vis_services/vr_*.log
 # Kaarten en instellingen: ~/ros2_ws/virtuele_robot (blijft bewaard).
 
 LOG=/tmp/vis_services
