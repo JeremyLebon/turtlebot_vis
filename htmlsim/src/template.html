@@ -830,7 +830,7 @@ function connect() {
     setStatus("on", "Verbonden met " + url);
     advertiseAll();
     send({ op: "advertise_service", service: "/sound", type: "turtlebot3_msgs/srv/Sound" });
-    for (const [t, [type, thr]] of Object.entries(IN)) if (t !== "/robot_description" && t !== "/cmd_vel") send({ op: "subscribe", topic: t, type, throttle_rate: thr, queue_length: 1 });
+    for (const [t, [type, thr]] of Object.entries(IN)) if (t !== "/robot_description" && t !== "/cmd_vel") send({ op: "subscribe", topic: t, type, throttle_rate: thr, queue_length: t === "/rosout" ? 100 : 1 });   // /rosout: info + warn tegelijk mogen niet wegvallen
     cmdStart();
     send({ op: "subscribe", topic: "/tf", type: OUT["/tf"], queue_length: 5 });
     setTimeout(publishStatic, 300);
