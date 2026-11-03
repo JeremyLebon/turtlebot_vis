@@ -37,7 +37,9 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
 - **Odometrie:** `params.odomSource` "truth" (standaard, zoals de Gazebo diff-drive-plugin) of "wheels" (encoders,
   met straalfout L/R). `/ground_truth` = echte pose t.o.v. de startpose, frame `sim_world`.
 - **Tijd:** `/clock` uit de simulatie; alle time-outs (cmd_vel 0,5 s, versheid 0,3 s) in sim-tijd, niet in wandtijd.
-  Bij een verborgen tabblad stopt `requestAnimationFrame` en dus ook de sim-tijd.
+  Bij een verborgen tabblad stopt `requestAnimationFrame`; dan tikt een worker-timer (`hiddenTick`, 20 ms) de simulatie
+  verder zonder renderen (camera pauzeert). Zonder die timer bevroor de sim-tijd zodra de Fenix-pagina of Lichtblick
+  in een ander tabblad openging: SLAM en Nav2 hingen, de robot bleef staan.
 - **Scan "geen echo":** 0.0 (echte LDS) of inf (Gazebo). inf gaat als `Infinity` in de JSON (rosbridge/Python accepteert dat).
 - **Kaartlagen:** OccupancyGrid als DataTexture, geplaatst via `map → odom` uit `/tf` (zonder throttle subscriben).
   Lagen op 8/14/20 mm met polygonOffset; camera-near 0,05 (anders z-fighting met de vloer).

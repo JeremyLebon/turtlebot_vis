@@ -1045,6 +1045,24 @@ function tick(now) {
   }
   render(); requestAnimationFrame(tick);
 }
+// Verborgen tabblad (bv. de Fenix-pagina of Lichtblick in een ander tabblad): dan stopt
+// requestAnimationFrame en bevroor de simulatie (geen /clock, /scan, /odom: SLAM en Nav2 hingen).
+// Een timer in een worker wordt niet afgeremd zoals setInterval op de pagina: physics en topics
+// lopen door, zonder renderen (de camera pauzeert).
+let hiddenWorker = null;
+function hiddenTick() {
+  const now = performance.now();
+  acc += Math.min(0.1, (now - lastReal) / 1000); lastReal = now;
+  while (acc >= sim.DT) { acc -= sim.DT; if (!paused) simStep(); }
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && !hiddenWorker) {
+    try {
+      hiddenWorker = new Worker(URL.createObjectURL(new Blob(["setInterval(() => postMessage(0), 20)"], { type: "text/javascript" })));
+      hiddenWorker.onmessage = hiddenTick;
+    } catch (e) { hiddenWorker = null; }
+  } else if (!document.hidden && hiddenWorker) { hiddenWorker.terminate(); hiddenWorker = null; }
+});
 // Link naar /geheugen.html, enkel in turtlebot-vis (/sim/), niet als artifact. Eigen tabblad via
 // window.open, zodat de knop Terug daar het tabblad sluit en de simulatie niet herstart.
 if (location.pathname.startsWith("/sim")) {
