@@ -393,7 +393,18 @@ controls.target.set(START.x, START.y, 0.1); controls.enableDamping = true; contr
 // Zoomgrenzen: zonder minDistance zoomde het scrollwiel tot in het doelpunt (alles binnen near = 0,05,
 // beeld leeg, en terug uitzoomen duurde eindeloos); zonder maxDistance verdween alles achter far = 80 m.
 controls.minDistance = 0.3; controls.maxDistance = 40;
-controls.zoomToCursor = false;
+// Eigen scrolzoom: OrbitControls 0.160 deelt door (devicePixelRatio | 0), dat is 0 bij browserzoom < 100 %
+// (pixelverhouding < 1): dan sprong elke scrolstap naar de kleinste of grootste afstand.
+controls.enableZoom = false;
+renderer.domElement.addEventListener("wheel", e => {
+  if (!controls.enabled) return;
+  e.preventDefault();
+  const px = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);   // regels/pagina's → pixels
+  const steps = Math.max(-5, Math.min(5, px / 100));                                // ~1 stap per muisklik
+  const off = camera.position.clone().sub(controls.target);
+  const d = Math.max(controls.minDistance, Math.min(controls.maxDistance, off.length() * Math.pow(0.9, -steps)));
+  camera.position.copy(controls.target).add(off.setLength(d)); controls.update();
+}, { passive: false });
 // Dubbelklik in het 3D-beeld: camera terug naar het standaardbeeld achter de robot
 renderer.domElement.addEventListener("dblclick", () => {
   if (!controls.enabled) return;   // niet tijdens Startpositie/Doel/Doos zetten

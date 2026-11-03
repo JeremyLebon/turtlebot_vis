@@ -88,6 +88,9 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
 
 ## Valkuilen
 
+- Scrolzoom is eigen code (`controls.enableZoom = false`): OrbitControls 0.160 deelt door `devicePixelRatio | 0`,
+  0 bij browserzoom < 100 %, dan sprong de camera per scrolstap naar min/max (of verdween alles). Grenzen 0,3-40 m.
+
 - Geen `prevRobot`, `keys`, enz. gebruiken vóór hun declaratie op module-niveau tijdens het opstarten (TDZ):
   functies die bij het laden lopen (applyTheme, buildWorldMeshes) mogen alleen al gedeclareerde `const`s gebruiken.
 - `deg` bestaat al in template.html (stringformatter); in tasks.js heet de omzetting `r2d`.
