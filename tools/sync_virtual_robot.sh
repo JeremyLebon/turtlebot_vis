@@ -19,9 +19,11 @@ done
 cp "$SRC/docker/cartographer_headless.launch.py" "$SRC/docker/sim_bringup.launch.py" "$DST/launch/"
 cp "$SRC/docker/twist_mux.yaml" "$SRC/docker/joystick_f710.yaml" "$DST/"
 cp -r "$SRC/status_page" "$DST/status_page"
+cp "$SRC/LICENSE" "$DST/LICENSE"   # Fenix: Lebtec, alle rechten voorbehouden
 # TurtleBot3-fork van de robot: Nav2 zonder rviz2, Cartographer-instellingen van de robot
 for p in turtlebot3_navigation2 turtlebot3_cartographer; do
     cp -r "$SRC/turtlebot3/$p" "$DST/turtlebot3/$p"
 done
+cp "$SRC/turtlebot3/LICENSE" "$DST/turtlebot3/LICENSE"   # Apache 2.0 (ROBOTIS)
 git -C "$SRC" log -1 --format='turtlebot_docker %h (%cs) %s' > "$DST/BRON"
 echo "overgenomen: $(cat "$DST/BRON")"
