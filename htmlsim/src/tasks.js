@@ -55,18 +55,19 @@ function onServiceResponse(m) { const r = pendingCalls.get(m.id); if (r) { pendi
 /* ---- opname: simulatorbeeld (samengesteld canvas) of volledig scherm ---- */
 const comp = document.createElement("canvas"), compCtx = comp.getContext("2d");
 const recorder = { mr: null, chunks: [], source: "", stream: null, started: 0, label: "" };
+// Enkel MP4 (H.264): Toledo speelt .webm niet af. Chrome en Edge (vanaf 126) nemen MP4 op, Firefox niet.
 function pickMime() {
-  for (const m of ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm", "video/mp4"]) if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
+  for (const m of ["video/mp4;codecs=avc1.42E01F", "video/mp4;codecs=avc1", "video/mp4"]) if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
   return "";
 }
 async function startRecording(source, label) {
   if (recorder.mr) return true;
+  const mime = pickMime(); if (!mime) { $("taskMsg").textContent = "Deze browser kan geen MP4 opnemen - gebruik Chrome of Edge (Toledo speelt .webm niet af)."; return false; }
   let stream;
   try {
     if (source === "screen") stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false });
     else { const c = renderer.domElement, s = Math.min(1, 1280 / c.width); comp.width = Math.round(c.width * s); comp.height = Math.round(c.height * s); stream = comp.captureStream(25); }
   } catch (e) { $("taskMsg").textContent = "Opname niet gestart: " + e.message; return false; }
-  const mime = pickMime(); if (!mime) { $("taskMsg").textContent = "Deze browser kan niet opnemen (MediaRecorder ontbreekt)."; return false; }
   Object.assign(recorder, { mr: new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2.5e6 }), chunks: [], source, stream, started: Date.now(), label });
   recorder.mr.ondataavailable = ev => ev.data.size && recorder.chunks.push(ev.data);
   stream.getVideoTracks()[0].addEventListener("ended", () => { if (recorder.mr) $("recToggle").click(); });   // gebruiker stopt delen
@@ -495,7 +496,7 @@ async function startTask() {
   if (activeRun) return;
   lastResult = null; $("taskOut").hidden = true;
   const src = $("recSrc").value;
-  if (src !== "none" && !recorder.mr) { const ok = await startRecording(src, def.label); if (!ok && src === "screen") return; }
+  if (src !== "none" && !recorder.mr) { const ok = await startRecording(src, def.label); if (!ok) return; }
   activeRun = new Run({ ...def, id });
   setTimeout(() => frameCameraFor(id), 50); $("pad").classList.add("testing");
   $("taskStart").disabled = true; $("taskStop").disabled = false; $("taskMsg").textContent = "Test loopt…"; renderChecks();
@@ -524,7 +525,7 @@ async function finishRun(reason) {
     gestart: run.wall0.toISOString(), beeindigd: new Date().toISOString(), sim_tijd_s: [r4(run.t0), r4(sim.simTime)],
     studentnode: run.node || null, resultaat: passed ? "geslaagd" : "niet geslaagd",
     controles: run.checks.map(c => ({ controle: c.label, ok: c.s === "ok", detail: c.detail, ...(c.optional ? { info: true } : {}) })),
-    opname: video ? { bestand: base + (video.mime.includes("mp4") ? ".mp4" : ".webm"), bron: video.source, bytes: video.bytes, seconden: video.seconds, sha256: video.sha256 } : null,
+    opname: video ? { bestand: base + ".mp4", bron: video.source, bytes: video.bytes, seconden: video.seconds, sha256: video.sha256 } : null,
     verloop: run.events.slice(0, 400),
   };
   const inhoud = JSON.stringify(body);
@@ -541,7 +542,7 @@ $("taskStop").onclick = () => finishRun("gestopt");
 $("dlReport").onclick = () => lastResult && saveBlob(new Blob([JSON.stringify(lastResult.report, null, 1)], { type: "application/json" }), lastResult.base + ".json");
 $("dlVideo").onclick = () => lastResult?.video && saveBlob(lastResult.video.blob, lastResult.report.rapport.opname.bestand);
 $("recToggle").onclick = async () => {
-  if (recorder.mr) { const v = await stopRecording(); if (v) saveBlob(v.blob, `opname_${fileTag()}_${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}.${v.mime.includes("mp4") ? "mp4" : "webm"}`); }
+  if (recorder.mr) { const v = await stopRecording(); if (v) saveBlob(v.blob, `opname_${fileTag()}_${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}.mp4`); }
   else startRecording($("recSrc").value === "none" ? "sim" : $("recSrc").value, "vrije opname");
 };
 $("invalidAs").onchange = () => { invalidMode = $("invalidAs").value; };
