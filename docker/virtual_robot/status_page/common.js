@@ -1182,6 +1182,13 @@ function initHeader(ros, page) {
       msg = "Batterij " + batt.v.toFixed(1) + " V - de OpenCR heeft de motoren uitgeschakeld (onder 11,0 V). Opladen of batterij wisselen.";
     else if (lfresh && launchSt.bringup && launchSt.robot_node === false)
       msg = "De OpenCR antwoordt niet (batterij leeg? USB?) - turtlebot3_node start vanzelf opnieuw zodra hij weer antwoordt.";
+    else if (lfresh && launchSt.sim_restart && launchSt.sim_restart.stopped.length &&
+             Date.now() / 1000 - launchSt.sim_restart.t < 60 &&
+             !launchSt.sim_restart.stopped.some(function (n) { return launchSt[n]; }))
+      // virtuele robot: simulatorpagina herladen -> tijd terug naar 0 (launch_control_node)
+      msg = "De simulator is herstart (pagina herladen of andere wereld): " +
+        launchSt.sim_restart.stopped.map(function (n) { return n === "slam" ? "SLAM" : "Navigatie"; }).join(" en ") + " gestopt. Start opnieuw" +
+        (launchSt.sim_restart.stopped.indexOf("slam") >= 0 ? " - een kaart die nog niet bewaard was, is verloren." : ".");
     alertEl.textContent = msg;
     alertEl.style.display = msg ? "" : "none";
   }

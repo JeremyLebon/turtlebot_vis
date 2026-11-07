@@ -1064,7 +1064,18 @@ class LaunchControlNode(Node):
         self.create_timer(5.0, self._usb_idle_check)
 
         self.monitor = MonitorCommands(MONITOR_BASE, socket.gethostname()) if MONITOR_BASE else None
-        self.rb_watchdog = RosbridgeWatchdog(lambda m: self.get_logger().warn(m))
+        # Virtuele robot: rosbridge is die van turtlebot-vis (vis_start.sh) en ook
+        # de verbinding van de simulator - niet herstarten (dat brak de simulator
+        # en de pagina ~20 s af als deze node even traag antwoordde)
+        self.rb_watchdog = None if SIM else RosbridgeWatchdog(lambda m: self.get_logger().warn(m))
+        if SIM:
+            # Simulatorpagina herladen of andere wereld: de tijd begint weer bij 0.
+            # Cartographer crasht daarop, AMCL/Nav2 rekenen met oude transforms -
+            # dus SLAM en Navigatie stoppen en dat op de pagina melden.
+            from rosgraph_msgs.msg import Clock
+            self.sim_t = None
+            self.sim_restart = None   # {"t", "stopped"}
+            self.create_subscription(Clock, "/clock", self._on_clock, 10)
         if self.monitor:
             # in the executor thread, so commands run like the service callbacks
             self.create_timer(0.3, self._monitor_tick)
@@ -1541,6 +1552,19 @@ class LaunchControlNode(Node):
             set_usb_auto(bool(new["auto"]))
             self.usb_last_use = time.monotonic()
 
+    def _on_clock(self, msg):
+        t = msg.clock.sec + msg.clock.nanosec * 1e-9
+        jumped = self.sim_t is not None and t < self.sim_t - 1.0
+        self.sim_t = t
+        if not jumped:
+            return
+        stopped = [n for n in ("slam", "navigation") if self._is_running(n)]
+        self.get_logger().warn("simulator herstart (tijd terug naar %.1f s) - gestopt: %s"
+                               % (t, ", ".join(stopped) or "niets"))
+        self.sim_restart = {"t": time.time(), "stopped": stopped}
+        if stopped:   # stoppen duurt enkele seconden: niet in de executor (status loopt door)
+            threading.Thread(target=self._terminate, args=(stopped,), daemon=True).start()
+
     def _is_running(self, name):
         return len(_pgrep_pids(LAUNCH_PATTERNS[name])) > 0
 
@@ -1570,8 +1594,11 @@ class LaunchControlNode(Node):
         status["desktop"] = self.desktop
         status["monitor_control"] = monitor_control()
         status["image_channel"] = image_channel()
-        status["rosbridge_watchdog"] = {"restarts": self.rb_watchdog.restarts,
-                                        "last": self.rb_watchdog.last_restart}
+        if self.rb_watchdog:
+            status["rosbridge_watchdog"] = {"restarts": self.rb_watchdog.restarts,
+                                            "last": self.rb_watchdog.last_restart}
+        if SIM:
+            status["sim_restart"] = self.sim_restart
         try:
             status["projects_running"] = self._project_running()
         except Exception:

@@ -63,6 +63,7 @@ from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from rcl_interfaces.msg import Parameter, ParameterType, ParameterValue
 from rcl_interfaces.srv import SetParameters
 from rclpy.action import ActionClient
+from rclpy.clock import Clock, ClockType
 from rclpy.node import Node
 from rclpy.time import Time
 from sensor_msgs.msg import CompressedImage
@@ -429,7 +430,7 @@ class NavWebNode(Node):
         self.last_tick_map = running_map()   # no wipe for a run already going at start
         self.zones = []
         self.zones_busy = False
-        self.create_timer(5.0, self._zones_tick)
+        self.create_timer(5.0, self._zones_tick, clock=Clock(clock_type=ClockType.STEADY_TIME))
         self.param_client = self.create_client(SetParameters, "/controller_server/set_parameters")
         self.tolerance = None   # last (xy, yaw) set on the goal checker
         self.cmd_seq = 0        # +1 per command from the page
@@ -442,8 +443,11 @@ class NavWebNode(Node):
         self.tf_buffer = None
         self.tf_listener = None
         self.last_pose_sub = 0.0
-        self.create_timer(0.2, self._publish_pose)
-        self.create_timer(0.5, self._publish_status)
+        # wall clock: on simulation time (virtual robot) the timer would stop
+        # after a jump back in time (simulator page reloaded)
+        self.last_ros_t = None
+        self.create_timer(0.2, self._publish_pose, clock=Clock(clock_type=ClockType.STEADY_TIME))
+        self.create_timer(0.5, self._publish_status, clock=Clock(clock_type=ClockType.STEADY_TIME))
         self.get_logger().info("nav_web_node ready: /web/nav_cmd -> Nav2, /web/nav_status, /web/robot_pose")
 
     # ---- robot pose ------------------------------------------------------
@@ -460,6 +464,13 @@ class NavWebNode(Node):
             self.tf_buffer = None
         if self.tf_buffer is None:
             return
+        # Buffer() without a node does not see the /clock: after the simulator
+        # restarts at t=0 it kept the old, newer transforms -> frozen robot arrow
+        ros_t = self.get_clock().now().nanoseconds
+        if self.last_ros_t is not None and ros_t < self.last_ros_t - 1e9:
+            self.get_logger().warn("tijd sprong terug (simulator herstart) - TF-buffer gewist")
+            self.tf_buffer.clear()
+        self.last_ros_t = ros_t
         for child, pub in ((BASE_FRAME, self.pose_pub), (ODOM_FRAME, self.map_odom_pub)):
             if pub.get_subscription_count() == 0:
                 continue

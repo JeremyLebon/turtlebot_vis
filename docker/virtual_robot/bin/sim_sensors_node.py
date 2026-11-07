@@ -96,6 +96,7 @@ class SimSensors(Node):
         self.last_t = None
         self.pose = None            # (x, y, yaw, frame)
         self.out = None             # last published values (camera overlay)
+        self.map_seen = 0.0         # monotonic time of the last map -> base_footprint
 
         # map_server latches its map, Cartographer publishes it again and again
         for durability in (DurabilityPolicy.TRANSIENT_LOCAL, DurabilityPolicy.VOLATILE):
@@ -187,7 +188,13 @@ class SimSensors(Node):
             try:
                 t = self.tf.lookup_transform(frame, "base_footprint", Time())
             except tf2_ros.TransformException:
+                # map -> odom (AMCL/Cartographer) even weg: op de kaart blijven
+                # met de laatste positie i.p.v. naar odom te springen (andere hotspots)
+                if frame == "map" and self.pose and self.pose[3] == "map" and time.monotonic() - self.map_seen < 10:
+                    return True
                 continue
+            if frame == "map":
+                self.map_seen = time.monotonic()
             q = t.transform.rotation
             yaw = math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z))
             self.pose = (t.transform.translation.x, t.transform.translation.y, yaw, frame)
