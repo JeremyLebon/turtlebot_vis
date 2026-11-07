@@ -13,7 +13,7 @@ DST=$(dirname "$0")/../docker/virtual_robot
 rm -rf "$DST"; mkdir -p "$DST/bin" "$DST/launch" "$DST/turtlebot3"
 for f in launch_control_node.py nav_web_node.py system_info_node.py cmd_vel_guard.py status_page_server.py \
          map_bundle.py fenix_services.py fenix_admin.py projects_lib.py camera_params.py beep.py \
-         sim_bringup_node.py camera_present.sh; do
+         sim_bringup_node.py sim_sensors_node.py camera_present.sh; do
     cp "$SRC/docker/$f" "$DST/bin/"
 done
 cp "$SRC/docker/cartographer_headless.launch.py" "$SRC/docker/sim_bringup.launch.py" "$DST/launch/"
