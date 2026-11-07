@@ -154,6 +154,91 @@ def get_wifi(iface):
     return None, None
 
 
+NET_AVG_S = 10         # s: wifi traffic averaged over this window (net_*_kbps_avg)
+SIOCGIWFREQ = 0x8B05   # wireless extensions: current frequency of the interface
+
+
+def wifi_band(freq_mhz):
+    """(band, channel) for a wifi frequency in MHz."""
+    if freq_mhz is None:
+        return None, None
+    if freq_mhz < 3000:
+        return "2.4 GHz", 14 if freq_mhz == 2484 else (freq_mhz - 2407) // 5
+    if freq_mhz < 5950:
+        return "5 GHz", (freq_mhz - 5000) // 5
+    return "6 GHz", (freq_mhz - 5950) // 5
+
+
+# nl80211 channel width enum -> MHz (80P80 counted as 160)
+NL80211_WIDTH_MHZ = {0: 20, 1: 20, 2: 40, 3: 80, 4: 160, 5: 160, 6: 5, 7: 10, 13: 320}
+
+
+def _nl_attrs(data):
+    attrs, i = {}, 0
+    while i + 4 <= len(data):
+        ln, typ = struct.unpack_from("HH", data, i)
+        if ln < 4:
+            break
+        attrs[typ & 0x3FFF] = data[i + 4:i + ln]
+        i += (ln + 3) & ~3
+    return attrs
+
+
+def _genl(sock, family, cmd, attrs, seq):
+    payload = b"".join(struct.pack("HH", 4 + len(v), t) + v + b"\0" * (-len(v) % 4) for t, v in attrs)
+    msg = struct.pack("BBH", cmd, 1, 0) + payload
+    sock.send(struct.pack("IHHII", 16 + len(msg), family, 1, seq, 0) + msg)   # NLM_F_REQUEST
+    data = sock.recv(65536)
+    ln, typ = struct.unpack_from("IH", data, 0)
+    if typ == 2:            # NLMSG_ERROR
+        raise OSError("netlink error %d" % struct.unpack_from("i", data, 16)[0])
+    return _nl_attrs(data[20:ln])
+
+
+def get_wifi_channel_info(iface):
+    """(freq_mhz, width_mhz, center_mhz) of iface via nl80211 (generic
+    netlink, no `iw` needed), or (None, None, None)."""
+    try:
+        s = socket.socket(socket.AF_NETLINK, socket.SOCK_RAW, 16)   # NETLINK_GENERIC
+        try:
+            s.settimeout(1)
+            s.bind((0, 0))
+            fam = _genl(s, 0x10, 3, [(2, b"nl80211\0")], 1)          # CTRL_CMD_GETFAMILY
+            fid = struct.unpack("H", fam[1][:2])[0]
+            a = _genl(s, fid, 5, [(3, struct.pack("I", socket.if_nametoindex(iface)))], 2)  # GET_INTERFACE
+        finally:
+            s.close()
+        freq = struct.unpack("I", a[38][:4])[0] if 38 in a else None
+        width = NL80211_WIDTH_MHZ.get(struct.unpack("I", a[159][:4])[0]) if 159 in a else None
+        center = struct.unpack("I", a[160][:4])[0] if 160 in a else None
+        return freq, width, center
+    except (OSError, KeyError, struct.error):
+        return None, None, None
+
+
+def get_wifi_freq(iface):
+    """Frequency in MHz the wifi interface uses now, or None: the kernel's
+    wireless ioctl (cfg80211's wext compat, no extra tools), else `iw`."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            # struct iwreq: ifname[16] + struct iw_freq {s32 m; s16 e; u8 i; u8 flags}
+            res = fcntl.ioctl(s.fileno(), SIOCGIWFREQ, struct.pack("16s16x", iface.encode()[:15]))
+        finally:
+            s.close()
+        m, e = struct.unpack_from("ih", res, 16)
+        if e > 0 or m >= 1000:      # e == 0 and m < 1000 is a channel number, not a frequency
+            return int(round(m * 10 ** e / 1e6))
+    except OSError:
+        pass
+    try:
+        out = subprocess.run(["iw", "dev", iface, "link"], capture_output=True, text=True, timeout=2).stdout
+        m = re.search(r"freq:\s*(\d+)", out)
+        return int(float(m.group(1))) if m else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
 # --- Pi health -------------------------------------------------------------
 # vcgencmd isn't in this (Ubuntu) image, but it is only a thin wrapper around
 # the VideoCore mailbox: the same "gencmd" request over /dev/vcio (available
@@ -281,6 +366,43 @@ def get_zenoh():
     except Exception:
         pass
     return listening, sorted(clients)
+
+
+# Open web pages: every Fenix page keeps one rosbridge websocket (common.js),
+# so established connections to 9090 from another host = open pages; the
+# devices are the different IPs on any of the web ports (the status page
+# itself, rosbridge, the web terminal).
+WEB_PORTS = {"pages": 9090, "http": 8080, "terminal": 7681}
+
+
+def get_web_clients():
+    conns = {k: 0 for k in WEB_PORTS}
+    ips = set()
+    port_key = {p: k for k, p in WEB_PORTS.items()}
+    for path in ("/proc/net/tcp", "/proc/net/tcp6"):
+        try:
+            with open(path) as f:
+                next(f)
+                for line in f:
+                    fields = line.split()
+                    local, remote, state = fields[1], fields[2], fields[3]
+                    k = port_key.get(int(local.rsplit(":", 1)[1], 16))
+                    if not k or state != "01":   # ESTABLISHED
+                        continue
+                    addr = remote.rsplit(":", 1)[0]
+                    if len(addr) == 8:
+                        ip = socket.inet_ntoa(struct.pack("<I", int(addr, 16)))
+                    elif addr.startswith("0000000000000000FFFF0000"):   # IPv4-mapped IPv6
+                        ip = socket.inet_ntoa(struct.pack("<I", int(addr[24:], 16)))
+                    else:
+                        ip = addr
+                    if ip.startswith("127.") or ip == "00000000000000000000000001000000":
+                        continue
+                    conns[k] += 1
+                    ips.add(ip)
+        except Exception:
+            pass
+    return {"pages": conns["pages"], "devices": len(ips), "terminal": conns["terminal"]}
 
 
 # --- Diagnostics -------------------------------------------------------------
@@ -652,6 +774,9 @@ class SystemInfoNode(Node):
         self.cpu_max = {}   # label -> max percent seen
         self.prev_net_bytes = read_net_bytes(IFACE)
         self.prev_net_time = time.monotonic()
+        # (time, rx_bytes, tx_bytes) of the last NET_AVG_S seconds: average
+        # traffic, steadier than the rate between two publishes (2 s)
+        self.net_samples = collections.deque()
         # Slower diagnostics (ping takes ~1 s, dmesg/D-Bus calls) in a
         # background thread so the 2 s publish timer never blocks.
         self.slow = {}
@@ -725,6 +850,21 @@ class SystemInfoNode(Node):
             n += 1
             time.sleep(15)
 
+    def net_kbps_avg(self):
+        """Average (rx_kbps, tx_kbps) over the last NET_AVG_S seconds, or (None, None)."""
+        now = time.monotonic()
+        rx, tx = read_net_bytes(IFACE)
+        if rx is None:
+            return None, None
+        self.net_samples.append((now, rx, tx))
+        while len(self.net_samples) > 2 and now - self.net_samples[1][0] >= NET_AVG_S:
+            self.net_samples.popleft()
+        t0, rx0, tx0 = self.net_samples[0]
+        dt = now - t0
+        if dt <= 0 or rx < rx0 or tx < tx0:     # first sample, or counters reset
+            return None, None
+        return round((rx - rx0) * 8 / 1000 / dt, 1), round((tx - tx0) * 8 / 1000 / dt, 1)
+
     def net_kbps(self):
         """Returns (rx_kbps, tx_kbps) since the last call, or (None, None)."""
         now_bytes = read_net_bytes(IFACE)
@@ -774,7 +914,11 @@ class SystemInfoNode(Node):
         mem_percent, mem_total_mb, mem_used_mb = get_mem_info()
         cpu_cur, cpu_min, cpu_max = self.per_cpu_percent()
         net_rx_kbps, net_tx_kbps = self.net_kbps()
+        net_rx_avg, net_tx_avg = self.net_kbps_avg()
         wifi_dbm, wifi_quality = get_wifi(IFACE)
+        wifi_freq, wifi_width, wifi_center = get_wifi_channel_info(IFACE)
+        wifi_freq = wifi_freq or get_wifi_freq(IFACE)
+        wifi_band_name, wifi_channel = wifi_band(wifi_freq)
         disk_total_gb, disk_free_gb = get_disk()
         zenoh_router, zenoh_clients = get_zenoh()
         data = {
@@ -793,8 +937,16 @@ class SystemInfoNode(Node):
             "mem_used_mb": mem_used_mb,
             "net_rx_kbps": net_rx_kbps,
             "net_tx_kbps": net_tx_kbps,
+            "net_rx_kbps_avg": net_rx_avg,     # average over NET_AVG_S
+            "net_tx_kbps_avg": net_tx_avg,
+            "net_avg_s": NET_AVG_S,
             "wifi_signal_dbm": wifi_dbm,
             "wifi_quality_percent": wifi_quality,
+            "wifi_freq_mhz": wifi_freq,
+            "wifi_band": wifi_band_name,
+            "wifi_channel": wifi_channel,
+            "wifi_width_mhz": wifi_width,
+            "wifi_center_mhz": wifi_center,
             "uptime_seconds": get_uptime_seconds(),
             "cpu_temp_c": get_cpu_temp(),
             "throttled": get_throttled(),
@@ -819,6 +971,7 @@ class SystemInfoNode(Node):
             "disk_free_gb": disk_free_gb,
             "zenoh_router": zenoh_router,
             "zenoh_clients": zenoh_clients,
+            "web_clients": get_web_clients(),
             "devices": get_devices(),
             # build arg IMAGE_VERSION (datum + git-commit), zie Dockerfile
             "image_version": os.environ.get("TURTLEBOT_IMAGE_VERSION"),

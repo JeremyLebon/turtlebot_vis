@@ -60,6 +60,12 @@ function startAgeTicker(ids) {
   }, 1000);
 }
 
+// Band, channel and channel width of the robot's wifi (system_info_node, 1.3.0+;
+// width 1.4.0+), e.g. "5 GHz kanaal 36, 20 MHz"
+function wifiChannel(d) {
+  return d.wifi_band ? d.wifi_band + " kanaal " + d.wifi_channel + (d.wifi_width_mhz ? ", " + d.wifi_width_mhz + " MHz" : "") : "";
+}
+
 // Wifi signal from /system_info (wifi_signal_dbm, wifi_quality_percent).
 // Thresholds: > -60 dBm good, -60..-70 fair, < -70 poor (video/teleop
 // start to suffer below roughly -70 dBm).
@@ -73,7 +79,7 @@ function showWifi(el, d) {
   }
   el.textContent = dbm + " dBm" +
     (d.wifi_quality_percent !== null && d.wifi_quality_percent !== undefined
-      ? " (" + d.wifi_quality_percent + "%)" : "");
+      ? " (" + d.wifi_quality_percent + "%)" : "") + (wifiChannel(d) ? ", " + wifiChannel(d) : "");
   el.style.color = dbm > -60 ? "var(--green)" : (dbm >= -70 ? "var(--yellow)" : "var(--red)");
 }
 
@@ -300,6 +306,7 @@ var FENIX_ICONS = {
   square: '<rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor"/>',
   save: '<path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/>',
   camera: '<path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="4"/>',
+  sensor: '<path d="M14 14.8V4a2 2 0 0 0-4 0v10.8a4 4 0 1 0 4 0z"/><path d="M12 9v8M18 6a5 5 0 0 1 0 6M20.5 3.5a9 9 0 0 1 0 11"/>',
   gamepad: '<path d="M6 11h4M8 9v4M15 12h.01M18 10h.01"/><path d="M17.3 5H6.7a4 4 0 0 0-4 3.6L2 15a3 3 0 0 0 5.5 1.7L9 15h6l1.5 1.7A3 3 0 0 0 22 15l-.7-6.4A4 4 0 0 0 17.3 5z"/>',
   bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
   fwd: '<path d="M5 12h14M13 6l6 6-6 6"/>',
@@ -966,7 +973,7 @@ function initHeader(ros, page) {
   }
 
   // Running launches as chips, each with its own stop button
-  var CHIP_NAMES = { bringup: "bringup", slam: "kaart maken (SLAM)", navigation: "navigatie", camera: "camera", joystick: "joystick" };
+  var CHIP_NAMES = { bringup: "bringup", slam: "kaart maken (SLAM)", navigation: "navigatie", camera: "camera", joystick: "joystick", sensors: "sensoren (sim)" };
   function renderChips() {
     var fresh = Date.now() - launchSt.t < 6000;
     var items = [];
@@ -1229,6 +1236,7 @@ function initHeader(ros, page) {
       var ping = pingState(d);
       w.setAttribute("data-tip", dbm === null || dbm === undefined ? "Wifi: geen signaal" :
         "Wifi " + dbm + " dBm" + (d.wifi_quality_percent != null ? " (" + d.wifi_quality_percent + "%)" : "") +
+        (wifiChannel(d) ? "\n" + wifiChannel(d) + " breed (" + d.wifi_freq_mhz + " MHz)" : "") +
         "\nIP " + (d.ip || "--") + "\nNaar de AP: " + ping.text);
 
       // Pi temperature (+ power and fan in the tooltip)

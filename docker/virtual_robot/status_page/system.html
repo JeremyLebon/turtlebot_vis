@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Fenix · Info</title>
 <script src="roslib.min.js"></script>
-<script src="common.js?v=29"></script>
+<script src="common.js?v=30"></script>
 <script src="qrcode.js"></script>
 <style>
   :root {
@@ -582,7 +582,8 @@
           : (d.mem_percent !== undefined ? d.mem_percent + "%" : "--");
       document.getElementById("sysNet").textContent =
         (d.net_rx_kbps !== undefined && d.net_rx_kbps !== null)
-          ? "↓ " + d.net_rx_kbps + " kbps  ↑ " + d.net_tx_kbps + " kbps"
+          ? "↓ " + d.net_rx_kbps + " kbps  ↑ " + d.net_tx_kbps + " kbps" +
+            (d.net_rx_kbps_avg != null ? "  (gemiddeld " + d.net_avg_s + " s: ↓ " + d.net_rx_kbps_avg + "  ↑ " + d.net_tx_kbps_avg + ")" : "")
           : "--";
       showWifi(document.getElementById("sysWifi"), d);
       document.getElementById("sysUptime").textContent = formatUptime(d.uptime_seconds);

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Turtlebot Navigatie</title>
 <script src="roslib.min.js"></script>
-<script src="common.js?v=29"></script>
+<script src="common.js?v=30"></script>
 <style>
   :root {
     --bg: #14161a;
@@ -1844,6 +1844,15 @@
       pipTopic.subscribe(onPipImage);
     }
   }
+  // Tab in the background: no camera frames for the picture-in-picture
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) { if (pipTopic) { pipTopic.unsubscribe(onPipImage); pipTopic = null; } }
+    else if (pipBox.style.display === "block" && !pipTopic) {
+      pipTopic = new ROSLIB.Topic({ ros: ros, name: "/camera/image_raw/compressed", messageType: "sensor_msgs/msg/CompressedImage",
+                                    compression: "none", throttle_rate: 200, queue_length: 1 });
+      pipTopic.subscribe(onPipImage);
+    }
+  });
   new ROSLIB.Topic({ ros: ros, name: "/launch_status", messageType: "std_msgs/msg/String", throttle_rate: 2000, queue_length: 1 })
     .subscribe(function (m) { try { pipStatus = JSON.parse(m.data); } catch (e) {} });
   setInterval(function () {

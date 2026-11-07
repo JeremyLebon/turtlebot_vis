@@ -4,6 +4,7 @@
 # real terminal). Exposes a fixed set of std_srvs/Trigger services - no
 # arbitrary commands, just start/stop of specific known launch files.
 import glob
+import http.client
 import http.server
 import json
 import os
@@ -42,6 +43,9 @@ FIXED_LAUNCHES = {
     "joystick": ["ros2", "launch", "teleop_twist_joy", "teleop-launch.py",
                  "joy_vel:=cmd_vel_joy", "publish_stamped_twist:=true",
                  "config_filepath:=/root/turtlebot3_ws/joystick_f710.yaml"],
+    # Gesimuleerde externe sensoren + camera (sessie 4, tot de echte er zijn).
+    # Niet onthouden, niet gestopt door "Stop alles" (rijdt niet).
+    "sensors": ["python3", "/usr/local/bin/sim_sensors_node.py"],
 }
 
 # Virtuele robot (turtlebot-vis, `robot virtueel`): dezelfde statuspagina en
@@ -65,6 +69,7 @@ LAUNCH_PATTERNS = {
     # whether started here or by camera_start.sh
     "camera": "camera_ros[/ ]camera_node",
     "joystick": "teleop-launch\\.py|lib/teleop_twist_joy/teleop_node|lib/joy/joy_node",
+    "sensors": "sim_sensors_node\\.py",
 }
 
 if SIM:
@@ -717,7 +722,88 @@ def monitor_control():
 MONITOR_COMMANDS = (["start:" + n for n in MONITOR_LAUNCHES] + ["stop:" + n for n in MONITOR_LAUNCHES] +
                     ["stop_all", "beep", "update", "reboot", "shutdown", "set_pin",
                      # map library on the monitor (map_bundle.py), "arg" = map name
-                     "map_upload", "map_download"])
+                     "map_upload", "map_download",
+                     # wifi load test: send data to the monitor, "arg" = "<test id>:<s>[:<Mbit/s>[:<down>]]"
+                     "wifitest"])
+
+
+def wifitest_start(monitor, cmd_id, arg):
+    """Wifi load test from the fleet monitor, "arg" = "<test id>:<s>[:<Mbit/s>[:<down>]]":
+    send data to <monitor>/wifitest/upload for N seconds (over wlan0, the
+    robot's only way out), as fast as possible (0) or at a fixed rate like a
+    camera stream. With down=1 the robot also reads as much from
+    <monitor>/wifitest/download: the AP then transmits like it would to a
+    student's laptop (every byte crosses the same channel twice). The
+    monitor counts what arrives; robots sending at the same time show how
+    much they slow each other down (same channel = shared airtime)."""
+    try:
+        p = arg.split(":")
+        test_id, secs = p[0], max(3, min(60, int(p[1])))
+        rate = max(0.0, min(100.0, float(p[2]))) if len(p) > 2 else 0.0
+        down = len(p) > 3 and p[3] == "1"
+    except (ValueError, IndexError):
+        monitor.report(cmd_id, "wifitest", False, "ongeldige wifitest: %s" % arg)
+        return
+    u = urllib.parse.urlsplit(MONITOR_BASE)
+    query = urllib.parse.urlencode({"robot": monitor.robot, "id": test_id})
+    # small chunks at a fixed rate (50 per second), else 64 kB
+    chunk = 65536 if not rate else max(1460, min(65536, int(rate * 1e6 / 8 / 50)))
+    got = {"up": 0, "down": 0, "d0": None, "d1": None}
+
+    def pace(t0, n):
+        if rate:
+            time.sleep(max(0.0, t0 + n * 8 / (rate * 1e6) - time.time()))
+
+    def download(t0):
+        try:
+            conn = http.client.HTTPConnection(u.hostname, u.port or 80, timeout=10)
+            conn.request("GET", "/wifitest/download?" + query)
+            r = conn.getresponse()
+            while time.time() - t0 < secs:
+                b = r.read1(chunk) if hasattr(r, "read1") else r.read(chunk)
+                if not b:
+                    break
+                now = time.time()
+                got["d0"] = got["d0"] or now
+                got["down"] += len(b)
+                got["d1"] = now
+                pace(t0, got["down"])
+            conn.close()
+        except (OSError, http.client.HTTPException):
+            pass
+
+    def run():
+        t0 = time.time()
+        th = threading.Thread(target=download, args=(t0,), daemon=True) if down else None
+        if th:
+            th.start()
+        try:
+            conn = http.client.HTTPConnection(u.hostname, u.port or 80, timeout=10)
+            conn.putrequest("POST", "/wifitest/upload?" + query)
+            conn.putheader("Content-Length", str(10 ** 11))   # we stop by closing
+            conn.endheaders()
+            buf = b"\0" * chunk
+            while time.time() - t0 < secs:
+                conn.sock.sendall(buf)
+                got["up"] += len(buf)
+                pace(t0, got["up"])
+            conn.close()
+        except (OSError, http.client.HTTPException) as exc:
+            monitor.report(cmd_id, "wifitest", False, "wifitest mislukt na %.1f MB: %s" % (got["up"] / 1e6, exc))
+            return
+        if th:
+            th.join(timeout=5)
+            try:   # what really arrived (the monitor only knows what it wrote into its buffer)
+                req = urllib.request.Request(MONITOR_BASE + "/wifitest/done", data=json.dumps(
+                    {"robot": monitor.robot, "id": test_id, "down_bytes": got["down"],
+                     "down_s": (got["d1"] or 0) - (got["d0"] or 0)}).encode(), headers={"Content-Type": "application/json"})
+                urllib.request.urlopen(req, timeout=3).read()
+            except Exception:
+                pass
+        dt = time.time() - t0
+        monitor.report(cmd_id, "wifitest", True, "wifitest: ↑ %.1f Mbit/s%s in %d s"
+                       % (got["up"] * 8 / dt / 1e6, ", ↓ %.1f Mbit/s" % (got["down"] * 8 / dt / 1e6) if down else "", secs))
+    threading.Thread(target=run, daemon=True).start()
 
 
 class RosbridgeWatchdog:
@@ -956,7 +1042,7 @@ def zones_count(map_name):
 class LaunchControlNode(Node):
     def __init__(self):
         super().__init__("launch_control_node")
-        for name in ("bringup", "slam", "navigation", "camera", "joystick"):
+        for name in ("bringup", "slam", "navigation", "camera", "joystick", "sensors"):
             self.create_service(Trigger, "/launch/" + name, self._make_start_cb(name))
             self.create_service(Trigger, "/launch/stop_" + name, self._make_stop_one_cb(name))
         self.create_service(Trigger, "/launch/stop_all", self._stop_all_cb)
@@ -1011,7 +1097,7 @@ class LaunchControlNode(Node):
         self.update_pub = self.create_publisher(String, "/system/update_status", 10)
         self.create_timer(2.0, self._publish_update_status)
 
-        self.get_logger().info("launch_control_node ready: /launch/{bringup,slam,navigation,camera,joystick,stop_all}, /system/{reboot,shutdown,update}")
+        self.get_logger().info("launch_control_node ready: /launch/{bringup,slam,navigation,camera,joystick,sensors,stop_all}, /system/{reboot,shutdown,update}")
 
     # ---- aanpassingen -------------------------------------------------------
     def _check_live_params(self):
@@ -1333,6 +1419,9 @@ class LaunchControlNode(Node):
                     resp.success, resp.message = set_admin_pin_hash(str(c.get("arg", "")))
                 elif cmd in ("map_upload", "map_download"):
                     resp.success, resp.message = self._monitor_map(cmd, str(c.get("arg", "")))
+                elif cmd == "wifitest":   # runs in its own thread, reports itself when done
+                    wifitest_start(self.monitor, c.get("id"), str(c.get("arg", "")))
+                    continue
                 elif cmd == "beep":
                     subprocess.Popen(["/usr/local/bin/beep.py", "on"], start_new_session=True,
                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -1731,7 +1820,7 @@ class LaunchControlNode(Node):
     def _stop_all_launches(self, include_camera=False):
         # "Stop alles" is about the robot moving - the camera keeps running
         # unless the Pi is going down (reboot/shutdown).
-        names = [n for n in LAUNCH_PATTERNS if include_camera or n != "camera"]
+        names = [n for n in LAUNCH_PATTERNS if include_camera or n not in ("camera", "sensors")]
         # student projects too (drive_to_tag drives the robot!)
         projects_stopped = self._stop_projects()
         stopped = self._terminate(names)

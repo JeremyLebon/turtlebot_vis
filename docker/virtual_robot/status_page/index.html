@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Fenix · Rijden</title>
 <script src="roslib.min.js"></script>
-<script src="common.js?v=29"></script>
+<script src="common.js?v=30"></script>
 <style>
   :root {
     --bg: #14161a;
@@ -92,6 +92,12 @@
   .dpad .down { grid-column: 2; grid-row: 3; }
   #stageWrap { position: relative; }
   #speedBox { right: 10px; bottom: 10px; width: 250px; }
+  /* gesimuleerde sensoren (sim_sensors_node) */
+  #sensBox { left: 10px; top: 46px; font-size: .78rem; padding: 6px 10px; }
+  #sensBox table { border-collapse: collapse; }
+  #sensBox td { padding: 1px 6px 1px 0; white-space: nowrap; }
+  #sensBox td.v { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+  #sensBox .sim { color: var(--yellow); font-weight: 700; font-size: .7rem; letter-spacing: .04em; }
   .speed { display: grid; grid-template-columns: 22px minmax(0, 1fr) 66px; align-items: center; gap: 8px; }
   .speed input { width: 100%; }
   .speed .v { font-size: .78rem; color: var(--muted); text-align: right; }
@@ -140,6 +146,10 @@
       </select>
     </span>
     <span class="grp">
+      <span class="lbl">Sensoren</span>
+      <button class="ib" id="sensToggle" data-tip="Gesimuleerde sensoren aan/uit">--</button>
+    </span>
+    <span class="grp">
       <span class="lbl">Lidar</span>
       <select id="scanRate" aria-label="Lidar-verversing" data-tip="Hoe vaak het lidar-beeld ververst - lager = minder wifi">
         <option value="off">uit</option>
@@ -176,6 +186,8 @@
       <div class="cam-off" id="camOff">camerastatus laden...</div>
       <span class="swap-hint">wissel</span>
     </div>
+
+    <div class="overlay hidden" id="sensBox"></div>
 
     <div class="overlay" id="pad">
       <div class="dpad">
@@ -252,7 +264,7 @@
   new ROSLIB.Topic({ ros: ros, name: "/launch_status", messageType: "std_msgs/msg/String", throttle_rate: 1000, queue_length: 1 })
     .subscribe(function (msg) {
       try { status = JSON.parse(msg.data); } catch (e) { return; }
-      renderCam(); renderJoy(); renderSlam(); renderBringup();
+      renderCam(); renderJoy(); renderSlam(); renderBringup(); renderSens();
     });
   function trigger(name, cb) {
     new ROSLIB.Service({ ros: ros, name: name, serviceType: "std_srvs/srv/Trigger" })
@@ -282,7 +294,12 @@
     camToggle.setAttribute("data-tip", "Camera " + (status.camera_enabled ? "aan" : "uit") + " - klik om " +
       (status.camera_enabled ? "uit" : "aan") + " te zetten (wordt onthouden, ook na een herstart)");
     var text = null;
-    if (!status.camera_sensor) text = "geen camera aangesloten (wordt enkel bij het opstarten van de Pi gedetecteerd)";
+    if (!status.camera_sensor && status.sensors) {
+      if (camRateSel.value === "off") text = "camerabeeld uitgeschakeld op deze pagina";
+      else if (!fresh("camera", 5000)) text = "wachten op het gesimuleerde beeld (bringup nodig)...";
+    }
+    else if (!status.camera_sensor) text = "geen camera aangesloten (wordt enkel bij het opstarten van de Pi gedetecteerd)" +
+      " - of zet de gesimuleerde sensoren aan (Sensoren)";
     else if (!status.camera_enabled) text = "camera uitgeschakeld";
     else if (!status.camera) text = "camera wordt gestart...";
     else if (camRateSel.value === "off") text = "camerabeeld uitgeschakeld op deze pagina";
@@ -317,6 +334,57 @@
   }
   camRateSel.addEventListener("change", function () { lsSet("camRate", camRateSel.value); subscribeCam(); });
   subscribeCam();
+  // Tab in the background or laptop locked: no camera frames over the wifi
+  // (students keep many tabs open; each open page costs ~1,6 Mbit/s at 5 fps)
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) { if (camTopic) { camTopic.unsubscribe(onCamImage); camTopic = null; } }
+    else subscribeCam();
+  });
+
+  // ---- Gesimuleerde sensoren (sessie 4) - /launch/sensors, not remembered ----
+  // sim_sensors_node: temperatuur, vochtigheid, gassen, licht, geluid volgens
+  // de plaats op de kaart, en een camerabeeld als er geen echte camera is.
+  var sensToggle = document.getElementById("sensToggle");
+  var sensBox = document.getElementById("sensBox");
+  sensToggle.innerHTML = fxIcon("sensor");
+  var sens = null, sensT = 0, sensMsg = "";
+  new ROSLIB.Topic({ ros: ros, name: "/sensors/summary", messageType: "std_msgs/msg/String", throttle_rate: 1000, queue_length: 1 })
+    .subscribe(function (msg) {
+      try { sens = JSON.parse(msg.data); sensT = Date.now(); } catch (e) { return; }
+      renderSens();
+    });
+  function sensRow(label, v, unit, dec) {
+    return "<tr><td>" + label + '</td><td class="v">' + (v == null ? "--" : v.toFixed(dec)) + "</td><td>" + unit + "</td></tr>";
+  }
+  function renderSens() {
+    if (!status) return;
+    var on = !!status.sensors;
+    sensToggle.classList.toggle("on", on);
+    sensToggle.setAttribute("data-tip", "Gesimuleerde sensoren " + (on ? "aan" : "uit") + " - klik om " + (on ? "uit" : "aan") +
+      " te zetten\nTopics /sensors/... (temperatuur, vochtigheid, druk, licht, gassen, geluid)" +
+      (status.camera_sensor ? "" : "\nZonder echte camera ook een gesimuleerd camerabeeld"));
+    var live = on && Date.now() - sensT < 4000 && sens;
+    if (!on && !sensMsg) { sensBox.classList.add("hidden"); return; }
+    sensBox.classList.remove("hidden");
+    if (sensMsg) { sensBox.textContent = sensMsg; return; }
+    if (!live) { sensBox.innerHTML = '<span class="sim">SIMULATIE</span> wachten op waarden' + (status.bringup ? "..." : " - start de bringup (odom nodig)"); return; }
+    sensBox.innerHTML = '<span class="sim">SIMULATIE</span><table>' +
+      sensRow("Temperatuur", sens.temperature, "°C", 1) + sensRow("Vochtigheid", sens.humidity, "%", 0) +
+      sensRow("Druk", sens.pressure / 100, "hPa", 1) + sensRow("Licht", sens.illuminance, "lx", 0) +
+      sensRow("CO₂", sens.co2, "ppm", 0) + sensRow("TVOC", sens.tvoc, "ppb", 0) + sensRow("CO", sens.co, "ppm", 1) +
+      sensRow("Geluid", sens.sound, "dB(A)", 0) + "</table>";
+  }
+  sensToggle.addEventListener("click", function () {
+    if (!status) return;
+    sensToggle.disabled = true;
+    sensMsg = "";
+    trigger(status.sensors ? "/launch/stop_sensors" : "/launch/sensors", function (ok, msg) {
+      sensToggle.disabled = false;
+      if (!ok) { sensMsg = msg; setTimeout(function () { sensMsg = ""; renderSens(); }, 8000); }
+      renderSens();
+    });
+  });
+  setInterval(renderSens, 1000);
 
   // ---- Joystick (F710) - /launch/joystick, not remembered ----
   var joyToggle = document.getElementById("joyToggle");
