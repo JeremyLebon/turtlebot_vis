@@ -56,6 +56,7 @@
       <span class="legField" data-kind="heat" hidden><i style="background:#ff7043"></i>warmtebron</span>
       <span class="legField" data-kind="humidity" hidden><i style="background:#4fc3f7"></i>vochtbron</span>
       <span class="legField" data-kind="light" hidden><i style="background:#ffe066"></i>lamp</span>
+      <span class="legField" data-kind="sound" hidden><i style="background:#c77dff"></i>geluidsbron</span>
     </div>
   </section>
 
@@ -107,21 +108,23 @@
           <p class="msg" id="joyMsg">Geen gamepad aangesloten: gebruik de knoppen (ingedrukt houden).</p>
           <p class="hint">Zoals de Logitech F710 op de robot: <code>sensor_msgs/Joy</code>, A = <code>buttons[0]</code>, B = 1, X = 2, Y = 3, LB = 4, RB = 5; linker stick = <code>axes[1]</code> (op = +), rechter stick = <code>axes[3]</code> (links = +). Met <b>LB</b> ingedrukt rijdt de robot met de sticks, zoals op de echte robot. Een gamepad aan je pc werkt ook (druk eerst een knop in).</p>
           <label class="chk"><input type="checkbox" id="fieldsOn" checked> Omgevingssensoren publiceren</label>
-          <p class="hint"><code>/sim/gas_value</code> · <code>/sim/temperature</code> · <code>/sim/humidity</code> · <code>/sim/illuminance</code>: hangen af van de plaats van de robot.</p>
+          <p class="hint"><code>/sensors/temperature</code> · <code>/sensors/humidity</code> · <code>/sensors/pressure</code> · <code>/sensors/illuminance</code> · <code>/sensors/gas/co2</code> · <code>/sensors/gas/tvoc</code> · <code>/sensors/gas/co</code> · <code>/sensors/sound</code>: hangen af van de plaats van de robot, zelfde topics als de gesimuleerde sensoren op de echte robot (sessie 4). De oude <code>/sim/...</code>-topics lopen nog mee.</p>
           <label class="chk"><input type="checkbox" id="fieldsShow"> Bronnen tonen in 3D</label>
           <div class="grid2"><label for="fieldMap">Kaart op de vloer</label><select id="fieldMap">
             <option value="" selected>uit</option>
             <option value="gas">gas</option>
             <option value="heat">temperatuur</option>
             <option value="humidity">vochtigheid</option>
-            <option value="light">licht</option></select></div>
+            <option value="light">licht</option>
+            <option value="sound">geluid</option></select></div>
           <p class="msg" id="fieldMapMsg"></p>
           <div class="grid2"><label for="measMap">Gemeten spoor</label><select id="measMap">
             <option value="" selected>uit</option>
             <option value="gas">gas</option>
             <option value="temp">temperatuur</option>
             <option value="hum">vochtigheid</option>
-            <option value="lux">licht</option></select></div>
+            <option value="lux">licht</option>
+            <option value="snd">geluid</option></select></div>
           <div class="row"><button class="ghost" id="measClear">Spoor wissen</button></div>
           <p class="msg" id="measMsg">Rij rond: elke meting (1× per seconde) wordt een bolletje in de kleur van de waarde, blauw = laag, rood = hoog.</p>
           <div class="hudsel" role="group" aria-label="Meetwaarden in de HUD (linksboven)">
@@ -132,6 +135,7 @@
             <label class="chk"><input type="checkbox" class="hudOpt" data-k="temp" checked> temperatuur</label>
             <label class="chk"><input type="checkbox" class="hudOpt" data-k="hum" checked> vochtigheid</label>
             <label class="chk"><input type="checkbox" class="hudOpt" data-k="lux" checked> licht</label>
+            <label class="chk"><input type="checkbox" class="hudOpt" data-k="snd" checked> geluid</label>
           </div>
           <p class="msg" id="fieldMsg"></p>
         </section>
@@ -808,6 +812,10 @@ const OUT = {
   "/ground_truth": "nav_msgs/msg/Odometry", "/goal_pose": "geometry_msgs/msg/PoseStamped", "/initialpose": "geometry_msgs/msg/PoseWithCovarianceStamped",
   "/student_id": "std_msgs/msg/String",
   "/sensor_state": "turtlebot3_msgs/msg/SensorState", "/battery_state": "sensor_msgs/msg/BatteryState",
+  "/sensors/temperature": "sensor_msgs/msg/Temperature", "/sensors/humidity": "sensor_msgs/msg/RelativeHumidity",
+  "/sensors/pressure": "sensor_msgs/msg/FluidPressure", "/sensors/illuminance": "sensor_msgs/msg/Illuminance",
+  "/sensors/gas/co2": "std_msgs/msg/Float32", "/sensors/gas/tvoc": "std_msgs/msg/Float32", "/sensors/gas/co": "std_msgs/msg/Float32",
+  "/sensors/sound": "std_msgs/msg/Float32", "/sensors/summary": "std_msgs/msg/String",
   "/sim/gas_value": "std_msgs/msg/Float32", "/sim/temperature": "sensor_msgs/msg/Temperature", "/sim/humidity": "sensor_msgs/msg/RelativeHumidity", "/sim/illuminance": "sensor_msgs/msg/Illuminance", "/joy": "sensor_msgs/msg/Joy",
 };
 const IN = {   // topic: [type, throttle ms]
@@ -1126,9 +1134,10 @@ function renderTopics() {
 /* ================= sensoren zoals de echte TurtleBot3 (A) en velden in de wereld (C) ================= */
 // A: /sensor_state (encoders uit de wielhoeken, knoppen SW1/SW2), /battery_state (3S-LiPo, zakt met de
 // gereden afstand), service /sound (piep in de browser). Onder 11,0 V vallen de motoren uit en piept de
-// robot, zoals de OpenCR. C: /sim/gas_value, /sim/temperature, /sim/humidity, /sim/illuminance volgens
-// `fields` in de wereld-JSON ({kind: gas|heat|humidity|light, x, y, strength, sigma}), afhankelijk van de
-// plaats van de robot. Vervangt homework/simulation_sensors.py (28-10).
+// robot, zoals de OpenCR. C: omgevingssensoren op /sensors/... volgens `fields` in de wereld-JSON
+// ({kind: gas|heat|humidity|light|sound, x, y, strength, sigma}), afhankelijk van de plaats van de robot.
+// Zelfde topics, types, basiswaarden en traagheid als sim_sensors_node.py op de robot (turtlebot_docker),
+// zodat code van thuis ongewijzigd op de robot werkt. /sim/... blijft voorlopig mee (oud huiswerk).
 const TICKS = 4096;
 const bat = { q: 1, dist: 0, lastL: null, lastR: null, dead: false, beepAt: 0 };
 const btn = { sw1: false, sw2: false };
@@ -1195,7 +1204,20 @@ function fieldValue(kind, x, y) {
   return v;
 }
 const nextS = { state: 0, bat: 0, field: 0 };
-const sensVals = { gas: null, temp: null, hum: null, lux: null };
+const sensVals = { gas: null, temp: null, hum: null, lux: null, pres: null, tvoc: null, co: null, snd: null };
+// zoals sim_sensors_node.py: basiswaarde, tijdconstante (s, sim-tijd), ruis; gas-veld = CO2 (ppm), TVOC = 0,5 en CO = 0,02 daarvan
+const SENS_BASE = { temp: 21, hum: 0.45, pres: 101325, lux: 350, gas: 450, tvoc: 80, co: 0.5, snd: 38 };
+const SENS_TAU = { temp: 4, hum: 3, pres: 1, lux: 0.3, gas: 2.5, tvoc: 2, co: 2, snd: 0.2 };
+const SENS_NOISE = { temp: 0.08, hum: 0.004, pres: 4, lux: 0.03, gas: 12, tvoc: 8, co: 0.3, snd: 1.2 };   // lux: relatief
+const sensTrue = {}; let sensT = null;
+function sensTargets(x, y) {
+  const gas = fieldValue("gas", x, y), snd = fieldValue("sound", x, y), t = sim.simTime;
+  return { temp: SENS_BASE.temp + fieldValue("heat", x, y), hum: Math.min(1, Math.max(0, SENS_BASE.hum + fieldValue("humidity", x, y))),
+    pres: SENS_BASE.pres + 60 * Math.sin(t / 3600), lux: SENS_BASE.lux + fieldValue("light", x, y),
+    gas: SENS_BASE.gas + gas, tvoc: SENS_BASE.tvoc + 0.5 * gas, co: SENS_BASE.co + 0.02 * gas,
+    // geluid telt logaritmisch op
+    snd: 10 * Math.log10(10 ** (SENS_BASE.snd / 10) + 10 ** ((SENS_BASE.snd + snd) / 10) - 10 ** (SENS_BASE.snd / 10)) };
+}
 // regels voor de HUD (zelfde waarden als op de topics)
 function sensorHud() {
   const on = k => document.querySelector(`.hudOpt[data-k="${k}"]`).checked;
@@ -1204,10 +1226,11 @@ function sensorHud() {
   if (on("bat")) t += `\n${low ? '<span class="bump">' : ""}batterij   ${v.toFixed(2)} V  ${pc} %${bat.dead ? "  LEEG: motoren uit" : ""}${low ? "</span>" : ""}`;
   if (on("enc")) t += `\nencoders   L ${Math.round(wheelPos("L") / (2 * Math.PI) * TICKS)}  R ${Math.round(wheelPos("R") / (2 * Math.PI) * TICKS)}  knop ${(btn.sw1 ? 1 : 0) | (btn.sw2 ? 2 : 0)}`;
   if ($("fieldsOn").checked && sensVals.gas != null) {
-    if (on("gas")) t += `\ngas        ${sensVals.gas.toFixed(0)} ppm`;
-    if (on("temp")) t += `\ntemp       ${sensVals.temp.toFixed(1)} °C`;
+    if (on("gas")) t += `\ngas        CO2 ${sensVals.gas.toFixed(0)} ppm  TVOC ${sensVals.tvoc.toFixed(0)} ppb  CO ${sensVals.co.toFixed(1)} ppm`;
+    if (on("temp")) t += `\ntemp       ${sensVals.temp.toFixed(1)} °C  ${(sensVals.pres / 100).toFixed(1)} hPa`;
     if (on("hum")) t += `\nvochtigh.  ${(sensVals.hum * 100).toFixed(0)} %`;
     if (on("lux")) t += `\nlicht      ${sensVals.lux.toFixed(0)} lux`;
+    if (on("snd")) t += `\ngeluid     ${sensVals.snd.toFixed(0)} dB(A)`;
   }
   return t;
 }
@@ -1229,22 +1252,34 @@ function sensorsStep() {
     $("batRead").textContent = `${volt.toFixed(2)} V · ${Math.round(bat.q * 100)} % · ${bat.dist.toFixed(1)} m gereden` + (bat.dead ? " · LEEG: motoren uit" : "");
   }
   if ($("fieldsOn").checked && t >= nextS.field) {
-    nextS.field = t + 1;
-    const p = sim.truthPose();
-    sensVals.gas = 400 + fieldValue("gas", p.x, p.y) + 8 * gauss();
-    sensVals.temp = 20 + fieldValue("heat", p.x, p.y) + 0.2 * gauss();
-    sensVals.hum = Math.min(1, Math.max(0, 0.45 + fieldValue("humidity", p.x, p.y) + 0.01 * gauss()));
-    sensVals.lux = 150 + fieldValue("light", p.x, p.y) + 5 * gauss();
-    pub("/sim/gas_value", { data: +sensVals.gas.toFixed(1) });
+    nextS.field = t + 0.5;   // 2 Hz, zoals de robot
+    const p = sim.truthPose(), tgt = sensTargets(p.x, p.y);
+    const fresh = sensT == null || t < sensT || t - sensT > 5;   // eerste meting, nieuwe wereld of sensoren net terug aan
+    for (const k in tgt) sensTrue[k] = fresh ? tgt[k] : sensTrue[k] + (tgt[k] - sensTrue[k]) * (1 - Math.exp(-(t - sensT) / SENS_TAU[k]));
+    sensT = t;
+    for (const k in sensTrue) sensVals[k] = Math.max(0, k === "lux" ? sensTrue[k] * (1 + SENS_NOISE[k] * gauss()) : sensTrue[k] + SENS_NOISE[k] * gauss());
+    sensVals.hum = Math.min(1, sensVals.hum);
     addMeasurement();
-    pub("/sim/temperature", { header: { stamp: st, frame_id: "base_link" }, temperature: +sensVals.temp.toFixed(2), variance: 0.04 });
-    pub("/sim/humidity", { header: { stamp: st, frame_id: "base_link" }, relative_humidity: +sensVals.hum.toFixed(3), variance: 0.0001 });
-    pub("/sim/illuminance", { header: { stamp: st, frame_id: "base_link" }, illuminance: +sensVals.lux.toFixed(1), variance: 25 });
+    const hdr = { stamp: st, frame_id: "base_link" }, f32 = v => ({ data: +v.toFixed(3) });
+    pub("/sensors/temperature", { header: hdr, temperature: +sensVals.temp.toFixed(2), variance: SENS_NOISE.temp ** 2 });
+    pub("/sensors/humidity", { header: hdr, relative_humidity: +sensVals.hum.toFixed(4), variance: SENS_NOISE.hum ** 2 });
+    pub("/sensors/pressure", { header: hdr, fluid_pressure: +sensVals.pres.toFixed(1), variance: SENS_NOISE.pres ** 2 });
+    pub("/sensors/illuminance", { header: hdr, illuminance: +sensVals.lux.toFixed(1), variance: (SENS_NOISE.lux * sensVals.lux) ** 2 });
+    pub("/sensors/gas/co2", f32(sensVals.gas)); pub("/sensors/gas/tvoc", f32(sensVals.tvoc)); pub("/sensors/gas/co", f32(sensVals.co));
+    pub("/sensors/sound", f32(sensVals.snd));
+    pub("/sensors/summary", { data: JSON.stringify({ temperature: +sensVals.temp.toFixed(2), humidity: +(sensVals.hum * 100).toFixed(2),
+      pressure: +sensVals.pres.toFixed(1), illuminance: +sensVals.lux.toFixed(1), co2: +sensVals.gas.toFixed(1), tvoc: +sensVals.tvoc.toFixed(1),
+      co: +sensVals.co.toFixed(2), sound: +sensVals.snd.toFixed(1), frame: "sim", sim: true, source: "htmlsim" }) });
+    // oude topics (huiswerk van vóór 07-11)
+    pub("/sim/gas_value", { data: +sensVals.gas.toFixed(1) });
+    pub("/sim/temperature", { header: hdr, temperature: +sensVals.temp.toFixed(2), variance: SENS_NOISE.temp ** 2 });
+    pub("/sim/humidity", { header: hdr, relative_humidity: +sensVals.hum.toFixed(4), variance: SENS_NOISE.hum ** 2 });
+    pub("/sim/illuminance", { header: hdr, illuminance: +sensVals.lux.toFixed(1), variance: (SENS_NOISE.lux * sensVals.lux) ** 2 });
   }
 }
 // velden zichtbaar (standaard uit: studenten moeten meten)
 const fieldG = new THREE.Group(); fieldG.visible = false; scene.add(fieldG);
-const FIELD_COL = { gas: 0x6fdc8c, heat: 0xff7043, humidity: 0x4fc3f7, light: 0xffe066 };
+const FIELD_COL = { gas: 0x6fdc8c, heat: 0xff7043, humidity: 0x4fc3f7, light: 0xffe066, sound: 0xc77dff };
 function updateFieldLegend() {   // enkel de soorten die in deze wereld voorkomen, en enkel als de bronnen zichtbaar zijn
   const kinds = new Set((sim.worldInfo.fields || []).map(f => f.kind));
   document.querySelectorAll(".legField").forEach(el => { el.hidden = !(fieldG.visible && kinds.has(el.dataset.kind)); });
@@ -1267,7 +1302,7 @@ document.querySelectorAll(".hudOpt").forEach(cb => {   // keuze per browser onth
 });
 // kleurenkaart van een veld op de vloer (werkelijke verdeling, zonder ruis), 10 cm per cel
 let fieldMapMesh = null;
-const FIELD_UNIT = { gas: [400, "ppm"], heat: [20, "°C"], humidity: [45, "%"], light: [150, "lux"] };
+const FIELD_UNIT = { gas: [450, "ppm"], heat: [21, "°C"], humidity: [45, "%"], light: [350, "lux"], sound: [38, "dB(A)"] };
 function buildFieldMap() {
   if (fieldMapMesh) { scene.remove(fieldMapMesh); fieldMapMesh.material.map.dispose(); fieldMapMesh.geometry.dispose(); fieldMapMesh = null; }
   const kind = $("fieldMap").value; $("fieldMapMsg").textContent = "";
@@ -1300,7 +1335,7 @@ measGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(MEAS_MA
 measGeo.setDrawRange(0, 0);
 const measCloud = new THREE.Points(measGeo, new THREE.PointsMaterial({ size: 0.14, vertexColors: true, sizeAttenuation: true, depthWrite: false }));
 measCloud.frustumCulled = false; measCloud.renderOrder = 5; scene.add(measCloud);
-const MEAS_UNIT = { gas: ["ppm", 0, 1], temp: ["°C", 1, 1], hum: ["%", 0, 100], lux: ["lux", 0, 1] };
+const MEAS_UNIT = { gas: ["ppm", 0, 1], temp: ["°C", 1, 1], hum: ["%", 0, 100], lux: ["lux", 0, 1], snd: ["dB(A)", 0, 1] };
 function rampColor(f) {   // 0 blauw → groen → geel → 1 rood
   const stops = [[0, 0.15, 0.35, 0.9], [0.35, 0.1, 0.8, 0.4], [0.7, 1, 0.85, 0.1], [1, 0.95, 0.2, 0.15]];
   for (let i = 1; i < stops.length; i++) if (f <= stops[i][0]) {

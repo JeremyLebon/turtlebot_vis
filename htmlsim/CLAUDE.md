@@ -69,9 +69,13 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
   `advertise_service` (piep met WebAudio). Onder 11,0 V: `currentCmd()` geeft 0 (motoren uit) en piepen. Tijdens Taak 2 met
   batterij-topic `/battery_state` publiceert de simulator die niet zelf. Geen `NaN` in berichten: JSON maakt er `null` van en
   rosbridge weigert het bericht.
-- **Velden in de wereld:** `fields: [{kind: gas|heat|humidity|light, x, y, strength, sigma}]` in de wereld-JSON (ook in `WORLDS` in core.js);
-  som van Gauss-bellen + basiswaarde (400 ppm, 20 °C, 150 lux) + ruis op `/sim/gas_value`, `/sim/temperature`, `/sim/humidity`, `/sim/illuminance`
-  (1 Hz, plaats = grondwaarheid). Bronnen in 3D standaard verborgen.
+- **Velden in de wereld:** `fields: [{kind: gas|heat|humidity|light|sound, x, y, strength, sigma}]` in de wereld-JSON
+  (ook in `WORLDS` in core.js, beide samen aanpassen). Omgevingssensoren op **`/sensors/...`, dezelfde topics, types,
+  basiswaarden, tijdconstanten en ruis als `sim_sensors_node.py` op de robot** (turtlebot_docker, sessie 4): temperature,
+  humidity (0-1), pressure, illuminance, gas/co2 (= gas-veld), gas/tvoc (0,5 × gas), gas/co (0,02 × gas), sound (dB, log-som),
+  summary (JSON, voor de Fenix-pagina). 2 Hz, eerste-orde-traagheid in sim-tijd. De oude `/sim/gas_value`, `/sim/temperature`,
+  `/sim/humidity`, `/sim/illuminance` lopen nog mee. In de virtuele robot start de knop Sensoren geen sim_sensors_node
+  (FENIX_SIM): deze simulator is de bron. Test: `node tests/e2e_sensors.cjs`. Bronnen in 3D standaard verborgen.
 - **Gamepad → `/joy`:** knoppen in de pagina of een echte gamepad (Gamepad-API, standaard-indeling) naar de indeling van
   joy_node met de F710 (XInput): 8 assen (links/op = +, triggers rust 1.0), 11 knoppen (A=0 … RB=5), 20 Hz sim-tijd.
   Met LB rijdt de robot met de sticks (zoals teleop_twist_joy, RB = turbo); voorrang na toetsenbord/knoppen in beeld.

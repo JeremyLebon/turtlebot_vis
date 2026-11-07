@@ -358,11 +358,15 @@
   }
   function renderSens() {
     if (!status) return;
-    var on = !!status.sensors;
+    // virtuele robot: de HTML-simulator publiceert de sensoren zelf (aan/uit in de simulator)
+    var bySim = status.sensors_source === "simulator";
+    var on = bySim ? Date.now() - sensT < 4000 : !!status.sensors;
     sensToggle.classList.toggle("on", on);
-    sensToggle.setAttribute("data-tip", "Gesimuleerde sensoren " + (on ? "aan" : "uit") + " - klik om " + (on ? "uit" : "aan") +
-      " te zetten\nTopics /sensors/... (temperatuur, vochtigheid, druk, licht, gassen, geluid)" +
-      (status.camera_sensor ? "" : "\nZonder echte camera ook een gesimuleerd camerabeeld"));
+    sensToggle.setAttribute("data-tip", bySim
+      ? "Sensoren " + (on ? "aan" : "uit") + " - de simulator levert ze (vinkje Omgevingssensoren publiceren)\nTopics /sensors/..., zoals op de robot"
+      : "Gesimuleerde sensoren " + (on ? "aan" : "uit") + " - klik om " + (on ? "uit" : "aan") +
+        " te zetten\nTopics /sensors/... (temperatuur, vochtigheid, druk, licht, gassen, geluid)" +
+        (status.camera_sensor ? "" : "\nZonder echte camera ook een gesimuleerd camerabeeld"));
     var live = on && Date.now() - sensT < 4000 && sens;
     if (!on && !sensMsg) { sensBox.classList.add("hidden"); return; }
     sensBox.classList.remove("hidden");

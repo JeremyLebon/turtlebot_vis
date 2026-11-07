@@ -74,6 +74,10 @@ LAUNCH_PATTERNS = {
 
 if SIM:
     LAUNCH_PATTERNS["bringup"] = "sim_bringup\\.launch\\.py"
+    # De HTML-simulator publiceert de sensoren zelf (zelfde /sensors/...-topics,
+    # vinkje "Omgevingssensoren publiceren"): geen sim_sensors_node ernaast.
+    del FIXED_LAUNCHES["sensors"], LAUNCH_PATTERNS["sensors"]
+SIM_SENSORS_MSG = "de simulator levert de sensoren zelf (vinkje Omgevingssensoren publiceren in de simulator)"
 
 # Processes a launch starts, for stopping: the launch process itself
 # (LAUNCH_PATTERNS) plus its children, which sometimes outlive SIGINT/SIGTERM
@@ -1546,6 +1550,8 @@ class LaunchControlNode(Node):
         status["camera_sensor"] = camera_sensor()
         status["camera_enabled"] = camera_enabled()
         status["joystick_device"] = joystick_name()
+        # wie de sensoren levert: de HTML-simulator (virtuele robot) of sim_sensors_node
+        status["sensors_source"] = "simulator" if SIM else "robot"
         # turtlebot3_node itself (bringup can run without it: it dies when
         # the OpenCR stops answering, e.g. motor power cut by low battery)
         status["robot_node"] = SIM or bool(_pgrep_pids("lib/turtlebot3_node/turtlebot3_ros"))
@@ -1666,6 +1672,9 @@ class LaunchControlNode(Node):
 
     def _make_start_cb(self, name):
         def cb(request, response):
+            if name == "sensors" and SIM:
+                response.success, response.message = False, SIM_SENSORS_MSG
+                return response
             if name == "camera":
                 # Remember the choice even if it can't start now: it then
                 # starts by itself after a reboot with a camera attached.
@@ -1798,6 +1807,9 @@ class LaunchControlNode(Node):
 
     def _make_stop_one_cb(self, name):
         def cb(request, response):
+            if name == "sensors" and SIM:
+                response.success, response.message = False, SIM_SENSORS_MSG
+                return response
             if name == "camera":
                 set_camera_enabled(False)
             children = CHILD_PATTERNS.get(name)

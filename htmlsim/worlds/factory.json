@@ -374,6 +374,20 @@
    "y": 0,
    "strength": 600,
    "sigma": 2.2
+  },
+  {
+   "kind": "humidity",
+   "x": 6.2,
+   "y": 3.2,
+   "strength": 0.3,
+   "sigma": 1.2
+  },
+  {
+   "kind": "sound",
+   "x": 0.3,
+   "y": -4.4,
+   "strength": 40,
+   "sigma": 1.5
   }
  ]
 }
