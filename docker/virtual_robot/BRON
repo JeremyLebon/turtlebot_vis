@@ -1,1 +1,1 @@
-turtlebot_docker adc7eee (2026-11-09) CHANGELOG: 1.9.2 built and pushed
+turtlebot_docker d188f76 (2026-11-09) 1.9.3 (niet gebouwd): virtuele robot - camerabeeld op Rijden viel steeds weg (timer verborg het simulatorbeeld elke seconde met 'geen camera'); labo-check toont beeld uit de simulator

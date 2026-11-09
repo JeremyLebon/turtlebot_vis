@@ -294,9 +294,14 @@
     camToggle.setAttribute("data-tip", "Camera " + (status.camera_enabled ? "aan" : "uit") + " - klik om " +
       (status.camera_enabled ? "uit" : "aan") + " te zetten (wordt onthouden, ook na een herstart)");
     var text = null;
-    if (!status.camera_sensor && status.sensors) {
+    // virtuele robot: de HTML-simulator publiceert het beeld zelf (camera_sensor en
+    // sensors leeg) - anders verborg deze timer het elke seconde ("geen camera")
+    var bySim = status.sensors_source === "simulator";
+    if (!status.camera_sensor && (status.sensors || bySim)) {
       if (camRateSel.value === "off") text = "camerabeeld uitgeschakeld op deze pagina";
-      else if (!fresh("camera", 5000)) text = "wachten op het gesimuleerde beeld (bringup nodig)...";
+      else if (!fresh("camera", 5000)) text = bySim
+        ? "wachten op het beeld van de simulator (vinkje Robotcamera publiceren aan, simulator zichtbaar?)..."
+        : "wachten op het gesimuleerde beeld (bringup nodig)...";
     }
     else if (!status.camera_sensor) text = "geen camera aangesloten (wordt enkel bij het opstarten van de Pi gedetecteerd)" +
       " - of zet de gesimuleerde sensoren aan (Sensoren)";

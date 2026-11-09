@@ -580,6 +580,8 @@ function laboRows(ctx) {
   } else rows.push(["", "Batterij", "wacht op bringup"]);
 
   if (!ls) rows.push(["", "Camera", "--"]);
+  else if (!ls.camera_sensor && ls.sensors_source === "simulator")   // virtuele robot: beeld uit de HTML-simulator
+    rows.push(fresh && fresh("camera", 5000) ? ["ok", "Camera", "beeld OK (simulator)"] : ["", "Camera", "beeld uit de simulator"]);
   else if (!ls.camera_sensor) rows.push(["", "Camera", "geen camera aangesloten"]);
   else if (!ls.camera_enabled) rows.push(["", "Camera", "uitgeschakeld"]);
   else if (!ls.camera) rows.push(["bad", "Camera", "camera_node draait niet"]);
