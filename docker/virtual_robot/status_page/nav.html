@@ -657,8 +657,10 @@
     var s = navStatus;
     if (!s) return;
     var ready = document.getElementById("nsReady");
-    ready.textContent = s.nav2_ready ? "actief" : "niet gestart";
-    ready.style.color = s.nav2_ready ? "var(--green)" : "var(--muted)";
+    // nav2_active: all Nav2 nodes up (missing on images before 1.9.2)
+    var waiting = s.nav2_ready && s.nav2_active === false;
+    ready.textContent = !s.nav2_ready ? "niet gestart" : waiting ? (s.loc ? "start op..." : "wacht op beginpositie") : "actief";
+    ready.style.color = !s.nav2_ready ? "var(--muted)" : waiting ? "var(--yellow)" : "var(--green)";
     var stEl = document.getElementById("nsState");
     stEl.textContent = (STATE_TEXT[s.state] || s.state) + (s.mode ? " (" + (s.mode === "route" ? "route" : "doel") + ")" : "");
     stEl.style.color = s.state === "succeeded" ? "var(--green)" : (s.state === "aborted" || s.state === "error" || s.state === "rejected") ? "var(--red)" : "";

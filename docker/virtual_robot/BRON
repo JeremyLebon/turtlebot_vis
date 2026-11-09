@@ -1,1 +1,1 @@
-turtlebot_docker 944d0db (2026-11-07) 1.9.2: virtuele robot - simulator herladen stopt SLAM/Navigatie met melding, nav_web_node wist TF-buffer bij tijdsprong; geen rosbridge-waakhond bij FENIX_SIM
+turtlebot_docker adc7eee (2026-11-09) CHANGELOG: 1.9.2 built and pushed

@@ -68,7 +68,7 @@ from rclpy.node import Node
 from rclpy.time import Time
 from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import Bool, String
-from std_srvs.srv import Empty
+from std_srvs.srv import Empty, Trigger
 from turtlebot3_msgs.srv import Sound
 from tf2_ros import Buffer, TransformListener
 
@@ -385,6 +385,12 @@ class NavWebNode(Node):
     def __init__(self):
         super().__init__("nav_web_node")
         self.nav_client = ActionClient(self, NavigateToPose, "navigate_to_pose")
+        # navigate_to_pose exists as soon as bt_navigator is configured, also when
+        # the bringup stopped halfway (planner_server inactive): ask the lifecycle
+        # manager whether all Nav2 nodes are active
+        self.nav2_active_client = self.create_client(Trigger, "/lifecycle_manager_navigation/is_active")
+        self.nav2_active = False
+        self.nav2_active_call, self.nav2_active_t = None, 0.0   # pending is_active request
         self.initialpose_pub = self.create_publisher(PoseWithCovarianceStamped, "/initialpose", 10)
         self.status_pub = self.create_publisher(String, "/web/nav_status", 10)
         self.pose_pub = self.create_publisher(PoseStamped, "/web/robot_pose", 10)
@@ -448,6 +454,7 @@ class NavWebNode(Node):
         self.last_ros_t = None
         self.create_timer(0.2, self._publish_pose, clock=Clock(clock_type=ClockType.STEADY_TIME))
         self.create_timer(0.5, self._publish_status, clock=Clock(clock_type=ClockType.STEADY_TIME))
+        self.create_timer(2.0, self._check_nav2_active, clock=Clock(clock_type=ClockType.STEADY_TIME))
         self.get_logger().info("nav_web_node ready: /web/nav_cmd -> Nav2, /web/nav_status, /web/robot_pose")
 
     # ---- robot pose ------------------------------------------------------
@@ -583,7 +590,10 @@ class NavWebNode(Node):
         m.pose.covariance[7] = 0.25
         m.pose.covariance[35] = 0.06853891945200942
         self.initialpose_pub.publish(m)
-        self.status["message"] = "beginpositie gezet"
+        if self.status.get("state") in ("unavailable", "rejected"):   # e.g. a goal sent before the initial pose
+            self._set_status("idle", None, "beginpositie gezet")
+        else:
+            self.status["message"] = "beginpositie gezet"
 
     # ---- localization (t49/t51) -------------------------------------------
     def _on_amcl_pose(self, msg):
@@ -630,9 +640,35 @@ class NavWebNode(Node):
         self.spin_client.send_goal_async(goal)
         self._set_status("relocalizing", None, "opnieuw lokaliseren: robot draait ter plaatse")
 
+    def _check_nav2_active(self):
+        if not self.nav2_active_client.service_is_ready():
+            self.nav2_active, self.nav2_active_call = False, None
+            return
+        # one question at a time: while the bringup waits for the initial pose
+        # the lifecycle manager answers nothing, and queued queries made
+        # rmw_zenoh log an ERROR every 2 s
+        # (a call from a Nav2 that was restarted meanwhile never returns: drop it after 30 s)
+        if self.nav2_active_call is not None and time.monotonic() - self.nav2_active_t < 30:
+            return
+
+        def done(future):
+            if future is not self.nav2_active_call:
+                return   # dropped call
+            r = future.result()
+            self.nav2_active, self.nav2_active_call = bool(r and r.success), None
+        self.nav2_active_t = time.monotonic()
+        self.nav2_active_call = self.nav2_active_client.call_async(Trigger.Request())
+        self.nav2_active_call.add_done_callback(done)
+
     def _send_goal(self, pose, bt, mode, tol=None):
         if not self.nav_client.server_is_ready():
             self._set_status("unavailable", mode, "Nav2 draait niet - start eerst Navigatie")
+            self.route = None
+            return
+        if not self.nav2_active:
+            self._set_status("unavailable", mode, "Nav2 is nog niet klaar - zet eerst de beginpositie"
+                             if self.loc is None else
+                             "Nav2 is niet volledig opgestart - stop en start Navigatie opnieuw")
             self.route = None
             return
         # always set (not only when changed): a restarted Nav2 is back at its default
@@ -1095,6 +1131,7 @@ class NavWebNode(Node):
     def _publish_status(self):
         s = dict(self.status)
         s["nav2_ready"] = self.nav_client.server_is_ready()
+        s["nav2_active"] = s["nav2_ready"] and self.nav2_active
         s["route_loop"] = bool(self.route and self.route["loop"])
         s["last_photo"] = self.last_photo
         s["explore"] = ("paused" if self.explore_paused else "running") if self.exploring else None

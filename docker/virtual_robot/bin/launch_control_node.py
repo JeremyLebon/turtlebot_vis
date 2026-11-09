@@ -423,6 +423,10 @@ def write_nav2_params():
     lanes = {"plugin": "nav2_costmap_2d::KeepoutFilter", "enabled": True,
              "filter_info_topic": "/lanes_filter_info"}
     gc = params["global_costmap"]["global_costmap"]["ros__parameters"]
+    # The global costmap (map frame) waits for the initial pose on activation,
+    # by default 60 s: a student who needs longer got planner_server stuck in
+    # "inactive", lifecycle_manager aborted and every goal failed (09, 9-11).
+    gc["initial_transform_timeout"] = 3600.0
     gc["filters"] = ["keepout_filter", "lanes_filter", "speed_filter"]
     gc["keepout_filter"], gc["lanes_filter"] = keepout, lanes
     # speed zones: SpeedFilter publishes /speed_limit (percent of max speed),

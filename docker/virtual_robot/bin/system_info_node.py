@@ -462,9 +462,14 @@ def get_services():
 # /rosout ERROR/FATAL for the robot alerts on every page (t35); known
 # harmless errors left out: no calibration file yet at every camera start;
 # the zone filters (KeepoutFilter...) of Nav2 at 5 Hz as long as the initial
-# pose is not set yet (no "map" frame from AMCL, e.g. right after Openen)
+# pose is not set yet (no "map" frame from AMCL, e.g. right after Openen);
+# SmacPlanner2D at every Navigation start: it passes a fixed cost 0.0 to its
+# collision checker ("for 2D cost at inscribed isn't relevant") and then
+# complains about the inflation layer - only matters for non-circular
+# footprints, the TurtleBot uses robot_radius
 ROSOUT_IGNORE = re.compile(r"Unable to open camera calibration file"
-                           r'|to mask frame \(map\) with error: "map" passed to lookupTransform argument target_frame does not exist')
+                           r'|to mask frame \(map\) with error: "map" passed to lookupTransform argument target_frame does not exist'
+                           r"|^Inflation layer either not found or inflation is not set sufficiently for optimized non-circular")
 # rcl_interfaces/Log levels (the Python constants Log.ERROR/FATAL are bytes)
 LOG_ERROR, LOG_FATAL = 40, 50
 
