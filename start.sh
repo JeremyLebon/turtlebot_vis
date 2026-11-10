@@ -4,8 +4,8 @@
 #   ./start.sh             starten, check, shell in de container
 #   ./start.sh --no-shell  enkel starten en check
 #   ./start.sh --pull      eerst de nieuwste image ophalen (internet nodig)
-#   ./start.sh --htmlsim   HTML-simulator: http://localhost:8080/sim/ (thuis, huiswerk)
-#   ./start.sh --fenix     HTML-simulator + virtuele robot: Fenix-pagina op http://localhost:8090
+#   ./start.sh --htmlsim   HTML-simulator: http://127.0.0.1:8080/sim/ (thuis, huiswerk)
+#   ./start.sh --fenix     HTML-simulator + virtuele robot: Fenix-pagina op http://127.0.0.1:8090
 #                          (SLAM, Navigatie; back-up als de echte robots niet werken)
 #   ./start.sh --sim       Gazebo-simulatie in de container
 #

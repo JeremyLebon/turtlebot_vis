@@ -130,7 +130,7 @@ def ros_checks(sim, html=False):
     rclpy.shutdown()
 
     if html and "clock" not in got:
-        line(WARN, "Simulator", "nog geen /clock - open http://localhost:8080/sim/ in de browser (verbindt vanzelf)")
+        line(WARN, "Simulator", "nog geen /clock - open http://127.0.0.1:8080/sim/ in de browser (verbindt vanzelf)")
         return
     if sim and "clock" not in got:
         line(WARN, "Gazebo", "draait nog niet (geen /clock) - start: ros2 launch turtlebot3_gazebo turtlebot3_world.launch.py")
@@ -194,7 +194,7 @@ def main():
                 line(OK if http_ok("http://%s:8080/" % host) else WARN, "Webpagina", "http://%s:8080" % host)
             if html:
                 rb = port_open("127.0.0.1", 9090) is not None
-                line(OK if rb else BAD, "rosbridge", "ws://localhost:9090" + ("" if rb else
+                line(OK if rb else BAD, "rosbridge", "ws://127.0.0.1:9090" + ("" if rb else
                      " luistert niet - zie /tmp/vis_services/rosbridge.log (of: robot %s)" % nr))
             if html:
                 port = os.environ.get("VR_PORT", "8090")
@@ -202,7 +202,7 @@ def main():
                     line(OK, "Fenix-pagina", "virtuele robot niet gestart (enkel nodig als back-up: fenix start)")
                 else:
                     vr = http_ok("http://127.0.0.1:%s/" % port)
-                    line(OK if vr else BAD, "Fenix-pagina", "virtuele robot http://localhost:%s" % port
+                    line(OK if vr else BAD, "Fenix-pagina", "virtuele robot http://127.0.0.1:%s" % port
                          + ("" if vr else " antwoordt niet - zie /tmp/vis_services/vr_*.log (of: fenix stop; fenix start)"))
             try:
                 ros_checks(sim, html)
@@ -210,10 +210,10 @@ def main():
                 line(BAD, "ROS", "controle mislukt: %s" % exc)
 
     line(OK if port_open("127.0.0.1", 8080) is not None else WARN, "Lichtblick",
-         "http://localhost:8080 (in de browser van Windows)")
+         "http://127.0.0.1:8080 (in de browser van Windows)")
     bridge = port_open("127.0.0.1", 8765) is not None
     line(OK if bridge else WARN, "Bridge",
-         "foxglove_bridge ws://localhost:8765" + ("" if bridge else " - start pas als de robot bereikbaar is"))
+         "foxglove_bridge ws://127.0.0.1:8765" + ("" if bridge else " - start pas als de robot bereikbaar is"))
     counts = bridge_count()
     extra = {k: v for k, v in counts.items() if v > 1}
     text = ", ".join("%s %d" % kv for kv in counts.items() if kv[1]) or "geen"

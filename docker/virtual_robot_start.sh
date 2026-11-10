@@ -1,7 +1,7 @@
 #!/bin/bash
 # Virtuele robot (`fenix start` bij `robot htmlsim`): de software van de echte TurtleBot - statuspagina
-# (http://localhost:8090), knoppen Bringup/SLAM/Navigatie, kaarten, zones, twist_mux en
-# cmd_vel_guard - op de laptop, met de HTML-simulator (http://localhost:8080/sim/) als
+# (http://127.0.0.1:8090), knoppen Bringup/SLAM/Navigatie, kaarten, zones, twist_mux en
+# cmd_vel_guard - op de laptop, met de HTML-simulator (http://127.0.0.1:8080/sim/) als
 # hardware. Back-up voor als de robots niet werken. De bestanden komen uit turtlebot_docker
 # (tools/sync_virtual_robot.sh); FENIX_SIM=1 zet bringup op de simulator en SLAM/Nav2 op
 # simulatietijd.

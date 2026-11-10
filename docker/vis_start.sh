@@ -2,10 +2,10 @@
 # Entrypoint van turtlebot-vis: start twee achtergronddiensten en daarna het
 # gewone commando (CMD, standaard `bash`).
 #
-#   Lichtblick (web-versie van Foxglove Studio)  http://localhost:8080
-#   foxglove_bridge                              ws://localhost:8765
+#   Lichtblick (web-versie van Foxglove Studio)  http://127.0.0.1:8080
+#   foxglove_bridge                              ws://127.0.0.1:8765
 #
-# De student surft vanuit Windows naar http://localhost:8080 (WSL2 stuurt
+# De student surft vanuit Windows naar http://127.0.0.1:8080 (WSL2 stuurt
 # localhost door; de container draait met network_mode: host). Lichtblick
 # draait in de browser - geen WSLg/OpenGL in Docker nodig, het alternatief
 # voor rviz2 als dat venster niet zichtbaar wordt. De bridge haalt de topics
@@ -14,7 +14,7 @@
 # Welke robot: automatisch, zie robot_select.sh. Met `robot sim` de
 # simulatie: eigen Zenoh-router, de bridge op simulatietijd en
 # sim_teleop_relay.py voor het Teleop-paneel. `robot htmlsim`: hetzelfde plus
-# rosbridge (ws://localhost:9090) voor de HTML-simulator op /sim/. De virtuele
+# rosbridge (ws://127.0.0.1:9090) voor de HTML-simulator op /sim/. De virtuele
 # robot (Fenix-pagina) start enkel met `fenix start` (robot_select.sh).
 # Logs: /tmp/vis_services/.
 
@@ -113,8 +113,8 @@ PY
             [ "$NR" = htmlsim ] || python3 /root/sim_teleop_relay.py >> "$LOG/sim_teleop_relay.log" 2>&1 &
             if [ "$NR" = htmlsim ]; then
                 # virtuele robot (Fenix-pagina): niet automatisch (~0,4 GB), enkel met `fenix start`
-                # HTML-simulator (http://localhost:8080/sim/) praat via rosbridge
-                echo "$(date +%T) rosbridge start op ws://localhost:9090"
+                # HTML-simulator (http://127.0.0.1:8080/sim/) praat via rosbridge
+                echo "$(date +%T) rosbridge start op ws://127.0.0.1:9090"
                 ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9090 \
                     >> "$LOG/rosbridge.log" 2>&1 &
             fi

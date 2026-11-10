@@ -50,10 +50,10 @@ RUN bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && env | grep -E '^(PATH|P
       '}' > /root/.vscode-server/data/Machine/settings.json
 # Lichtblick (open-source web-versie van Foxglove Studio) + foxglove_bridge:
 # alternatief voor rviz2 in de browser, zonder WSLg/OpenGL. Gestart door
-# vis_start.sh (entrypoint): http://localhost:8080, bridge op ws://localhost:8765.
+# vis_start.sh (entrypoint): http://127.0.0.1:8080, bridge op ws://127.0.0.1:8765.
 # rosbridge-msgs: de robot publiceert /connected_clients (rosbridge); zonder dit
 # berichttype logt de bridge daar telkens een ERROR, rood op de robotpagina.
-# rosbridge-server: voor de HTML-simulator (robot htmlsim, ws://localhost:9090).
+# rosbridge-server: voor de HTML-simulator (robot htmlsim, ws://127.0.0.1:9090).
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ros-${ROS_DISTRO}-foxglove-bridge curl \
       ros-${ROS_DISTRO}-rosbridge-msgs \
@@ -70,7 +70,7 @@ COPY docker/lichtblick_layout.json /opt/lichtblick/turtlebot_layout.json
 RUN python3 -c "import json; p='/opt/lichtblick/index.html'; s=open(p).read(); \
     ph='/*LICHTBLICK_SUITE_DEFAULT_LAYOUT_PLACEHOLDER*/'; assert ph in s; \
     open(p,'w').write(s.replace(ph, json.dumps(json.load(open('/opt/lichtblick/turtlebot_layout.json')))))"
-# http://localhost:8080 zonder parameters -> meteen verbinden met de bridge,
+# http://127.0.0.1:8080 zonder parameters -> meteen verbinden met de bridge,
 # zodat de student niets hoeft in te stellen. Via 127.0.0.1, ook als de pagina op
 # localhost openstaat: onder WSL lukte na een wifi-onderbreking tot ~400 s geen
 # nieuwe verbinding met "localhost".
@@ -78,7 +78,7 @@ RUN sed -i 's#<head>#<head><script>if(!new URLSearchParams(location.search).has(
       /opt/lichtblick/index.html && grep -q 'ds=foxglove-websocket' /opt/lichtblick/index.html
 # Eén keer de layouts uit de Humble-tijd weg (Jazzy-overschakeling, 23-10):
 # Lichtblick bewaart ze in de browser (IndexedDB lichtblick-layouts, actieve
-# layout in localStorage studio.layout) en http://localhost:8080 is dezelfde
+# layout in localStorage studio.layout) en http://127.0.0.1:8080 is dezelfde
 # oorsprong als vroeger - de oude teleop publiceerde Twist op /cmd_vel_web en
 # blokkeerde zo de webpagina's van de robot. Zonder bewaarde layout neemt
 # Lichtblick de standaardlayout hierboven. Nieuwe reset nodig: TB_LAYOUT verhogen.
@@ -88,7 +88,7 @@ RUN python3 -c "p='/opt/lichtblick/index.html'; s=open(p).read(); \
     js='<script>'+open('/tmp/layout_reset.js').read().replace('__TB_LAYOUT__', '${TB_LAYOUT}')+'</script>'; \
     assert '<head>' in s; open(p,'w').write(s.replace('<head>', '<head>'+js, 1))" \
     && grep -q 'tbLayout' /opt/lichtblick/index.html && rm /tmp/layout_reset.js
-# HTML-simulator TB3 Lite Sim 3D (htmlsim/, `robot htmlsim`): http://localhost:8080/sim/,
+# HTML-simulator TB3 Lite Sim 3D (htmlsim/, `robot htmlsim`): http://127.0.0.1:8080/sim/,
 # zonder internet - three.js en Rapier uit de npm-registry, enkel wat hij gebruikt.
 ARG THREE_VERSION=0.160.0
 ARG RAPIER_VERSION=0.14.0
@@ -104,7 +104,7 @@ RUN cd /tmp/htmlsim && python3 build.py --local \
     && cp /tmp/npm/package/rapier.es.js $D/vendor/rapier/ \
     && rm -rf /tmp/npm /tmp/htmlsim
 # Virtuele robot (`robot htmlsim`): de software van de echte robot (statuspagina op
-# http://localhost:8090, knoppen, kaarten, zones) met de HTML-simulator als hardware -
+# http://127.0.0.1:8090, knoppen, kaarten, zones) met de HTML-simulator als hardware -
 # back-up als de robots niet werken. Bestanden uit turtlebot_docker
 # (tools/sync_virtual_robot.sh), op dezelfde paden als op de robot. De TurtleBot3-fork
 # van de robot (Nav2 zonder rviz2, Cartographer-instellingen) in /root/turtlebot3_ws;

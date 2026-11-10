@@ -80,7 +80,7 @@ rviz2                    # of: ros2 launch turtlebot3_navigation2 navigation2.la
 ```
 
 Start in de container een eigen Zenoh-router en rosbridge; surf naar
-<http://localhost:8080/sim/>. De **TB3 Lite Sim 3D** (TurtleBot3 in de browser,
+<http://127.0.0.1:8080/sim/>. De **TB3 Lite Sim 3D** (TurtleBot3 in de browser,
 met de automatische tests van de huiswerkopdrachten) verbindt vanzelf. Je
 nodes draai je in de container (`./connect.sh`), zoals op de robot. Geen
 internet nodig. Terug naar de echte robot: `robot` in de container. Gazebo in
@@ -90,7 +90,7 @@ de container: `./start.sh --sim`. Broncode en tests van de simulator:
 ### Virtuele robot en Fenix-pagina (back-up voor de echte robot)
 
 `./start.sh --fenix` (of `fenix start` in de container, bij `robot htmlsim`)
-start naast de simulator ook de software van de echte TurtleBot: de Fenix-pagina op <http://localhost:8090> (knop **Fenix-pagina**
+start naast de simulator ook de software van de echte TurtleBot: de Fenix-pagina op <http://127.0.0.1:8090> (knop **Fenix-pagina**
 in de simulator) met Rijden, Mappen (SLAM met Cartographer, kaart opslaan,
 zones), Navigatie (Nav2, planners, routes), twist_mux en cmd_vel_guard.
 Zelfde knoppen en paden als op de robot; de simulator speelt de hardware en
@@ -104,8 +104,8 @@ daarna de image opnieuw bouwen.
 
 De container start ook **Lichtblick** (open-source web-versie van Foxglove
 Studio) en **foxglove_bridge**: surf vanuit Windows naar
-<http://localhost:8080>. De pagina verbindt vanzelf met de bridge
-(`ws://localhost:8765`) en opent een layout met 3D (kaart, scan, robot, pad,
+<http://127.0.0.1:8080>. De pagina verbindt vanzelf met de bridge
+(`ws://127.0.0.1:8765`) en opent een layout met 3D (kaart, scan, robot, pad,
 doel zetten), camera en teleop (`/cmd_vel_web`). Handig als het rviz2-venster
 onder WSLg niet verschijnt. De bridge haalt de topics via Zenoh, net als
 rviz2: geen extra belasting op de robot. Logs: `/tmp/vis_services/` in de

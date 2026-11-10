@@ -18,7 +18,7 @@ try {
       if (done || !document.body) return;
       var d = document.createElement("div");
       d.id = "tb-layout-bar";
-      d.textContent = "Nieuwe Lichtblick-layout: sluit de andere tabbladen met localhost:8080 - deze pagina laadt dan vanzelf.";
+      d.textContent = "Nieuwe Lichtblick-layout: sluit de andere tabbladen met 127.0.0.1:8080 - deze pagina laadt dan vanzelf.";
       d.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#ff9500;color:#000;padding:10px;font:600 15px sans-serif;text-align:center";
       document.body.appendChild(d);
     }, 3000);
