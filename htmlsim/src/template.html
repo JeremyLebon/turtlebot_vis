@@ -72,6 +72,7 @@
         <div class="grid2"><label for="worldSel">Wereld</label><select id="worldSel">
           <option value="turtlebot3">TurtleBot3-wereld (6 × 6 m)</option>
           <option value="factory">Fabriekshal (16 × 12 m)</option>
+          <option value="classroom">Klaslokaal (9 × 7 m)</option>
           <option value="empty">Lege kamer (5 × 5 m)</option>
           <option value="custom" hidden>Eigen wereld</option></select></div>
         <div class="row">
@@ -304,7 +305,7 @@
         <p class="msg" id="worldMsg"></p>
         <p class="hint">Eigen wereld: sla een ingebouwde wereld op als vertrekpunt en pas de JSON aan. Elementen (maten in m, hoeken in graden):
           <code>wall</code> x0 y0 x1 y1 [t h], <code>box</code> x y [z] sx sy sz [yaw pitch], <code>cyl</code> x y r h,
-          <code>rack</code> x y [bays depth h yaw], <code>conveyor</code> x y l [w h yaw], <code>pallet</code> x y [load],
+          <code>rack</code> x y [bays depth h yaw], <code>conveyor</code> x y l [w h yaw], <code>pallet</code> x y [load], <code>table</code> x y [l w h yaw], <code>chair</code> x y [yaw],
           <code>movable</code> x y [sx sy sz mass], <code>mark</code> x y sx sy [yaw]; elk met optioneel <code>color</code>.
           Verder <code>floor</code> [sx, sy] en <code>spawn</code> [x, y, θ].</p>
         </section>

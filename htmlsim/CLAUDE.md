@@ -43,7 +43,7 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
 - **Scan "geen echo":** 0.0 (echte LDS) of inf (Gazebo). inf gaat als `Infinity` in de JSON (rosbridge/Python accepteert dat).
 - **Kaartlagen:** OccupancyGrid als DataTexture, geplaatst via `map → odom` uit `/tf` (zonder throttle subscriben).
   Lagen op 8/14/20 mm met polygonOffset; camera-near 0,05 (anders z-fighting met de vloer).
-- **Werelden:** data-gedreven (`loadWorld(def)`), elementen `wall/box/cyl/rack/conveyor/pallet/movable/mark`.
+- **Werelden:** data-gedreven (`loadWorld(def)`), elementen `wall/box/cyl/rack/conveyor/pallet/table/chair/movable/mark`.
   Dozen 35 cm hoog: lidar van de Burger zit op 18 cm, lagere objecten scheert de scan voorbij.
 - **Opdrachten (tasks.js):** log van de studentnode via `/rosout` (rcl_interfaces/Log), match op berichttekst
   (niet de nodenaam: "battery_warning" bevat "warn"). `/rosout` met `queue_length: 100` (bij 1 laat rosbridge een info-regel vallen
