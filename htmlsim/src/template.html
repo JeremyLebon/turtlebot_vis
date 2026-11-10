@@ -203,7 +203,7 @@
     <section>
       <h2>Verbinding</h2>
       <div class="row">
-        <input type="text" id="url" value="ws://localhost:9090" aria-label="rosbridge URL">
+        <input type="text" id="url" value="ws://127.0.0.1:9090" aria-label="rosbridge URL">
         <button class="act" id="connect">Verbinden</button>
       </div>
       <div class="row">
@@ -1114,9 +1114,12 @@ if (location.pathname.startsWith("/sim")) {
   };
   memPoll(); setInterval(memPoll, 5000);
   // Statuspagina van de virtuele robot (turtlebot-vis, poort 8090): knop zodra ze antwoordt
-  const fenixUrl = "http://" + location.hostname + ":8090/nav.html";
+  // 127.0.0.1 i.p.v. localhost: onder WSL viel het doorsturen van "localhost" na een
+  // wifi-onderbreking tot ~400 s weg (nieuwe verbindingen lukten niet)
+  const fenixHost = location.hostname === "localhost" ? "127.0.0.1" : location.hostname;
+  const fenixUrl = "http://" + fenixHost + ":8090/nav.html";
   $("fenixLink").addEventListener("click", () => { const w = window.open(fenixUrl, "tbfenix"); w?.focus(); });
-  const fenixPoll = () => fetch("http://" + location.hostname + ":8090/", { mode: "no-cors", cache: "no-store" })
+  const fenixPoll = () => fetch("http://" + fenixHost + ":8090/", { mode: "no-cors", cache: "no-store" })
     .then(() => { $("fenixLink").hidden = false; }, () => { $("fenixLink").hidden = true; });
   fenixPoll(); setInterval(fenixPoll, 10000);
 }

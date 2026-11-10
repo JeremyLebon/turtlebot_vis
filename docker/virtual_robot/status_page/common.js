@@ -4,7 +4,9 @@
 
 function connectRos() {
   var host = window.location.hostname;
-  var wsUrl = "ws://" + host + ":9090";
+  // virtuele robot (http://localhost:8090): 127.0.0.1 i.p.v. localhost - onder WSL
+  // lukte na een wifi-onderbreking tot ~400 s geen nieuwe verbinding met "localhost"
+  var wsUrl = "ws://" + (host === "localhost" ? "127.0.0.1" : host) + ":9090";
   var wsUrlEl = document.getElementById("wsUrl");
   if (wsUrlEl) wsUrlEl.textContent = wsUrl;
   var nameEl = document.getElementById("robotName");

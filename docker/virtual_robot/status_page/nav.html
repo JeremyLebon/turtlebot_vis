@@ -491,6 +491,19 @@
   var canvas = document.getElementById("mapCanvas");
   var ctx = canvas.getContext("2d");
   var wrap = document.getElementById("mapWrap");
+  // The bars above the map (route, zones, edit, initial pose) covered its top:
+  // no route point or zone corner could be set there. Make room above the map
+  // while one is shown (desktop; on phones they are rows, see CSS).
+  var ctxBar = document.getElementById("ctxBar");
+  function ctxRoom() {
+    var h = window.innerWidth > 760 && navLayout !== "cam" ? ctxBar.offsetHeight : 0;
+    wrap.style.paddingTop = h ? (h + 14) + "px" : "";
+    // small camera picture (top right) moves down with the map
+    var pip = document.getElementById("camPip");
+    if (pip) pip.style.top = h && navLayout !== "split" ? (h + 24) + "px" : "";
+  }
+  if (window.ResizeObserver) new ResizeObserver(ctxRoom).observe(ctxBar);
+  window.addEventListener("resize", ctxRoom);
 
   function yawOf(q) { return Math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z)); }
 
@@ -1880,6 +1893,7 @@
   function applyNavLayout() {
     wrap.classList.toggle("ly-cam", navLayout === "cam");
     wrap.classList.toggle("ly-split", navLayout === "split");
+    ctxRoom();
     document.getElementById("nlySplit").classList.toggle("on", navLayout === "split");
     var ps = document.getElementById("npipSize");
     ps.textContent = navPip; ps.disabled = navLayout === "split";
