@@ -71,8 +71,10 @@ RUN python3 -c "import json; p='/opt/lichtblick/index.html'; s=open(p).read(); \
     ph='/*LICHTBLICK_SUITE_DEFAULT_LAYOUT_PLACEHOLDER*/'; assert ph in s; \
     open(p,'w').write(s.replace(ph, json.dumps(json.load(open('/opt/lichtblick/turtlebot_layout.json')))))"
 # http://localhost:8080 zonder parameters -> meteen verbinden met de bridge,
-# zodat de student niets hoeft in te stellen.
-RUN sed -i 's#<head>#<head><script>if(!new URLSearchParams(location.search).has("ds"))location.replace("?ds=foxglove-websocket\&ds.url=ws://"+location.hostname+":8765")</script>#' \
+# zodat de student niets hoeft in te stellen. Via 127.0.0.1, ook als de pagina op
+# localhost openstaat: onder WSL lukte na een wifi-onderbreking tot ~400 s geen
+# nieuwe verbinding met "localhost".
+RUN sed -i 's#<head>#<head><script>if(!new URLSearchParams(location.search).has("ds"))location.replace("?ds=foxglove-websocket\&ds.url=ws://"+(location.hostname=="localhost"?"127.0.0.1":location.hostname)+":8765")</script>#' \
       /opt/lichtblick/index.html && grep -q 'ds=foxglove-websocket' /opt/lichtblick/index.html
 # Eén keer de layouts uit de Humble-tijd weg (Jazzy-overschakeling, 23-10):
 # Lichtblick bewaart ze in de browser (IndexedDB lichtblick-layouts, actieve
