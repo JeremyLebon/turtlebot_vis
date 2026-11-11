@@ -173,7 +173,7 @@ def main():
     nr = os.environ.get("TB_NR")
     html = nr == "htmlsim"
     sim = nr in ("sim", "htmlsim")
-    print("Turtlebot-vis check (ROS 2 %s)" % os.environ.get("ROS_DISTRO", "?"))
+    print("Turtlebot-vis %s - check (ROS 2 %s)" % (os.environ.get("TB_VIS_VERSION", "dev"), os.environ.get("ROS_DISTRO", "?")))
 
     rmw = os.environ.get("RMW_IMPLEMENTATION", "")
     if rmw != "rmw_zenoh_cpp":

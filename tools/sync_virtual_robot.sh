@@ -25,4 +25,6 @@ for p in turtlebot3_navigation2 turtlebot3_cartographer; do
 done
 cp "$SRC/turtlebot3/LICENSE" "$DST/turtlebot3/LICENSE"   # Apache 2.0 (ROBOTIS)
 git -C "$SRC" log -1 --format='turtlebot_docker %h (%cs) %s' > "$DST/BRON"
+# versie zoals op de robot ("v1.9.3 · 2026-11-10 85ae1c8"): Fenix > Status toont ze
+printf 'v%s · %s (virtuele robot)\n' "$(cat "$SRC/VERSION")" "$(git -C "$SRC" log -1 --format='%cs %h')" > "$DST/VERSION"
 echo "overgenomen: $(cat "$DST/BRON")"

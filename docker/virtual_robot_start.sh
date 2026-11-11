@@ -25,6 +25,8 @@ stop() {
 start() {
     mkdir -p "$LOG" /root/ros2_ws/virtuele_robot/maps
     export FENIX_SIM=1 TURTLEBOT3_MODEL=burger
+    # versie van de robotsoftware (tools/sync_virtual_robot.sh) voor Fenix > Status
+    export TURTLEBOT_IMAGE_VERSION="$(cat /root/turtlebot3_ws/ROBOT_VERSION 2>/dev/null)"
     source /root/turtlebot3_ws/install/setup.bash
     pgrep -f "[t]wist_mux --ros-args" > /dev/null || nohup ros2 run twist_mux twist_mux --ros-args \
         --params-file /root/turtlebot3_ws/twist_mux.yaml -r cmd_vel_out:=cmd_vel_mux > "$LOG/vr_twist_mux.log" 2>&1 &

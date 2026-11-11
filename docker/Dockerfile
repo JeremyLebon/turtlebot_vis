@@ -115,7 +115,7 @@ COPY docker/virtual_robot /tmp/virtual_robot
 RUN V=/tmp/virtual_robot && W=/root/turtlebot3_ws \
     && install -m 755 $V/bin/* /usr/local/bin/ \
     && mkdir -p $W/src $W/launch && cp $V/launch/* $W/launch/ && cp $V/*.yaml $W/ \
-    && cp -r $V/status_page $W/status_page && cp -r $V/turtlebot3 $W/src/ \
+    && cp -r $V/status_page $W/status_page && cp -r $V/turtlebot3 $W/src/ && cp $V/VERSION $W/ROBOT_VERSION \
     && bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && cd $W && colcon build --event-handlers console_direct- > /dev/null" \
     && rm -rf $W/build $W/log /tmp/virtual_robot \
     && ln -s /root/ros2_ws/virtuele_robot /root/turtlebot_state
@@ -142,5 +142,10 @@ RUN printf '%s\n' 'source /root/robot_select.sh' \
       'PROMPT_COMMAND="_robot_refresh${PROMPT_COMMAND:+;$PROMPT_COMMAND}"' \
       '[ -e /tmp/vis_checked ] || { touch /tmp/vis_checked; check; }' \
       >> /root/.bashrc
+# Versie van turtlebot-vis (VERSION + CHANGELOG.md), in `check`. Bouwen met:
+#   --build-arg VIS_VERSION="v$(cat VERSION) · $(date +%F) $(git rev-parse --short HEAD)"
+# Onderaan: een nieuwe versie bouwt enkel deze laag opnieuw.
+ARG VIS_VERSION=dev
+ENV TB_VIS_VERSION=$VIS_VERSION
 ENTRYPOINT ["/root/vis_start.sh"]
 CMD ["bash"]
