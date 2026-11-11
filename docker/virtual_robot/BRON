@@ -1,1 +1,1 @@
-turtlebot_docker 683d1f5 (2026-11-11) 1.9.7 (enkel virtuele robot): transform_tolerance >= 1 s op simulatietijd (Unable to transform robot pose op een drukke laptop)
+turtlebot_docker cc6decc (2026-11-11) 1.9.8 (niet gebouwd): navigatiestatus met planner/controller en doel, lokalisatiegrenzen 30 cm / 20°, echte fout op de virtuele robot

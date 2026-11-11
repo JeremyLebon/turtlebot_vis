@@ -64,7 +64,7 @@ from nav2_msgs.action import NavigateToPose, Spin
 from nav2_msgs.msg import CostmapFilterInfo, ParticleCloud
 from nav2_msgs.srv import LoadMap
 from nav_msgs.srv import GetMap
-from nav_msgs.msg import MapMetaData, OccupancyGrid
+from nav_msgs.msg import MapMetaData, OccupancyGrid, Odometry
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from rcl_interfaces.msg import Parameter, ParameterType, ParameterValue
 from rcl_interfaces.srv import SetParameters
@@ -155,11 +155,14 @@ SESSION = "_verkenning"
 
 
 # AMCL quality from its covariance (standard deviation): good = position to
-# ~15 cm and heading to ~9°, doubt up to 0.5 m / ~35°, else lost. Right after
+# 30 cm and heading to ~20°, doubt up to 0.6 m / ~35°, else lost. Right after
 # setting the initial pose it is "doubt" (0.5 m spread, like rviz) until the
 # robot has driven a bit (AMCL only updates after update_min_d = 0.25 m).
-LOC_GOOD = (0.15, 0.15)
-LOC_DOUBT = (0.5, 0.6)
+# Was 15 cm / 9°: never reached with TurtleBot3's alpha1-5 = 0.2 (AMCL keeps
+# the cloud wide for wheel slip). Measured 2026-11-11 on the virtual robot
+# while driving: AMCL sigma 12-27 cm / 11-19°, real error 2-10 cm / 0-2.5°.
+LOC_GOOD = (0.30, 0.35)
+LOC_DOUBT = (0.6, 0.6)
 
 
 def loc_from_amcl(msg):
@@ -182,6 +185,26 @@ def loc_from_amcl(msg):
             "sx": round(math.sqrt(max(cxx, 0.0)), 3), "sy": round(math.sqrt(max(cyy, 0.0)), 3),
             "syaw": round(syaw, 3), "a": round(a, 3), "b": round(b, 3),
             "angle": round(0.5 * math.atan2(2 * cxy, cxx - cyy), 3), "quality": quality}
+
+
+# Virtual robot: the simulator publishes the real pose on /ground_truth (frame
+# sim_world). Where the map frame lies in sim_world is stored at "Kaart
+# opslaan" (<map>.simworld.json); during navigation that gives the real
+# error of the AMCL pose ("Echte fout" on nav.html). A real robot has no
+# /ground_truth, so none of this runs there.
+def simworld_file(map_name):
+    return os.path.join(MAP_DIR, map_name + ".simworld.json")
+
+
+def pose_compose(a, b):
+    """a then b, both (x, y, yaw)."""
+    c, s = math.cos(a[2]), math.sin(a[2])
+    return (a[0] + c * b[0] - s * b[1], a[1] + s * b[0] + c * b[1], a[2] + b[2])
+
+
+def pose_inverse(a):
+    c, s = math.cos(a[2]), math.sin(a[2])
+    return (-c * a[0] - s * a[1], s * a[0] - c * a[1], -a[2])
 
 
 def lastpose_file(map_name):
@@ -353,12 +376,15 @@ STATE_NAMES = {
 }
 
 
+def resolve_algo(planner, controller):
+    """Planner/controller as Nav2 will run them (unknown -> Nav2's default)."""
+    return (planner if planner in PLANNERS else "GridBased",
+            controller if controller in CONTROLLERS else "FollowPath")
+
+
 def behavior_tree(planner, controller):
     """Path of a behavior tree using this planner/controller ("" = Nav2's default)."""
-    if planner not in PLANNERS:
-        planner = "GridBased"
-    if controller not in CONTROLLERS:
-        controller = "FollowPath"
+    planner, controller = resolve_algo(planner, controller)
     if (planner, controller) == ("GridBased", "FollowPath"):
         return ""
     path = "/tmp/bt_%s_%s.xml" % (planner, controller)
@@ -453,6 +479,11 @@ class NavWebNode(Node):
         self.create_timer(5.0, self._zones_tick, clock=Clock(clock_type=ClockType.STEADY_TIME))
         self.param_client = self.create_client(SetParameters, "/controller_server/set_parameters")
         self.tolerance = None   # last (xy, yaw) set on the goal checker
+        self.algo = None        # (planner, controller) of the last goal/route, shown in the status
+        self.target = None      # {"x", "y", "yaw"} sent to Nav2 last (goal or current route point)
+        self.truth = None       # ((x, y, yaw) in sim_world, stamp, monotonic) from /ground_truth
+        self.simworld = (None, None)   # (map name, sim_world pose of its map frame or None)
+        self.create_subscription(Odometry, "/ground_truth", self._on_truth, 10)
         self.cmd_seq = 0        # +1 per command from the page
 
         self.goal_handle = None
@@ -522,6 +553,65 @@ class NavWebNode(Node):
             p.pose.orientation = t.transform.rotation
             pub.publish(p)
 
+    # ---- real pose (virtual robot) -----------------------------------------
+    def _on_truth(self, msg):
+        p = msg.pose.pose
+        self.truth = ((p.position.x, p.position.y, 2 * math.atan2(p.orientation.z, p.orientation.w)),
+                      msg.header.stamp, time.monotonic())
+
+    def _map_base(self, stamp=None):
+        """(x, y, yaw) of the robot in the map frame from TF (SLAM or AMCL), or None."""
+        if self.tf_buffer is None:
+            return None
+        for t in ((Time.from_msg(stamp),) if stamp else ()) + (Time(),):
+            try:
+                tr = self.tf_buffer.lookup_transform(MAP_FRAME, BASE_FRAME, t).transform
+            except Exception:
+                continue
+            return (tr.translation.x, tr.translation.y, 2 * math.atan2(tr.rotation.z, tr.rotation.w))
+        return None
+
+    def _truth_fresh(self):
+        return self.truth is not None and time.monotonic() - self.truth[2] < 2.0
+
+    def _save_simworld(self, name):
+        """At "Kaart opslaan" in the simulator: where the map frame lies in sim_world."""
+        if not self._truth_fresh():
+            return
+        world_base, stamp, _ = self.truth
+        map_base = self._map_base(stamp)
+        if map_base is None:
+            return
+        x, y, yaw = pose_compose(world_base, pose_inverse(map_base))
+        try:
+            with open(simworld_file(name), "w") as f:
+                json.dump({"x": round(x, 4), "y": round(y, 4), "yaw": round(yaw, 5)}, f)
+            self.simworld = (None, None)
+        except OSError as e:
+            self.get_logger().warn("simworld niet bewaard: %s" % e)
+
+    def _truth_error(self, name):
+        """{"d": m, "yaw": rad} between the robot pose on the map (AMCL) and the
+        real pose, {"map": False} without <map>.simworld.json, None on a real robot."""
+        if not self._truth_fresh() or not name or name == SESSION:
+            return None
+        if self.simworld[0] != name:
+            try:
+                with open(simworld_file(name)) as f:
+                    d = json.load(f)
+                self.simworld = (name, (float(d["x"]), float(d["y"]), float(d["yaw"])))
+            except (OSError, ValueError, KeyError, TypeError):
+                self.simworld = (name, None)
+        if self.simworld[1] is None:
+            return {"map": False}
+        world_base, stamp, _ = self.truth
+        est = self._map_base(stamp)
+        if est is None:
+            return None
+        real = pose_compose(pose_inverse(self.simworld[1]), world_base)
+        dyaw = math.atan2(math.sin(est[2] - real[2]), math.cos(est[2] - real[2]))
+        return {"d": round(math.hypot(est[0] - real[0], est[1] - real[1]), 3), "yaw": round(abs(dyaw), 3)}
+
     # ---- commands ----------------------------------------------------------
     def _on_cmd(self, msg):
         try:
@@ -570,6 +660,7 @@ class NavWebNode(Node):
                 self.route = None
                 self._stop_action()
                 self.paused_goal = None
+                self.algo = resolve_algo(cmd.get("planner"), cmd.get("controller"))
                 self.last_goal = {"x": float(cmd["x"]), "y": float(cmd["y"]), "yaw": float(cmd["yaw"]),
                                   "bt": behavior_tree(cmd.get("planner"), cmd.get("controller")),
                                   "tol": parse_tolerance(cmd.get("tolerance"))}
@@ -583,6 +674,7 @@ class NavWebNode(Node):
                 self._stop_action()
                 self.paused_goal = None
                 poses = [clean_pose(p) for p in poses][:100]
+                self.algo = resolve_algo(cmd.get("planner"), cmd.get("controller"))
                 self.route = {"poses": poses, "loop": bool(cmd.get("loop")), "lap": 1, "index": 0,
                               "bt": behavior_tree(cmd.get("planner"), cmd.get("controller")),
                               "tol": tol, "via_tol": parse_tolerance(cmd.get("via_tolerance")) or tol}
@@ -601,6 +693,8 @@ class NavWebNode(Node):
             elif kind == "zones_adopt":
                 # nav.html saved the map of this exploration as <map>: its zones go along
                 target = str(cmd.get("map", ""))
+                if re.match(r"^[A-Za-z0-9_-]{1,40}$", target):
+                    self._save_simworld(target)
                 if re.match(r"^[A-Za-z0-9_-]{1,40}$", target) and load_zones(SESSION) \
                         and not os.path.exists(zones_file(target)):
                     shutil.copyfile(zones_file(SESSION), zones_file(target))
@@ -731,6 +825,7 @@ class NavWebNode(Node):
         goal = NavigateToPose.Goal()
         goal.pose = make_pose(self.get_clock().now().to_msg(), pose["x"], pose["y"], pose["yaw"])
         goal.behavior_tree = bt
+        self.target = {k: round(float(pose[k]), 3) for k in ("x", "y", "yaw")}
         if mode == "goal":
             self._set_status("sending", "goal", "doel verzonden")
         future = self.nav_client.send_goal_async(goal, feedback_callback=self._on_nav_feedback)
@@ -1172,6 +1267,10 @@ class NavWebNode(Node):
         name = self.last_tick_map
         s["pose_suggestion"] = load_lastpose(name) if s["nav2_ready"] and self.loc is None \
             and name and name != SESSION else None
+        if self.algo:
+            s["planner"], s["controller"] = self.algo
+        s["goal"] = self.target
+        s["truth_err"] = self._truth_error(name) if s["nav2_ready"] and self.loc else None
         if self.tolerance:
             s["tolerance"] = {"xy": self.tolerance[0], "yaw": self.tolerance[1]}
         msg = String()

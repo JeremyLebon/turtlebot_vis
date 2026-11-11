@@ -228,7 +228,7 @@ def list_maps():
 # Files of one map: the map itself plus what belongs to it (zones and routes
 # from nav_web_node, the original before the first edit in the map editor).
 MAP_SUFFIXES = (".yaml", ".pgm", ".zones.json", ".routes.json", ".orig.pgm",
-                ".zones.bak.json", ".edited.pgm")
+                ".zones.bak.json", ".edited.pgm", ".simworld.json")
 MAP_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
 
 
