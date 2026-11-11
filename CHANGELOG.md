@@ -15,6 +15,10 @@ Eigen versies, los daarvan:
 ## 1.0.2 - nog niet gebouwd
 - **`check` als tabel**: kolommen Onderdeel, Adres en Info, met een kop per
   blok; lange uitleg loopt door in de kolom Info (past ook in 80 kolommen).
+- **`./start.sh --pull` doet ook `git pull`** (de scripts), vóór de image. Is
+  `start.sh` zelf veranderd, dan start meteen de nieuwe versie. Lukt `git
+  pull` niet (eigen wijzigingen, geen internet), dan een melding en verder
+  met de huidige scripts.
 
 ## 1.0.1 - 2026-11-11
 - **`check` en `./start.sh` leesbaarder**: blokken *Open in de browser*,

@@ -3,7 +3,7 @@
 #
 #   ./start.sh             starten, check, shell in de container
 #   ./start.sh --no-shell  enkel starten en check
-#   ./start.sh --pull      eerst de nieuwste image ophalen (internet nodig)
+#   ./start.sh --pull      eerst de nieuwste scripts (git pull) en image ophalen (internet nodig)
 #   ./start.sh --htmlsim   HTML-simulator: http://127.0.0.1:8080/sim/ (thuis, huiswerk)
 #   ./start.sh --fenix     HTML-simulator + virtuele robot: Fenix-pagina op http://127.0.0.1:8090
 #                          (SLAM, Navigatie; back-up als de echte robots niet werken)
@@ -16,6 +16,7 @@ set -e
 cd "$(dirname "$0")"
 
 OPEN_SHELL=true PULL=false MODE= FENIX=false
+ARGS=("$@")
 for arg in "$@"; do
     case $arg in
         --no-shell) OPEN_SHELL=false ;;
@@ -27,6 +28,22 @@ for arg in "$@"; do
         *) echo "onbekende optie: $arg (zie ./start.sh --help)"; exit 1 ;;
     esac
 done
+
+# --pull: eerst de scripts bijwerken (git pull), dan de image. Is start.sh zelf
+# veranderd, dan meteen de nieuwe versie starten (TB_START_PULLED: maar één keer).
+if $PULL && [ -z "${TB_START_PULLED:-}" ] && [ -d .git ]; then
+    old=$(git rev-parse HEAD)
+    if msg=$(git pull --ff-only 2>&1); then
+        if [ "$(git rev-parse HEAD)" != "$old" ]; then
+            echo "Scripts bijgewerkt: $(git log -1 --format='%h %s' | cut -c1-70)"
+            git diff --quiet "$old" HEAD -- start.sh || exec env TB_START_PULLED=1 ./start.sh "${ARGS[@]}"
+        fi
+    else
+        echo "Scripts niet bijgewerkt (git pull lukt niet), verder met de huidige:"
+        echo "$msg" | tail -n 6 | sed 's/^/    /'
+        echo "Eigen wijzigingen in deze map? Zie de GitBook (git checkout .env, git stash)."
+    fi
+fi
 
 # Onder WSL: geheugenlimiet in %USERPROFILE%\.wslconfig? (anders voorstel)
 ./wsl_check.sh || true
