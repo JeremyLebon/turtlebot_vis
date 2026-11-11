@@ -12,7 +12,7 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
-## 1.0.8 - nog niet gebouwd
+## 1.0.8 - 2026-11-11
 - **Virtuele robot 1.9.8**: Navigatiestatus toont planner/controller en het
   doel; lokalisatie wordt "goed" tot 30 cm / 20° (σ); nieuwe rij **Echte
   fout** (AMCL tegenover de echte positie uit de simulator) voor kaarten die
