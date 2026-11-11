@@ -33,9 +33,13 @@ done
 # veranderd, dan meteen de nieuwe versie starten (TB_START_PULLED: maar één keer).
 if $PULL && [ -z "${TB_START_PULLED:-}" ] && [ -d .git ]; then
     old=$(git rev-parse HEAD)
+    echo "Scripts bijwerken (git pull)..."
     if msg=$(git pull --ff-only 2>&1); then
-        if [ "$(git rev-parse HEAD)" != "$old" ]; then
-            echo "Scripts bijgewerkt: $(git log -1 --format='%h %s' | cut -c1-70)"
+        if [ "$(git rev-parse HEAD)" = "$old" ]; then
+            echo "  al de nieuwste versie ($(git log -1 --format='%h, %cd' --date=format:'%d-%m-%Y'))"
+        else
+            echo "  $(git rev-list --count "$old"..HEAD) nieuwe wijziging(en), $(git rev-parse --short "$old") -> $(git rev-parse --short HEAD):"
+            git log --format='    - %s' "$old"..HEAD | cut -c1-100 | head -8
             git diff --quiet "$old" HEAD -- start.sh || exec env TB_START_PULLED=1 ./start.sh "${ARGS[@]}"
         fi
     else
@@ -49,7 +53,7 @@ fi
 ./wsl_check.sh || true
 
 export XAUTH=${XAUTH:-}     # anders waarschuwt docker compose (enkel nodig onder Linux met X11)
-if $PULL; then docker compose pull; fi
+if $PULL; then echo "Image ophalen (docker pull)..."; docker compose pull; fi
 # Stil als de image er al is; de eerste keer (image ophalen, ~5 GB) wel de voortgang tonen.
 if docker image inspect "$(docker compose config --images | head -1)" > /dev/null 2>&1; then
     out=$(docker compose up -d 2>&1) || { echo "$out"; exit 1; }
