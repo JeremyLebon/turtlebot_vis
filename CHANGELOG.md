@@ -12,6 +12,15 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## 1.0.7 - nog niet gebouwd
+- **Virtuele robot 1.9.7: Nav2 verdraagt haperingen tot 1 s** (was 0,1-0,2 s):
+  op een drukke laptop verloor de controller de robotpositie ("Unable to
+  transform robot pose") en reed de robot door obstakels.
+- **Simulator 1.4.3: ~40 % minder berichten naar rosbridge.** `/imu` 50 -> 20 Hz,
+  `/ground_truth` en `/joint_states` 30 -> 10 Hz, `/joy` 20 -> 1 Hz zonder
+  gamepad. `/clock`, `/odom`, `/tf` en `/scan` blijven. rosbridge (Python, één
+  kern) liep op een Windows-laptop vol en gooide `/tf` en `/clock` weg.
+
 ## 1.0.6 - 2026-11-11
 - **Simulator 1.4.2: TurtleBot3-wereld niet meer symmetrisch.** Zonder de
   schans (weg sinds 1.3.1) was de wereld puntsymmetrisch (zeshoek, 3 x 3

@@ -52,6 +52,7 @@ FIXED_LAUNCHES = {
 # knoppen op een laptop, met de HTML-simulator als hardware. Bringup = enkel
 # wachten op de simulator; SLAM en Navigatie op simulatietijd (/clock).
 SIM = os.environ.get("FENIX_SIM") == "1"
+SIM_TF_TOLERANCE = 1.0   # s, virtual robot only (write_nav2_params)
 if SIM:
     FIXED_LAUNCHES["bringup"] = ["ros2", "launch", "/root/turtlebot3_ws/launch/sim_bringup.launch.py"]
 
@@ -439,6 +440,19 @@ def write_nav2_params():
     lc["filters"] = ["keepout_filter"]
     lc["keepout_filter"] = dict(keepout)
     apply_nav2_overrides(params)
+    if SIM:
+        # Virtual robot: /clock and /tf come from a browser tab via rosbridge.
+        # On a busy laptop (2026-11-11: 94 % CPU, Defender scan) they arrive
+        # in bursts; with Nav2's 0.1-0.2 s the controller lost the robot pose
+        # ("Unable to transform robot pose into global plan's frame") and the
+        # local costmap stopped following the robot. 1 s rides out the gaps.
+        def loosen(d):
+            for k, v in d.items():
+                if k == "transform_tolerance" and isinstance(v, (int, float)):
+                    d[k] = max(v, SIM_TF_TOLERANCE)
+                elif isinstance(v, dict):
+                    loosen(v)
+        loosen(params)
     with open(NAV2_PARAMS_OUT, "w") as f:
         yaml.safe_dump(params, f, sort_keys=False)
     return NAV2_PARAMS_OUT

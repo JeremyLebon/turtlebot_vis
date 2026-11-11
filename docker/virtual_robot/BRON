@@ -1,1 +1,1 @@
-turtlebot_docker 45ba678 (2026-11-11) 1.9.6 (niet gebouwd): laag Particles (AMCL) op Navigatie, uitgedund tot 200 via /web/particles enkel zolang aan; MPPI standaard-controller op de pagina
+turtlebot_docker 683d1f5 (2026-11-11) 1.9.7 (enkel virtuele robot): transform_tolerance >= 1 s op simulatietijd (Unable to transform robot pose op een drukke laptop)
