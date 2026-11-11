@@ -12,6 +12,17 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## 1.0.1 - nog niet gebouwd
+- **`check` en `./start.sh` leesbaarder**: blokken *Open in de browser*,
+  *Verbinding*, *Robot* en *Deze laptop*; eerst de link, dan de uitleg (op een
+  eigen regel); onderaan het besluit en de commando's. *Simulator* staat er nog
+  maar één keer (versie en of hij open is).
+- **`./start.sh`**: geen banner meer vóór en na `check` (zelfde info), geen
+  regels van docker compose (enkel bij de eerste download), geen
+  XAUTH-waarschuwing.
+- **Banner** van de shell (bij `docker exec` en bij een andere robot): links
+  en commando's onder elkaar.
+
 ## 1.0.0 - 2026-11-11
 Eerste genummerde versie.
 - **Versienummer** bovenaan `check`; de virtuele robot toont de versie van de

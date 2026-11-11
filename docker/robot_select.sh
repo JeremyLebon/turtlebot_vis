@@ -134,17 +134,24 @@ check() {
     timeout -s KILL 20 python3 /root/vis_check.py
 }
 
+# Welke robot, de links en de commando's. Dezelfde commando's als onderaan `check`.
 _robot_banner() {
+    local B=$'\e[1m' E=$'\e[0m'
     if [ "$TB_NR" = htmlsim ]; then
-        echo "HTML-simulator  (ROS_DOMAIN_ID=0, Zenoh-router en rosbridge in deze container)"
-        echo "Simulator: http://127.0.0.1:8080/sim/   Lichtblick: http://127.0.0.1:8080   Virtuele robot (Fenix-pagina): fenix start   Echte robot: robot"
+        echo "${B}HTML-simulator${E}  (ROS_DOMAIN_ID=0)"
+        echo "  Simulator    http://127.0.0.1:8080/sim/"
+        echo "  Lichtblick   http://127.0.0.1:8080"
+        echo "  Commando's   fenix start (virtuele robot)  ·  robot (echte robot)  ·  check"
     elif [ "$TB_NR" = sim ]; then
-        echo "Simulatie  (ROS_DOMAIN_ID=0, Zenoh-router in deze container)"
-        echo "Gazebo starten: ros2 launch turtlebot3_gazebo turtlebot3_world.launch.py"
-        echo "Lichtblick in de browser: http://127.0.0.1:8080   Echte robot: robot"
+        echo "${B}Gazebo-simulatie${E}  (ROS_DOMAIN_ID=0)"
+        echo "  Starten      ros2 launch turtlebot3_gazebo turtlebot3_world.launch.py"
+        echo "  Lichtblick   http://127.0.0.1:8080"
+        echo "  Commando's   robot (echte robot)  ·  robot htmlsim  ·  check"
     else
-        echo "TurtleBot $TB_NR  (ROS_DOMAIN_ID=$ROS_DOMAIN_ID, Zenoh-router 10.0.$TB_NR.10)"
-        echo "Lichtblick in de browser: http://127.0.0.1:8080   Andere robot: robot <nr>   Simulatie: robot sim / robot htmlsim   Controle: check"
+        echo "${B}TurtleBot $TB_NR${E}  (ROS_DOMAIN_ID=$ROS_DOMAIN_ID, Zenoh-router 10.0.$TB_NR.10)"
+        echo "  Fenix-pagina http://10.0.$TB_NR.10:8080"
+        echo "  Lichtblick   http://127.0.0.1:8080"
+        echo "  Commando's   robot <nr> (andere robot)  ·  robot sim / robot htmlsim  ·  check"
     fi
 }
 
@@ -159,6 +166,7 @@ _robot_refresh() {
     source "$ROBOT_ENV"
     # andere robot: de ros2-daemon kent nog de oude (lege `ros2 topic list`)
     [ -n "$_robot_seen" ] && { echo "Robotkeuze gewijzigd:"; [ "${TB_DAEMON_RESET:-0}" = 1 ] && ros2 daemon stop >/dev/null 2>&1; }
+    # VIS_QUIET (start.sh): de eerste keer geen banner, `check` toont hetzelfde
+    [ -z "$_robot_seen" ] && [ -n "$VIS_QUIET" ] || _robot_banner
     _robot_seen=$cur
-    _robot_banner
 }

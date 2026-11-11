@@ -31,8 +31,14 @@ done
 # Onder WSL: geheugenlimiet in %USERPROFILE%\.wslconfig? (anders voorstel)
 ./wsl_check.sh || true
 
+export XAUTH=${XAUTH:-}     # anders waarschuwt docker compose (enkel nodig onder Linux met X11)
 if $PULL; then docker compose pull; fi
-docker compose up -d
+# Stil als de image er al is; de eerste keer (image ophalen, ~5 GB) wel de voortgang tonen.
+if docker image inspect "$(docker compose config --images | head -1)" > /dev/null 2>&1; then
+    out=$(docker compose up -d 2>&1) || { echo "$out"; exit 1; }
+else
+    docker compose up -d
+fi
 
 # -t enkel met een terminal (anders faalt docker exec, bv. in een script)
 TTY=-i; [ -t 0 ] && [ -t 1 ] && TTY=-it
@@ -47,12 +53,13 @@ if [ -n "$MODE" ]; then
     fi
     if $FENIX; then
         echo "Virtuele robot starten..."
-        docker exec turtlebot-vis bash -ic "fenix start" 2>/dev/null | tail -1 || true
+        docker exec turtlebot-vis bash -ic "fenix start" > /dev/null 2>&1 || true
     fi
 fi
-docker exec $TTY turtlebot-vis bash -ic check || true
+# VIS_QUIET: de shell toont de banner (robot, links) niet, check toont hetzelfde
+docker exec -e VIS_QUIET=1 $TTY turtlebot-vis bash -ic check || true
 
 if $OPEN_SHELL; then
     echo
-    exec docker exec $TTY turtlebot-vis bash
+    exec docker exec -e VIS_QUIET=1 $TTY turtlebot-vis bash
 fi
