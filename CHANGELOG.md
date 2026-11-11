@@ -12,7 +12,7 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
-## 1.0.4 - nog niet gebouwd
+## 1.0.4 - 2026-11-11
 - **Simulator 1.4.1: zijbalk wegschuiven.** Knop *Zijbalk* in de titelbalk
   van de simulator: de 3D-wereld krijgt de hele breedte; nog eens klikken =
   terug. De keuze blijft bewaard.
