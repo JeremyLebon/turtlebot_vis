@@ -112,6 +112,12 @@ RUN cd /tmp/htmlsim && python3 build.py --local \
 # enkel de virtuele robot sourcet die. Kaarten: ~/ros2_ws/virtuele_robot.
 RUN apt-get update && apt-get install -y --no-install-recommends ros-${ROS_DISTRO}-twist-mux \
     && rm -rf /var/lib/apt/lists/*
+# Project sessie 4 (analyse en PDF-verslag): pandas, reportlab, seaborn (matplotlib,
+# numpy, OpenCV zitten er al). Uit Ubuntu, zodat er geen venv/pip nodig is; python3-venv
+# voor wie toch extra bibliotheken wil (GitBook Sessie 4, Python-bibliotheken installeren).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3-pandas python3-reportlab python3-seaborn python3-venv \
+    && rm -rf /var/lib/apt/lists/*
 COPY docker/virtual_robot /tmp/virtual_robot
 RUN V=/tmp/virtual_robot && W=/root/turtlebot3_ws \
     && install -m 755 $V/bin/* /usr/local/bin/ \
