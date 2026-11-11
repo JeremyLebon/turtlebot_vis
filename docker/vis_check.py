@@ -23,8 +23,8 @@ OK, WARN, BAD, OFF = "\033[32m✔\033[0m", "\033[33m!\033[0m", "\033[31m✘\033[
 BOLD, END = "\033[1m", "\033[0m"
 # Regels per blok, pas aan het einde getoond (in deze volgorde): de controles
 # lopen in een andere volgorde dan wat de student wil lezen.
-BROWSER, CONN, ROBOT, LAPTOP = "Open in de browser", "Verbinding", "Robot", "Deze laptop"
-sections = {BROWSER: [], CONN: [], ROBOT: [], LAPTOP: []}
+START, BROWSER, CONN, ROBOT, LAPTOP = "Opstarten", "Open in de browser", "Verbinding", "Robot", "Deze laptop"
+sections = {START: [], BROWSER: [], CONN: [], ROBOT: [], LAPTOP: []}
 count = {BAD: 0, WARN: 0}
 
 
@@ -50,6 +50,25 @@ def line(sym, label, text, sec=CONN, more=()):
     else:
         addr, info = "", text
     sections[sec].append((sym, label, addr, [info] + list(more)))
+
+
+def start_rows(path):
+    """Stappen van start.sh (git pull, image, onderdelen) als eerste blok.
+    Regels "ok|warn|bad<TAB>stap<TAB>tekst"; "+<TAB><TAB>tekst" = uitleg bij de vorige."""
+    try:
+        with open(path) as f:
+            rows = [l.rstrip("\n").split("\t", 2) for l in f if l.strip()]
+        os.remove(path)
+    except OSError:
+        return
+    sym = {"ok": OK, "warn": WARN, "bad": BAD}
+    for r in rows:
+        if len(r) < 3:
+            continue
+        if r[0] == "+" and sections[START]:
+            sections[START][-1][3].append(r[2])
+        elif r[0] in sym:
+            line(sym[r[0]], r[1], r[2], START)
 
 
 def show():
@@ -243,6 +262,8 @@ def main():
     html = nr == "htmlsim"
     sim = nr in ("sim", "htmlsim")
     vr_running = False
+    if os.environ.get("VIS_START_ROWS"):
+        start_rows(os.environ["VIS_START_ROWS"])
     mode = {"htmlsim": "HTML-simulator", "sim": "Gazebo-simulatie"}.get(nr, "TurtleBot %s" % nr if nr else "geen robot")
     print(BOLD + "Turtlebot-vis %s" % os.environ.get("TB_VIS_VERSION", "dev") + END
           + "  ·  ROS 2 %s  ·  %s" % (os.environ.get("ROS_DISTRO", "?"), mode))
