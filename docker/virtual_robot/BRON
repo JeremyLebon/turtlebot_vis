@@ -1,1 +1,1 @@
-turtlebot_docker 85ae1c8 (2026-11-10) 1.9.3 (niet gebouwd): balk boven de kaart bedekt de kaart niet meer (routepunten bovenaan); virtuele robot verbindt via 127.0.0.1 i.p.v. localhost (WSL na wifi-onderbreking)
+turtlebot_docker 45ba678 (2026-11-11) 1.9.6 (niet gebouwd): laag Particles (AMCL) op Navigatie, uitgedund tot 200 via /web/particles enkel zolang aan; MPPI standaard-controller op de pagina

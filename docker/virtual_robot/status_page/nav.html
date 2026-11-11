@@ -275,10 +275,11 @@
         <span class="rsep"></span>
         <button class="btn tip-l layer" data-layer="showScan" data-icon="scan" aria-label="Laserscan" data-tip="Laserscan (rood) op de kaart: ligt hij op de muren, dan klopt de lokalisatie (op Mappen standaard aan)"></button>
         <button class="btn tip-l layer" data-layer="showLocalCm" data-icon="localcm" aria-label="Local costmap" data-tip="Local costmap: obstakels + veiligheidsmarge rond de robot (3 x 3 m)"></button>
+        <button class="btn tip-l layer nav-only" data-layer="showParticles" data-icon="particles" aria-label="Particles (AMCL)" data-tip="Particles van AMCL (oranje streepjes): elke streep is een gok waar de robot staat en waar hij naartoe kijkt. Dicht bij elkaar = zeker, uitgewaaierd = onzeker"></button>
         <button class="btn tip-l layer" data-layer="showGlobalCm" data-icon="globalcm" aria-label="Global costmap" data-tip="Global costmap: hele kaart + veiligheidsmarge (planner)"></button>
         <button class="btn tip-l" id="navPadBtn" data-icon="index" aria-label="Bijsturen" data-tip="Bijsturen (teleop) tonen/verbergen - gaat voor op Nav2 zolang je een pijl ingedrukt houdt"></button>
         <button class="btn tip-l" id="camPipBtn" data-icon="camera" aria-label="Camera" data-tip="Camerabeeld in de kaart"></button>
-        <span class="hidden-cbs"><input type="checkbox" id="showLocalCm"><input type="checkbox" id="showScan"><input type="checkbox" id="showGlobalCm"></span>
+        <span class="hidden-cbs"><input type="checkbox" id="showLocalCm"><input type="checkbox" id="showScan"><input type="checkbox" id="showGlobalCm"><input type="checkbox" id="showParticles"></span>
       </div>
       <button id="mapSwap" aria-label="Kaart groot" title="Kaart weer groot"></button>
       <div id="navPad" style="display:none">
@@ -379,9 +380,9 @@
       </select>
       <label class="sub" for="controllerSel">Controller</label>
       <select id="controllerSel" title="Lokale controller: volgt het pad en ontwijkt obstakels">
-        <option value="FollowPath" title="DWB - probeert veel snelheden uit en kiest de beste (standaard)">DWB</option>
+        <option value="FollowPath" title="DWB - probeert veel snelheden uit en kiest de beste (standaard van TurtleBot3)">DWB</option>
         <option value="RPP" title="Regulated Pure Pursuit - volgt een punt voor zich op het pad, rustig">Pure Pursuit</option>
-        <option value="MPPI" title="MPPI - simuleert 1000 mogelijke trajecten per stap en kiest het beste; vloeiend, maar zwaar voor de Pi">MPPI</option>
+        <option value="MPPI" title="MPPI - simuleert 1000 mogelijke trajecten per stap en kiest het beste; vloeiend (standaard op deze pagina, afgesteld voor de Pi 5)">MPPI</option>
       </select>
       <label class="sub" for="tolSel">Nauwkeurigheid</label>
       <select id="tolSel" title="Wanneer is de robot 'aangekomen'? Nauwkeuriger dan AMCL (5-10 cm) heeft geen zin: dan gaat hij wiebelen of blijven draaien">
@@ -638,7 +639,7 @@
   var plannerSel = document.getElementById("plannerSel");
   var controllerSel = document.getElementById("controllerSel");
   plannerSel.value = lsGet("navPlanner", "GridBased");
-  controllerSel.value = lsGet("navController", "FollowPath");
+  controllerSel.value = lsGet("navController", "MPPI");   // 2026-11-11: MPPI as default for the students
   plannerSel.addEventListener("change", function () { lsSet("navPlanner", plannerSel.value); });
   controllerSel.addEventListener("change", function () { lsSet("navController", controllerSel.value); });
   // Goal tolerance (nav_web_node sets controller_server's goal checker
@@ -1375,6 +1376,39 @@
     box.addEventListener("change", function () { lsSet(c[2], box.checked ? "1" : "0"); setCostmap(c[0], box.checked); });
   });
 
+  // ---- AMCL particles (optional overlay) ----
+  // nav_web_node thins /particle_cloud (up to 2000 poses) to 200, 1x/s, and
+  // only while this layer subscribes: off = no traffic at all
+  var particles = null;   // [x, y, yaw, ...] in the map frame
+  var particlesTopic = new ROSLIB.Topic({ ros: ros, name: "/web/particles", messageType: "std_msgs/msg/String",
+                                          queue_length: 1 });
+  function setParticles(on) {
+    if (on) particlesTopic.subscribe(function (msg) {
+      try { particles = JSON.parse(msg.data).p; } catch (e) { particles = null; }
+      draw();
+    });
+    else { particlesTopic.unsubscribe(); particles = null; draw(); }
+  }
+  function drawParticles() {
+    if (!particles) return;
+    var dpr = window.devicePixelRatio || 1, len = 7 * dpr;
+    ctx.strokeStyle = "#ff8c1a"; ctx.lineWidth = 1.5 * dpr;
+    ctx.beginPath();
+    for (var i = 0; i + 2 < particles.length; i += 3) {
+      var p = toCanvas(particles[i], particles[i + 1]), a = particles[i + 2];
+      // canvas y points down: heading a on the map = -a on screen
+      ctx.moveTo(p[0], p[1]);
+      ctx.lineTo(p[0] + Math.cos(a) * len, p[1] - Math.sin(a) * len);
+    }
+    ctx.stroke();
+  }
+  (function () {
+    var box = document.getElementById("showParticles");
+    box.checked = lsGet("navParticles", "0") === "1";
+    if (box.checked) setParticles(true);
+    box.addEventListener("change", function () { lsSet("navParticles", box.checked ? "1" : "0"); setParticles(box.checked); });
+  })();
+
   function draw() {
     if (!map) return;
     var dpr = window.devicePixelRatio || 1;
@@ -1384,6 +1418,7 @@
     drawCostmap(costmaps.global, null);
     drawCostmap(costmaps.local, mapOdom);
     drawScan();
+    drawParticles();
 
     // 1 m grid ticks along the edges would clutter small maps; a scale bar instead
     var mPx = 1 / map.res * scale * view.z;

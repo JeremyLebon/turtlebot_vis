@@ -821,7 +821,8 @@ class SystemInfoNode(Node):
 
     def _monitor_payload(self, data):
         keep = ("bringup", "slam", "navigation", "camera", "joystick", "robot_node",
-                "usb_power", "joystick_device", "camera_sensor", "map_running", "changes", "maps", "update")
+                "usb_power", "joystick_device", "camera_sensor", "map_running", "changes", "maps", "update",
+                "image_previous")
         ls = self.launch_status if time.time() - self.launch_status.get("_t", 0) < 10 else {}
         bat = self.battery if self.battery and time.time() - self.battery["t"] < 10 else None
         status = {k: v for k, v in data.items() if k not in ("host", "config")}

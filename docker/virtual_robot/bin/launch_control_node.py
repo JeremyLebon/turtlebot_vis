@@ -731,6 +731,8 @@ MONITOR_COMMANDS = (["start:" + n for n in MONITOR_LAUNCHES] + ["stop:" + n for 
                     ["stop_all", "beep", "update", "reboot", "shutdown", "set_pin",
                      # map library on the monitor (map_bundle.py), "arg" = map name
                      "map_upload", "map_download",
+                     # back to the :vorige image / install a tagged version, "arg" = "vX.Y.Z"
+                     "rollback", "install_version",
                      # wifi load test: send data to the monitor, "arg" = "<test id>:<s>[:<Mbit/s>[:<down>]]"
                      "wifitest"])
 
@@ -1432,6 +1434,11 @@ class LaunchControlNode(Node):
                     resp = self._stop_all_cb(None, resp)
                 elif cmd == "update":
                     resp = self._update_cb(None, resp)
+                elif cmd == "rollback":
+                    resp = self._rollback_cb(None, resp)
+                elif cmd == "install_version":
+                    r = self._install_version(str(c.get("arg", "")))
+                    resp.success, resp.message = r["success"], r["message"]
                 elif cmd in ("reboot", "shutdown"):
                     resp = self._make_power_cb("Reboot" if cmd == "reboot" else "PowerOff")(None, resp)
                 elif cmd == "set_pin":
@@ -1595,6 +1602,8 @@ class LaunchControlNode(Node):
         status["monitor_cmd"] = self.monitor.last if self.monitor else None
         # for the fleet monitor's "update all" queue (knows when a robot is done)
         status["update"] = self.update_status
+        # version of the :vorige image (fleet monitor: "Terug naar vorige versie")
+        status["image_previous"] = _previous_image()
         status["desktop"] = self.desktop
         status["monitor_control"] = monitor_control()
         status["image_channel"] = image_channel()

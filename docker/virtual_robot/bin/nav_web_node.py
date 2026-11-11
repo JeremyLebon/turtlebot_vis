@@ -31,6 +31,12 @@
 #   /web/map_odom    geometry_msgs/PoseStamped out: map->odom (AMCL), 5 Hz,
 #                    likewise only while subscribed - nav.html places the
 #                    local costmap (odom frame, rolling window) with it
+#   /web/particles   std_msgs/String (JSON) out: {"n": particles in AMCL,
+#                    "p": [x, y, yaw, ...]} of at most PARTICLES_MAX particles,
+#                    1 Hz, only while subscribed (layer "Particles" on nav.html):
+#                    /particle_cloud itself is up to 2000 poses, ~300 kB JSON.
+#                    AMCL only publishes it after an update (robot moved, new
+#                    initial pose), so the last cloud is kept and repeated
 #
 # The Nav2 action (navigate_to_pose) runs here instead of in the browser:
 # rosbridge's action support is limited, and this way a page reload doesn't
@@ -55,7 +61,7 @@ import rclpy
 from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from nav2_msgs.action import NavigateToPose, Spin
-from nav2_msgs.msg import CostmapFilterInfo
+from nav2_msgs.msg import CostmapFilterInfo, ParticleCloud
 from nav2_msgs.srv import LoadMap
 from nav_msgs.srv import GetMap
 from nav_msgs.msg import MapMetaData, OccupancyGrid
@@ -97,6 +103,7 @@ ACTION_RE = re.compile(r"^(wait:\d{1,3}|beep|photo|spin|hold)$")
 PHOTO_DIR = "/root/turtlebot_state/photos"
 PHOTO_KEEP = 300         # newest photos kept (~50 kB each)
 CAMERA_TOPIC = "/camera/image_raw/compressed"
+PARTICLES_MAX = 200      # /web/particles: enough to see the cloud spread out
 
 
 def clean_pose(p):
@@ -395,6 +402,13 @@ class NavWebNode(Node):
         self.status_pub = self.create_publisher(String, "/web/nav_status", 10)
         self.pose_pub = self.create_publisher(PoseStamped, "/web/robot_pose", 10)
         self.map_odom_pub = self.create_publisher(PoseStamped, "/web/map_odom", 10)
+        # AMCL particles, thinned out, only while a page shows them
+        self.particles_pub = self.create_publisher(String, "/web/particles", 1)
+        self.particles_json = None   # last thinned cloud
+        # AMCL publishes the cloud best effort (sensor data QoS); a message only
+        # comes after an AMCL update, so cheap to keep subscribed
+        self.create_subscription(ParticleCloud, "/particle_cloud", self._on_particles,
+                                 QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT))
         self.create_subscription(String, "/web/nav_cmd", self._on_cmd, 10)
         # Exploring (explore_lite) sends its own goals to the same Nav2: a goal
         # or route from the page pauses it first, else the two keep replacing
@@ -455,7 +469,23 @@ class NavWebNode(Node):
         self.create_timer(0.2, self._publish_pose, clock=Clock(clock_type=ClockType.STEADY_TIME))
         self.create_timer(0.5, self._publish_status, clock=Clock(clock_type=ClockType.STEADY_TIME))
         self.create_timer(2.0, self._check_nav2_active, clock=Clock(clock_type=ClockType.STEADY_TIME))
+        self.create_timer(1.0, self._particles_tick, clock=Clock(clock_type=ClockType.STEADY_TIME))
         self.get_logger().info("nav_web_node ready: /web/nav_cmd -> Nav2, /web/nav_status, /web/robot_pose")
+
+    # ---- AMCL particles (layer on nav.html) -------------------------------
+    def _particles_tick(self):
+        if self.particles_json is not None and self.particles_pub.get_subscription_count() > 0:
+            self.particles_pub.publish(String(data=self.particles_json))
+
+    def _on_particles(self, msg):
+        ps = msg.particles   # thinning 200 of them is cheap, even without a page
+        step = max(1, len(ps) // PARTICLES_MAX)
+        flat = []
+        for q in ps[::step][:PARTICLES_MAX]:
+            o = q.pose.orientation
+            yaw = math.atan2(2 * (o.w * o.z + o.x * o.y), 1 - 2 * (o.y * o.y + o.z * o.z))
+            flat += [round(q.pose.position.x, 2), round(q.pose.position.y, 2), round(yaw, 2)]
+        self.particles_json = json.dumps({"n": len(ps), "p": flat}, separators=(",", ":"))
 
     # ---- robot pose ------------------------------------------------------
     def _publish_pose(self):

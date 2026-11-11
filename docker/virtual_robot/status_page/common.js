@@ -341,6 +341,7 @@ var FENIX_ICONS = {
   ruler: '<path d="M3 17L17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/>',
   localcm: '<rect x="6" y="6" width="12" height="12" rx="1"/><path d="M6 12h12M12 6v12"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/>',
   globalcm: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>',
+  particles: '<path d="M5 7l2-1M10 5l2 1M16 6l2-1M6 13l2 1M12 11l2-1M17 13l2 1M8 18l2-1M14 18l2 1"/>',
   scan: '<circle cx="12" cy="12" r="2" fill="currentColor"/><path d="M4 8l1 1M20 8l-1 1M3 14h1.5M19.5 14H21M7 4.5l.8 1.3M17 4.5l-.8 1.3M12 3v1.5"/>',
   lidar: '<circle cx="12" cy="12" r="2"/><path d="M5 5a10 10 0 0 0 0 14M19 5a10 10 0 0 1 0 14M8 8a5 5 0 0 0 0 8M16 8a5 5 0 0 1 0 8"/>',
 };
