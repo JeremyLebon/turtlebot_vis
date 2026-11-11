@@ -12,7 +12,7 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
-## 1.0.6 - nog niet gebouwd
+## 1.0.6 - 2026-11-11
 - **Simulator 1.4.2: TurtleBot3-wereld niet meer symmetrisch.** Zonder de
   schans (weg sinds 1.3.1) was de wereld puntsymmetrisch (zeshoek, 3 x 3
   palen, twee dozen in spiegelbeeld): een positie en dezelfde positie 180°
