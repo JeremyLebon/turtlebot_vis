@@ -12,6 +12,15 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## 1.0.6 - nog niet gebouwd
+- **Simulator 1.4.2: TurtleBot3-wereld niet meer symmetrisch.** Zonder de
+  schans (weg sinds 1.3.1) was de wereld puntsymmetrisch (zeshoek, 3 x 3
+  palen, twee dozen in spiegelbeeld): een positie en dezelfde positie 180°
+  gedraaid rond het midden gaven dezelfde lidarscan. AMCL kon zich dan
+  vastzetten op het spiegelbeeld en Nav2 reed "naar de andere kant". Nu een
+  vaste kist tegen de bovenste wand en een kort muurstuk linksonder. Oude
+  kaarten van deze wereld missen die twee: beter een nieuwe kaart maken.
+
 ## 1.0.5 - 2026-11-11
 - **Virtuele robot 1.9.6**: laag **Particles** (AMCL) op Navigatie en MPPI
   als standaard-controller op de pagina (zelfde als de echte robot 1.9.6).
