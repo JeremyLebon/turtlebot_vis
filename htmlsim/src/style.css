@@ -57,6 +57,8 @@ body{background:var(--bg);color:var(--fg);font:15px/1.45 var(--f-body);display:f
 .pad .f{grid-area:1/2} .pad .l{grid-area:2/1} .pad .x{grid-area:2/2;font-size:11px} .pad .r{grid-area:2/3} .pad .b{grid-area:3/2}
 
 .panel{border-left:1px solid var(--line);background:var(--surface);overflow-y:auto;min-width:0}
+body.panel-hidden .layout{grid-template-columns:minmax(0,1fr)}
+body.panel-hidden .panel{display:none}
 .panel section{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
 .panel h2{margin:0;font:600 12px var(--f-mono);text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}

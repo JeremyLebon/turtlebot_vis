@@ -23,6 +23,7 @@
   <button class="ghost" id="memLink" type="button" hidden title="Geheugen van WSL en de container, met de knop Cache vrijmaken (opent in een nieuw tabblad, de simulatie loopt door)">Geheugen</button>
   <button class="ghost" id="fenixLink" type="button" hidden title="Statuspagina van de virtuele robot: SLAM, kaarten, zones en Navigatie, zoals op de echte robot (nieuw tabblad, de simulatie loopt door)">Fenix-pagina</button>
   <button class="ghost" id="dlProject" hidden title="Broncode, build-script, tests en docentscript voor Claude Code">Project downloaden (.zip)</button>
+  <button class="ghost" id="panelToggle" type="button" aria-controls="sidePanel" aria-expanded="true" title="Zijbalk verbergen: meer plaats voor de 3D-wereld (nog eens klikken = terug)">Zijbalk ⇥</button>
   <div class="status"><span id="dot" class="dot"></span><span id="statusText">Niet verbonden, lokaal rijden met toetsen</span></div>
 </header>
 
@@ -60,7 +61,7 @@
     </div>
   </section>
 
-  <aside class="panel">
+  <aside class="panel" id="sidePanel">
     <nav class="tabs" role="tablist" aria-label="Zijbalk">
       <button role="tab" id="tabBtn-sim" aria-controls="tab-sim" aria-selected="true">Simulatie</button>
       <button role="tab" id="tabBtn-task" aria-controls="tab-task" aria-selected="false">Opdrachten</button>
@@ -344,6 +345,22 @@ ros2 topic list             # zie je /scan en /odom?</pre>
     </div>
   </aside>
 <script>
+// Zijbalk weg- en terugschuiven (onthouden); de 3D-wereld volgt via de ResizeObserver op #stage
+(function () {
+  var btn = document.getElementById("panelToggle");
+  function set(hidden) {
+    document.body.classList.toggle("panel-hidden", hidden);
+    btn.setAttribute("aria-expanded", hidden ? "false" : "true");
+    btn.textContent = hidden ? "⇤ Zijbalk" : "Zijbalk ⇥";
+    btn.title = hidden ? "Zijbalk terug tonen (Simulatie, Opdrachten, Instellingen)"
+                       : "Zijbalk verbergen: meer plaats voor de 3D-wereld (nog eens klikken = terug)";
+    try { localStorage.setItem("tb3sim.panelHidden", hidden ? "1" : "0"); } catch (e) {}
+  }
+  btn.addEventListener("click", function () { set(!document.body.classList.contains("panel-hidden")); });
+  var start = false;
+  try { start = localStorage.getItem("tb3sim.panelHidden") === "1"; } catch (e) {}
+  set(start);
+})();
 // Tabs van de zijbalk (laatste keuze onthouden)
 (function () {
   var tabs = Array.prototype.slice.call(document.querySelectorAll('.panel [role="tab"]'));
