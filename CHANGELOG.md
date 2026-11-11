@@ -12,7 +12,7 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
-## 1.0.9 - nog niet gebouwd
+## 1.0.9 - 2026-11-11
 - **Simulator 1.4.4**: HUD-regel **belasting**: CPU van de laptop (uit
   `/system_info` van de virtuele robot), sim-tijd t.o.v. echte tijd en fps;
   rood bij > 85 % CPU of als de simulator achterop raakt (< 0,9x).
