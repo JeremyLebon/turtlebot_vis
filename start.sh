@@ -34,6 +34,10 @@ B= E= OK=✔ WARN=!
 if [ -t 1 ]; then B=$'\e[1m' E=$'\e[0m' OK=$'\e[32m✔\e[0m' WARN=$'\e[33m!\e[0m'; fi
 hdr() { printf '\n%s%s%s\n' "$B" "$1" "$E"; }
 
+# Versie van de scripts: VERSION (zelfde nummer als de image) + commit en datum van deze map
+printf '%sTurtlebot-vis start.sh%s  ·  scripts v%s (%s)\n' "$B" "$E" "$(cat VERSION 2>/dev/null || echo '?')" \
+    "$(git log -1 --format='%h, %cd' --date=format:'%d-%m-%Y' 2>/dev/null || echo 'geen git')"
+
 # --pull: eerst de scripts bijwerken (git pull), dan de image. Is start.sh zelf
 # veranderd, dan meteen de nieuwe versie starten (TB_START_PULLED: maar één keer).
 if $PULL && [ -z "${TB_START_PULLED:-}" ] && [ -d .git ]; then
@@ -41,7 +45,7 @@ if $PULL && [ -z "${TB_START_PULLED:-}" ] && [ -d .git ]; then
     old=$(git rev-parse HEAD)
     if msg=$(git pull --ff-only 2>&1); then
         if [ "$(git rev-parse HEAD)" = "$old" ]; then
-            echo "  $OK al de nieuwste versie ($(git log -1 --format='%h, %cd' --date=format:'%d-%m-%Y'))"
+            echo "  $OK al de nieuwste versie"
         else
             echo "  $OK $(git rev-list --count "$old"..HEAD) nieuwe wijziging(en), $(git rev-parse --short "$old") -> $(git rev-parse --short HEAD):"
             git log --format='      - %s' "$old"..HEAD | cut -c1-100 | head -8
