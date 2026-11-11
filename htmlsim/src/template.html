@@ -147,10 +147,11 @@
         <section>
         <div class="layers">
           <label class="chk"><input type="checkbox" id="lyMap" checked><span class="sw" style="background:var(--fg)"></span>/map</label>
-          <label class="chk"><input type="checkbox" id="lyGlobal" checked><span class="sw" style="background:var(--cost)"></span>global costmap</label>
-          <label class="chk"><input type="checkbox" id="lyLocal" checked><span class="sw" style="background:var(--lethal)"></span>local costmap</label>
-          <label class="chk"><input type="checkbox" id="lyPlan" checked><span class="sw" style="background:var(--plan)"></span>paden</label>
+          <label class="chk"><input type="checkbox" id="lyGlobal"><span class="sw" style="background:var(--cost)"></span>global costmap</label>
+          <label class="chk"><input type="checkbox" id="lyLocal"><span class="sw" style="background:var(--lethal)"></span>local costmap</label>
+          <label class="chk"><input type="checkbox" id="lyPlan"><span class="sw" style="background:var(--plan)"></span>paden</label>
         </div>
+        <p class="hint">Costmaps en paden staan standaard uit: rosbridge moet ze voor de simulator omzetten naar JSON, en de Fenix-pagina toont ze al. Zet ze aan als je ze hier wilt zien.</p>
         <p class="hint">Kies onderaan <b>Startpositie</b> of <b>Doel</b>, klik op de vloer en sleep voor de richting. Dat publiceert <code>/initialpose</code> en <code>/goal_pose</code> in frame <code>map</code>. Kaarten worden op hun plaats getekend via <code>map → odom</code> uit <code>/tf</code>.</p>
         <div class="row"><button class="ghost" id="refetchMap">Kaart opnieuw ophalen</button></div>
         <p class="msg" id="navMsg">Nog geen kaart ontvangen.</p>
@@ -841,6 +842,7 @@ const IN = {   // topic: [type, throttle ms]
   "/global_costmap/costmap": ["nav_msgs/msg/OccupancyGrid", 1000], "/local_costmap/costmap": ["nav_msgs/msg/OccupancyGrid", 500],
   "/plan": ["nav_msgs/msg/Path", 250], "/local_plan": ["nav_msgs/msg/Path", 250], "/robot_description": ["std_msgs/msg/String", 0],
   "/rosout": ["rcl_interfaces/msg/Log", 0],
+  "/system_info": ["std_msgs/msg/String", 2000],   // virtuele robot (system_info_node): CPU van de laptop
 };
 const stats = {};
 for (const k in OUT) stats[k] = { dir: "→", n: 0, hz: 0 };
@@ -877,7 +879,7 @@ function connect() {
     setStatus("on", "Verbonden met " + url);
     advertiseAll();
     send({ op: "advertise_service", service: "/sound", type: "turtlebot3_msgs/srv/Sound" });
-    for (const [t, [type, thr]] of Object.entries(IN)) if (t !== "/robot_description" && t !== "/cmd_vel") send({ op: "subscribe", topic: t, type, throttle_rate: thr, queue_length: t === "/rosout" ? 100 : 1 });   // /rosout: info + warn tegelijk mogen niet wegvallen
+    for (const [t, [type, thr]] of Object.entries(IN)) if (t !== "/robot_description" && t !== "/cmd_vel" && layerOn(t)) send({ op: "subscribe", topic: t, type, throttle_rate: thr, queue_length: t === "/rosout" ? 100 : 1 });   // /rosout: info + warn tegelijk mogen niet wegvallen
     cmdStart();
     send({ op: "subscribe", topic: "/tf", type: OUT["/tf"], queue_length: 5 });
     setTimeout(publishStatic, 300);
@@ -902,6 +904,8 @@ function connect() {
       { const first = !mapOdom; mapOdom = { p: V(tr.transform.translation.x, tr.transform.translation.y, tr.transform.translation.z), q: tr.transform.rotation }; if (first) updateNavMsg(); }
     }
     else if (t === "/rosout") onRosout(msg);
+    else if (t === "/system_info") { try { const d = JSON.parse(msg.data), c = d.cpu_percent_per_core;
+      if (c && c.length) load.cpu = { pct: c.reduce((a, b) => a + b, 0) / c.length, n: c.length, t: performance.now() }; } catch { } }
     else if (t === "/map") setGrid("map", msg);
     else if (t === "/global_costmap/costmap") setGrid("global", msg);
     else if (t === "/local_costmap/costmap") setGrid("local", msg);
@@ -916,9 +920,17 @@ function connect() {
   ws.onclose = () => { ws = null; cmdStop(); $("connect").textContent = "Verbinden"; if ($("dot").className !== "dot err") setStatus("", "Niet verbonden, lokaal rijden met toetsen"); };
 }
 const GRID_TOPICS = ["/map", "/global_costmap/costmap", "/local_costmap/costmap"];
+// Kaartlagen: enkel geabonneerd als het vinkje aan staat (rosbridge zet elke costmap om naar JSON)
+const LAYER_TOPICS = { "/map": "lyMap", "/global_costmap/costmap": "lyGlobal", "/local_costmap/costmap": "lyLocal", "/plan": "lyPlan", "/local_plan": "lyPlan" };
+const layerOn = t => !LAYER_TOPICS[t] || $(LAYER_TOPICS[t]).checked;
+const subLayer = t => send({ op: "subscribe", topic: t, type: IN[t][0], throttle_rate: IN[t][1], queue_length: 1 });
+for (const box of new Set(Object.values(LAYER_TOPICS))) $(box).addEventListener("change", () => {
+  if (!live()) return;
+  for (const [t, b] of Object.entries(LAYER_TOPICS)) if (b === box) { if ($(box).checked) subLayer(t); else send({ op: "unsubscribe", topic: t }); }
+});
 function resubscribeMaps() {
   if (!live()) return false;
-  for (const tp of GRID_TOPICS) { send({ op: "unsubscribe", topic: tp }); send({ op: "subscribe", topic: tp, type: IN[tp][0], throttle_rate: IN[tp][1], queue_length: 1 }); }
+  for (const tp of GRID_TOPICS) if (layerOn(tp)) { send({ op: "unsubscribe", topic: tp }); subLayer(tp); }
   return true;
 }
 function requestDescription() {
@@ -945,6 +957,10 @@ const setMatrix = (obj, T) => { obj.matrix.compose(new THREE.Vector3(T.p.x, T.p.
 // nodig heeft (/clock, /odom, /tf, /scan) blijft; de rest trager (2026-11-11, 1.4.3).
 const RATES = { clock: 50, odom: 30, imu: 20, scan: 5, joints: 10, truth: 10 };
 const next = { clock: 0, odom: 0, imu: 0, scan: 0, cam: 0, l3: 0, trail: 0, stat: 0, joints: 0, truth: 0 };
+// Belasting (HUD): CPU van de laptop uit /system_info van de virtuele robot (WSL ziet alle kernen),
+// echtetijdfactor (sim-tijd per seconde: < 1 als de browser niet bijkomt, want tick() neemt
+// hoogstens 0,1 s per frame) en beelden per seconde.
+const load = { cpu: null, frames: 0, fps: 0, rtf: 1, simT: 0 };
 let paused = false, keyCmd = null, padCmd = null, joyCmd = null, cmdSrc = "–", acc = 0, lastReal = performance.now(), staticT = 0, camDue = null, prevRobot = null;
 
 function b64(typed) {
@@ -1079,7 +1095,7 @@ function render() {
 
   const q = p.q, roll = Math.atan2(2 * (q.w * q.x + q.y * q.z), 1 - 2 * (q.x * q.x + q.y * q.y)), pitch = Math.asin(Math.max(-1, Math.min(1, 2 * (q.w * q.y - q.z * q.x))));
   const o = sim.odom, cmd = sim.cmdTarget, rb = r.rootBody.rb.linvel();
-  let txt = (student.name ? `student    ${stuLabel()}\n` : `<span class="bump">student    niet ingesteld</span>\n`) +
+  let txt = (student.name ? `student    ${stuLabel()}\n` : `<span class="bump">student    niet ingesteld</span>\n`) + loadHud() +
     `sim-tijd   ${sim.simTime.toFixed(2)} s${paused ? "  (gepauzeerd)" : ""}\n` + `werkelijk  x ${p.x.toFixed(3)}  y ${p.y.toFixed(3)}  θ ${deg(p.th)}°\n`;
   if (mobile()) {
     const err = Math.hypot(ow.x - p.x, ow.y - p.y);
@@ -1093,10 +1109,22 @@ function render() {
   $("hud").innerHTML = txt;
 }
 
+function loadHud() {
+  const c = load.cpu && performance.now() - load.cpu.t < 6000 ? load.cpu : null;
+  const heavy = (c && c.pct > 85) || load.rtf < 0.9;
+  const t = `belasting  ${c ? `CPU ${Math.round(c.pct)} % (${c.n} kernen)` : "CPU –"} · sim ${load.rtf.toFixed(2)}× · ${load.fps} fps` +
+    (heavy ? "  laptop overbelast: sluit andere programma's" : "");
+  return (heavy ? `<span class="bump">${t}</span>` : t) + "\n";
+}
+
 function tick(now) {
   acc += Math.min(0.1, (now - lastReal) / 1000); lastReal = now;
   while (acc >= sim.DT) { acc -= sim.DT; if (!paused) simStep(); }
+  load.frames++;
   if (now >= next.stat) {
+    const dtw = next.stat ? (now - next.stat + 1000) / 1000 : 1;
+    load.fps = Math.round(load.frames / dtw); load.frames = 0;
+    load.rtf = paused ? 1 : (sim.simTime - load.simT) / dtw; load.simT = sim.simTime;
     for (const k in stats) { stats[k].hz = stats[k].n; stats[k].n = 0; }
     next.stat = now + 1000;
     document.querySelectorAll("#jointBox input").forEach((inp, i) => { const o = sim.robot.byName[inp.dataset.j]; const out = $("jo" + i); if (o && out) out.textContent = `${o.pos.toFixed(3)} → ${o.target.toFixed(3)}`; });

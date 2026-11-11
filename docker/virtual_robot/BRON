@@ -1,1 +1,1 @@
-turtlebot_docker cc6decc (2026-11-11) 1.9.8 (niet gebouwd): navigatiestatus met planner/controller en doel, lokalisatiegrenzen 30 cm / 20°, echte fout op de virtuele robot
+turtlebot_docker 429891a (2026-11-11) 1.9.9 (niet gebouwd): korte tekst bij Echte fout voor een oude kaart

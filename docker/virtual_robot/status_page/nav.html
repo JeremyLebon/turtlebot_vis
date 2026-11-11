@@ -412,7 +412,7 @@
         <tr><td>Doeltolerantie</td><td id="nsTol" title="Huidige instelling van de goal checker in Nav2 (controller_server)">--</td></tr>
         <tr><td>Doel</td><td id="nsGoal" title="Positie die Nav2 nu als doel heeft (bij een route: het huidige routepunt). Grijs = vorig doel.">--</td></tr>
         <tr><td>Robotpositie</td><td id="nsPose">--</td></tr>
-        <tr id="nsTruthRow" style="display:none"><td>Echte fout</td><td id="nsTruth" title="Alleen in de simulator: hoe ver de positie van AMCL (pijl op de kaart) van de echte positie van de robot ligt. Vergelijk met de twijfel van AMCL hieronder.">--</td></tr>
+        <tr id="nsTruthRow" style="display:none"><td>Echte fout</td><td id="nsTruth" title="Alleen in de simulator: hoe ver de positie van AMCL (pijl op de kaart) van de echte positie van de robot ligt. Vergelijk met de twijfel van AMCL hieronder. Onbekend: de kaart is bewaard voor v1.9.8 - maak en bewaar ze opnieuw in de simulator.">--</td></tr>
         <tr><td>Lokalisatie</td><td id="nsLoc" title="Hoe zeker AMCL is van de positie (ellips op de kaart: 95 %). Twijfel na de beginpositie is normaal tot de robot een stukje gereden heeft.">--</td></tr>
       </table>
       <div class="toolbar" style="margin-top:8px">
@@ -697,7 +697,7 @@
     var te = s.truth_err, teEl = document.getElementById("nsTruth");
     document.getElementById("nsTruthRow").style.display = te ? "" : "none";
     if (te) {
-      teEl.textContent = te.map === false ? "onbekend - kaart van voor v1.9.8: maak en bewaar ze opnieuw in de simulator"
+      teEl.textContent = te.map === false ? "onbekend (kaart van voor v1.9.8)"
         : Math.round(te.d * 100) + " cm, " + Math.round(te.yaw * 180 / Math.PI) + "\u00b0";
       teEl.style.color = te.map === false ? "var(--muted)" : te.d > 0.3 || te.yaw > 0.35 ? "var(--red)" : "";
     }
