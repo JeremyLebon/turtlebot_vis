@@ -12,7 +12,7 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
-## 1.0.1 - nog niet gebouwd
+## 1.0.1 - 2026-11-11
 - **`check` en `./start.sh` leesbaarder**: blokken *Open in de browser*,
   *Verbinding*, *Robot* en *Deze laptop*; eerst de link, dan de uitleg (op een
   eigen regel); onderaan het besluit en de commando's. *Simulator* staat er nog
