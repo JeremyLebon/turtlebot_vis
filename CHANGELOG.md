@@ -16,6 +16,9 @@ Eigen versies, los daarvan:
 Eerste genummerde versie.
 - **Versienummer** bovenaan `check`; de virtuele robot toont de versie van de
   robotsoftware op Fenix > Status (`v1.9.3 · 2026-11-10 85ae1c8 (virtuele robot)`).
+- **`check` (ook bij `./start.sh`)** toont de versies van de simulator en de
+  virtuele robot; de regels *Bridge* en *Bridges* zijn samengevoegd (een
+  dubbele bridge komt als waarschuwing *Dubbel*).
 - **127.0.0.1 in plaats van localhost** in de simulator, Fenix, Lichtblick, de
   banner en `check`: onder WSL lukte na een wifi-onderbreking tot ~400 s geen
   nieuwe verbinding met `localhost`.

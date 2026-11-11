@@ -21,6 +21,15 @@ OK, WARN, BAD = "\033[32m✔\033[0m", "\033[33m!\033[0m", "\033[31m✘\033[0m"
 problems = 0
 
 
+def read_first(path):
+    """First line of a version file in the image, or "?"."""
+    try:
+        with open(path) as f:
+            return f.readline().strip() or "?"
+    except OSError:
+        return "?"
+
+
 def line(sym, label, text):
     global problems
     if sym is BAD:
@@ -193,16 +202,18 @@ def main():
             if not sim:
                 line(OK if http_ok("http://%s:8080/" % host) else WARN, "Webpagina", "http://%s:8080" % host)
             if html:
+                line(OK, "Simulator", "v%s - http://127.0.0.1:8080/sim/" % read_first("/opt/lichtblick/sim/VERSION"))
                 rb = port_open("127.0.0.1", 9090) is not None
                 line(OK if rb else BAD, "rosbridge", "ws://127.0.0.1:9090" + ("" if rb else
                      " luistert niet - zie /tmp/vis_services/rosbridge.log (of: robot %s)" % nr))
             if html:
                 port = os.environ.get("VR_PORT", "8090")
+                vr_ver = read_first("/root/turtlebot3_ws/ROBOT_VERSION").split(" ")[0]
                 if subprocess.run(["pgrep", "-f", "status_page_server.py"], capture_output=True).returncode != 0:
-                    line(OK, "Fenix-pagina", "virtuele robot niet gestart (enkel nodig als back-up: fenix start)")
+                    line(OK, "Fenix-pagina", "virtuele robot %s niet gestart (enkel nodig als back-up: fenix start)" % vr_ver)
                 else:
                     vr = http_ok("http://127.0.0.1:%s/" % port)
-                    line(OK if vr else BAD, "Fenix-pagina", "virtuele robot http://127.0.0.1:%s" % port
+                    line(OK if vr else BAD, "Fenix-pagina", "virtuele robot %s - http://127.0.0.1:%s" % (vr_ver, port)
                          + ("" if vr else " antwoordt niet - zie /tmp/vis_services/vr_*.log (of: fenix stop; fenix start)"))
             try:
                 ros_checks(sim, html)
@@ -213,14 +224,13 @@ def main():
          "http://127.0.0.1:8080 (in de browser van Windows)")
     bridge = port_open("127.0.0.1", 8765) is not None
     line(OK if bridge else WARN, "Bridge",
-         "foxglove_bridge ws://127.0.0.1:8765" + ("" if bridge else " - start pas als de robot bereikbaar is"))
+         "foxglove_bridge ws://127.0.0.1:8765 (voor Lichtblick)" + ("" if bridge else " - start pas als de robot bereikbaar is"))
+    # dubbele bridges (restjes van een vorige modus): enkel dan een regel
     counts = bridge_count()
     extra = {k: v for k, v in counts.items() if v > 1}
-    text = ", ".join("%s %d" % kv for kv in counts.items() if kv[1]) or "geen"
     if extra:
-        text += " - meer dan één: restjes van een vorige modus, opruimen met: robot %s" % (
-            nr if sim else nr or "")
-    line(WARN if extra else OK, "Bridges", text.rstrip())
+        line(WARN, "Dubbel", "%s - restjes van een vorige modus, opruimen met: robot %s" % (
+            ", ".join("%s %d keer" % kv for kv in extra.items()), nr or ""))
     display = os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
     line(OK if display and (os.path.exists("/tmp/.X11-unix") or os.path.exists("/mnt/wslg")) else WARN,
          "Display", "rviz2/rqt kunnen vensters openen" if display else

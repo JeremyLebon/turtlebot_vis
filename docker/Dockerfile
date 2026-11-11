@@ -95,6 +95,7 @@ ARG RAPIER_VERSION=0.14.0
 COPY htmlsim /tmp/htmlsim
 RUN cd /tmp/htmlsim && python3 build.py --local \
     && D=/opt/lichtblick/sim && mkdir -p $D/vendor/rapier /tmp/npm && cp dist/index.html $D/ \
+    && python3 -c "import json; print(json.load(open('package.json'))['version'])" > $D/VERSION \
     && curl -fsSL https://registry.npmjs.org/three/-/three-${THREE_VERSION}.tgz | tar xz -C /tmp/npm \
     && for f in build/three.module.js examples/jsm/controls/OrbitControls.js examples/jsm/loaders/STLLoader.js \
                 examples/jsm/loaders/ColladaLoader.js examples/jsm/loaders/OBJLoader.js examples/jsm/loaders/TGALoader.js; do \
