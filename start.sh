@@ -30,12 +30,16 @@ for arg in "$@"; do
 done
 
 # Elke stap wordt een rij in de tabel van `check` (blok Opstarten, VIS_START_ROWS);
-# een oudere image kent dat niet: dan als lijst. Tijdens het werk één regel voortgang.
+# een oudere image kent dat niet: dan als lijst. Tijdens het werk: Stap 1, 2, ... met ✔ of !.
 ROWS=
 row() { ROWS+="$1"$'\t'"$2"$'\t'"$3"$'\n'; }     # ok|warn|bad, stap, tekst
 more() { ROWS+="+"$'\t\t'"$1"$'\n'; }             # uitleg bij de vorige rij
-busy() { [ -t 1 ] && printf '\r\e[K%s' "$1"; }    # voortgang, wordt overschreven
-done_busy() { [ -t 1 ] && printf '\r\e[K'; }
+G= Y= R= E=
+if [ -t 1 ]; then G=$'\e[32m' Y=$'\e[33m' R=$'\e[31m' E=$'\e[0m'; fi
+N=0
+step() { N=$((N + 1)); printf 'Stap %d  %s... ' "$N" "$1"; }   # voortgang, blijft staan
+step_ok() { echo "${G}✔${E}"; }
+step_warn() { echo "${Y}!${E}"; }
 
 VER=$(cat VERSION 2>/dev/null || echo '?')
 here() { git log -1 --format='%h, %cd' --date=format:'%d-%m-%Y' 2>/dev/null || echo 'geen git'; }
@@ -43,15 +47,17 @@ here() { git log -1 --format='%h, %cd' --date=format:'%d-%m-%Y' 2>/dev/null || e
 # --pull: eerst de scripts bijwerken (git pull), dan de image. Is start.sh zelf
 # veranderd, dan meteen de nieuwe versie starten (TB_START_PULLED: maar één keer).
 if $PULL && [ -z "${TB_START_PULLED:-}" ] && [ -d .git ]; then
-    busy "Scripts bijwerken (git pull)..."
+    step "Scripts bijwerken (git pull)"
     old=$(git rev-parse HEAD)
     if msg=$(git pull --ff-only 2>&1); then
         TB_START_PULLED=$(git rev-parse --short "$old")     # = HEAD als er niets nieuws was
+        step_ok
         if ! git diff --quiet "$old" HEAD -- start.sh; then
-            done_busy
+            echo "        start.sh is veranderd: de nieuwe versie start"
             exec env TB_START_PULLED="$TB_START_PULLED" ./start.sh "${ARGS[@]}"
         fi
     else
+        step_warn
         row warn "Scripts" "v$VER ($(here)) - niet bijgewerkt, git pull lukt niet:"
         while IFS= read -r l; do more "$l"; done < <(echo "$msg" | grep -v '^\s*$' | tail -n 4)
         more "Eigen wijzigingen in deze map? Zie de GitBook (git checkout .env, git stash)."
@@ -69,7 +75,6 @@ case ${TB_START_PULLED:-} in
               while IFS= read -r l; do more "$l"; done < <(git log --format='- %s' "$TB_START_PULLED"..HEAD | cut -c1-90 | head -6)
           fi ;;
 esac
-done_busy
 
 # Onder WSL: geheugenlimiet in %USERPROFILE%\.wslconfig? (anders voorstel)
 ./wsl_check.sh || true
@@ -81,15 +86,16 @@ was_running=$(docker ps -q -f name='^turtlebot-vis$')
 before=$(img_id)
 if [ -z "$before" ]; then
     # eerste keer: image ophalen (~5 GB), met de voortgang van docker
-    echo "Image ophalen (eerste keer, ~5 GB)..."
+    step "Image ophalen (eerste keer, ~5 GB)"; echo
     docker compose pull
 elif $PULL; then
-    busy "Image controleren (docker pull, bij een update enkele minuten)..."
-    out=$(docker compose pull -q 2>&1) || { done_busy; echo "$out"; row warn "Image" "docker pull lukt niet (internet?), verder met de huidige"; }
+    step "Image controleren (docker pull, bij een update enkele minuten)"
+    if out=$(docker compose pull -q 2>&1); then step_ok; else
+        step_warn; echo "$out"; row warn "Image" "docker pull lukt niet (internet?), verder met de huidige"; fi
 fi
-busy "Container starten..."
-out=$(docker compose up -d 2>&1) || { done_busy; echo "$out"; exit 1; }
-done_busy
+step "Container starten"
+out=$(docker compose up -d 2>&1) || { echo "${R}✘${E}"; echo "$out"; exit 1; }
+step_ok
 if $PULL || [ -z "$before" ]; then
     [ -n "$before" ] && [ "$(img_id)" = "$before" ] && row ok "Image" "al de nieuwste" || row ok "Image" "nieuwe image binnengehaald"
 fi
@@ -101,28 +107,28 @@ TTY=-i; [ -t 0 ] && [ -t 1 ] && TTY=-it
 # dus die automatische check uitzetten om hem niet dubbel te tonen.
 docker exec turtlebot-vis touch /tmp/vis_checked
 if [ -n "$MODE" ]; then
-    busy "Onderdelen starten..."
+    if [ "$MODE" = htmlsim ]; then step "HTML-simulator starten (rosbridge)"; else step "Gazebo-simulatie kiezen"; fi
     docker exec turtlebot-vis bash -ic "robot $MODE" > /dev/null 2>&1 || true
     if [ "$MODE" = htmlsim ]; then
         if docker exec turtlebot-vis bash -c 'for i in $(seq 1 40); do (exec 3<>/dev/tcp/127.0.0.1/9090) 2>/dev/null && exit 0; sleep 0.5; done'; then
-            row ok "HTML-simulator" "rosbridge gestart"
+            step_ok; row ok "HTML-simulator" "rosbridge gestart"
         else
-            row warn "HTML-simulator" "rosbridge start niet, zie hieronder"
+            step_warn; row warn "HTML-simulator" "rosbridge start niet, zie hieronder"
         fi
     else
-        row ok "Gazebo" "Zenoh-router in de container gestart"
+        step_ok; row ok "Gazebo" "Zenoh-router in de container gestart"
     fi
     if $FENIX; then
-        busy "Virtuele robot starten..."
+        step "Virtuele robot starten (Fenix-pagina)"
         docker exec turtlebot-vis bash -ic "fenix start" > /dev/null 2>&1 || true
         if docker exec turtlebot-vis bash -c '(exec 3<>/dev/tcp/127.0.0.1/8090) 2>/dev/null'; then
-            row ok "Virtuele robot" "gestart (Fenix-pagina)"
+            step_ok; row ok "Virtuele robot" "gestart (Fenix-pagina)"
         else
-            row warn "Virtuele robot" "start niet, zie hieronder"
+            step_warn; row warn "Virtuele robot" "start niet, zie hieronder"
         fi
     fi
-    done_busy
 fi
+step "Controle"; echo
 
 # De rijen naar de container; check toont ze als eerste blok van zijn tabel.
 # VIS_QUIET: de shell toont de banner (robot, links) niet, check toont hetzelfde.
