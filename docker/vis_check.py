@@ -155,9 +155,9 @@ def ros_checks(sim, html=False):
     if html:
         ver = "v" + read_first("/opt/lichtblick/sim/VERSION")
         if "clock" in got:
-            line(OK, "Simulator", "%s  %s, draait (%d topics)" % (sim_url, ver, len(topics)), BROWSER)
+            line(OK, "Simulator", "%-27s %s, draait (%d topics)" % (sim_url, ver, len(topics)), BROWSER)
         else:
-            line(WARN, "Simulator", "%s  %s" % (sim_url, ver), BROWSER,
+            line(WARN, "Simulator", "%-27s %s" % (sim_url, ver), BROWSER,
                  ["nog niet open: open de link in de browser (verbindt vanzelf)"])
         return
     if sim and "clock" not in got:
@@ -251,7 +251,7 @@ def main():
                 else:
                     vr_running = True
                     vr = http_ok("http://127.0.0.1:%s/" % port)
-                    line(OK if vr else BAD, "Fenix-pagina", "http://127.0.0.1:%s  virtuele robot %s" % (port, vr_ver),
+                    line(OK if vr else BAD, "Fenix-pagina", "%-27s %s (virtuele robot)" % ("http://127.0.0.1:%s" % port, vr_ver),
                          BROWSER, () if vr else ["antwoordt niet - zie /tmp/vis_services/vr_*.log (of: fenix stop; fenix start)"])
 
     line(OK if port_open("127.0.0.1", 8080) is not None else WARN, "Lichtblick", "http://127.0.0.1:8080", BROWSER)
