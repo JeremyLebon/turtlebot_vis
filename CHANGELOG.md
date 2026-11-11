@@ -12,7 +12,7 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
-## 1.0.3 - nog niet gebouwd
+## 1.0.3 - 2026-11-11
 - **`./start.sh` in dezelfde tabel als `check`**: eerste blok *Opstarten* met
   Scripts (versie, git pull), Image, Container en de gestarte onderdelen;
   tijdens het werk één regel voortgang. Met een oudere image als lijst.
