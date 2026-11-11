@@ -149,6 +149,9 @@
                  background: #262a31cc; color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
   #poseHint { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); background: #000b; color: var(--yellow, #e5c07b); padding: 4px 10px; border-radius: 6px; font-size: 0.85rem; pointer-events: none; }
   #mapEmpty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 20px; color: var(--muted); }
+  /* map coordinates under the mouse (hover, no click needed) */
+  #hoverXY { position: absolute; z-index: 5; pointer-events: none;
+    background: #000c; color: #fff; font: 12px ui-monospace, monospace; padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
   .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
   .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; background: var(--c); }
 
@@ -202,6 +205,7 @@
     </div>
     <div id="mapWrap" class="no-map">
       <canvas id="mapCanvas" width="10" height="10"></canvas>
+      <div id="hoverXY" hidden></div>
       <div id="mapEmpty"><span class="maps-only">Nog geen kaart.<br>Start linksboven <b>Kaart maken</b>, of kies hiernaast een opgeslagen kaart.</span><span class="nav-only">Nog geen kaart.<br>Maak er een op <a href="nav.html#mappen">Mappen</a>, of start hiernaast Navigatie met een opgeslagen kaart.</span></div>
       <div id="toolRail" role="toolbar" aria-label="Kaartgereedschap">
         <button class="btn mode active tip-r" data-mode="view" data-icon="eye" aria-label="Kijken" data-tip="Kijken (niets aanklikken)"></button>
@@ -1550,6 +1554,21 @@
     var r = canvas.getBoundingClientRect();
     return [(ev.clientX - r.left) * canvas.width / r.width, (ev.clientY - r.top) * canvas.height / r.height];
   }
+  // Map coordinates under the mouse: read x/y of a spot without sending a goal
+  var hoverXY = document.getElementById("hoverXY");
+  canvas.addEventListener("pointermove", function (ev) {
+    if (!map || ev.pointerType === "touch") return;
+    var c = canvasXY(ev), w = toWorld(c[0], c[1]);
+    var wrap = document.getElementById("mapWrap").getBoundingClientRect();
+    hoverXY.textContent = "x " + w[0].toFixed(2) + "  y " + w[1].toFixed(2) + " m";
+    hoverXY.hidden = false;
+    // next to the cursor; on the other side near the right/bottom edge
+    var lx = ev.clientX - wrap.left + 14, ly = ev.clientY - wrap.top + 16;
+    if (lx + hoverXY.offsetWidth > wrap.width - 4) lx -= hoverXY.offsetWidth + 28;
+    if (ly + hoverXY.offsetHeight > wrap.height - 4) ly -= hoverXY.offsetHeight + 32;
+    hoverXY.style.left = lx + "px"; hoverXY.style.top = ly + "px";
+  });
+  canvas.addEventListener("pointerleave", function () { hoverXY.hidden = true; });
   function clampView() {
     view.z = Math.min(Math.max(view.z, 1), 16);
     view.px = Math.min(0, Math.max(view.px, canvas.width * (1 - view.z)));

@@ -12,6 +12,10 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## 1.0.10 - nog niet gebouwd
+- **Virtuele robot 1.9.10**: coördinaten onder de muis op de kaart (x en y in
+  het frame `map` naast de cursor, zonder een doel te sturen).
+
 ## 1.0.9 - 2026-11-11
 - **Simulator 1.4.4**: HUD-regel **belasting**: CPU van de laptop (uit
   `/system_info` van de virtuele robot), sim-tijd t.o.v. echte tijd en fps;
