@@ -11,9 +11,11 @@ topics van een Jazzy-robot (en omgekeerd) wel, maar krijgt geen berichten.
 import json
 import os
 import re
+import shutil
 import socket
 import subprocess
 import sys
+import textwrap
 import time
 import urllib.request
 
@@ -36,18 +38,46 @@ def read_first(path):
 
 
 def line(sym, label, text, sec=CONN, more=()):
-    """Eén regel in blok `sec`; `more`: extra regels eronder (uitleg, tip)."""
+    """Eén rij in blok `sec`. Begint `text` met een adres (http://, ws://, host:poort),
+    dan komt dat in de kolom Adres. `more`: extra uitleg in de kolom Info eronder."""
     if sym in count:
         count[sym] += 1
-    sections[sec].append("  %s %-14s %s" % (sym, label, text))
-    sections[sec].extend("  %-16s %s" % ("", m) for m in more)
+    first, _, rest = text.partition(" ")
+    if "://" in first or re.match(r"^[\d.]+:\d+$", first):
+        addr, info = first, rest
+        if info.startswith("(") and info.endswith(")") and info.count("(") == 1:
+            info = info[1:-1]           # "(1 ms)" -> "1 ms": de kolom maakt het al duidelijk
+    else:
+        addr, info = "", text
+    sections[sec].append((sym, label, addr, [info] + list(more)))
 
 
 def show():
-    for title, rows in sections.items():
-        if rows:
-            print("\n" + BOLD + title + END)
-            print("\n".join(rows))
+    """Alle blokken als één tabel; Info loopt door op de volgende regel als ze te lang is."""
+    blocks = [(t, rows) for t, rows in sections.items() if rows]
+    rows = [r for _, rs in blocks for r in rs]
+    w1 = max(len(r[1]) for r in rows)
+    w2 = max([len(r[2]) for r in rows] + [5])
+    cols = shutil.get_terminal_size((110, 24)).columns
+    w3 = max(24, min(70, cols - (w1 + w2 + 1) - 13))
+    widths = (1, w1, w2, w3)
+    inner = sum(w + 2 for w in widths) + 3
+
+    def rule(l, m, r):
+        return l + m.join("─" * (w + 2) for w in widths) + r
+
+    out = []
+    for n, (title, rs) in enumerate(blocks):
+        out.append("┌" + "─" * inner + "┐" if n == 0 else rule("├", "┴", "┤"))
+        out.append("│ " + BOLD + title.ljust(inner - 2) + END + " │")
+        out.append(rule("├", "┬", "┤"))
+        for sym, label, addr, infos in rs:
+            lines = [l for i in infos if i for l in textwrap.wrap(i, w3)] or [""]
+            for k, l in enumerate(lines):
+                c = (sym, label, addr) if k == 0 else (" ", "", "")
+                out.append("│ %s │ %-*s │ %-*s │ %-*s │" % (c[0], w1, c[1], w2, c[2], w3, l))
+    out.append(rule("└", "┴", "┘"))
+    print("\n".join(out))
 
 
 def port_open(host, port, timeout=1.0):
@@ -155,9 +185,9 @@ def ros_checks(sim, html=False):
     if html:
         ver = "v" + read_first("/opt/lichtblick/sim/VERSION")
         if "clock" in got:
-            line(OK, "Simulator", "%-27s %s, draait (%d topics)" % (sim_url, ver, len(topics)), BROWSER)
+            line(OK, "Simulator", "%s %s, draait (%d topics)" % (sim_url, ver, len(topics)), BROWSER)
         else:
-            line(WARN, "Simulator", "%-27s %s" % (sim_url, ver), BROWSER,
+            line(WARN, "Simulator", "%s %s" % (sim_url, ver), BROWSER,
                  ["nog niet open: open de link in de browser (verbindt vanzelf)"])
         return
     if sim and "clock" not in got:
@@ -251,12 +281,12 @@ def main():
                 else:
                     vr_running = True
                     vr = http_ok("http://127.0.0.1:%s/" % port)
-                    line(OK if vr else BAD, "Fenix-pagina", "%-27s %s (virtuele robot)" % ("http://127.0.0.1:%s" % port, vr_ver),
+                    line(OK if vr else BAD, "Fenix-pagina", "http://127.0.0.1:%s %s (virtuele robot)" % (port, vr_ver),
                          BROWSER, () if vr else ["antwoordt niet - zie /tmp/vis_services/vr_*.log (of: fenix stop; fenix start)"])
 
     line(OK if port_open("127.0.0.1", 8080) is not None else WARN, "Lichtblick", "http://127.0.0.1:8080", BROWSER)
     bridge = port_open("127.0.0.1", 8765) is not None
-    line(OK if bridge else WARN, "Bridge", "ws://127.0.0.1:8765 (foxglove_bridge, voor Lichtblick)", CONN,
+    line(OK if bridge else WARN, "Bridge", "ws://127.0.0.1:8765 voor Lichtblick (foxglove_bridge)", CONN,
          () if bridge else ["start pas als de robot bereikbaar is"])
     # dubbele bridges (restjes van een vorige modus): enkel dan een regel
     counts = bridge_count()
@@ -273,8 +303,8 @@ def main():
          "/root/ros2_ws" + (" (gebouwd)" if built else " (nog niet gebouwd: colcon build)"), LAPTOP)
     memory_check()
 
-    show()
     print()
+    show()
     if count[BAD]:
         print("%s %d probleem/problemen hierboven. Opnieuw: check" % (BAD, count[BAD]))
     elif count[WARN]:

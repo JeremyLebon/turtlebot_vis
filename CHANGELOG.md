@@ -12,6 +12,10 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## 1.0.2 - nog niet gebouwd
+- **`check` als tabel**: kolommen Onderdeel, Adres en Info, met een kop per
+  blok; lange uitleg loopt door in de kolom Info (past ook in 80 kolommen).
+
 ## 1.0.1 - 2026-11-11
 - **`check` en `./start.sh` leesbaarder**: blokken *Open in de browser*,
   *Verbinding*, *Robot* en *Deze laptop*; eerst de link, dan de uitleg (op een
