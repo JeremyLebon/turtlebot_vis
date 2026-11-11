@@ -12,7 +12,7 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
-## 1.0.11 - nog niet gebouwd
+## 1.0.11 - 2026-11-12
 - **Python-bibliotheken voor het project van sessie 4** zitten in de image:
   pandas, reportlab, seaborn (en python3-venv). matplotlib, numpy en OpenCV
   zaten er al. Geen venv of pip meer nodig voor analyse en PDF-verslag.
