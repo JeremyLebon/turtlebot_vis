@@ -12,7 +12,7 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
-## 1.0.5 - nog niet gebouwd
+## 1.0.5 - 2026-11-11
 - **Virtuele robot 1.9.6**: laag **Particles** (AMCL) op Navigatie en MPPI
   als standaard-controller op de pagina (zelfde als de echte robot 1.9.6).
 
