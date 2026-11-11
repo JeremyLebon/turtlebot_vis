@@ -24,7 +24,7 @@ for arg in "$@"; do
         --htmlsim) MODE=htmlsim ;;
         --fenix) MODE=htmlsim FENIX=true ;;
         --sim) MODE=sim ;;
-        -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,/^set/{/^#/p}' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "onbekende optie: $arg (zie ./start.sh --help)"; exit 1 ;;
     esac
 done
