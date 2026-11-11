@@ -12,7 +12,7 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
-## 1.0.7 - nog niet gebouwd
+## 1.0.7 - 2026-11-11
 - **Virtuele robot 1.9.7: Nav2 verdraagt haperingen tot 1 s** (was 0,1-0,2 s):
   op een drukke laptop verloor de controller de robotpositie ("Unable to
   transform robot pose") en reed de robot door obstakels.
