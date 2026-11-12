@@ -12,7 +12,7 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
-## 1.0.13 - nog niet gebouwd
+## 1.0.13 - 2026-11-12
 - **`check` herkent een beschadigde image**: vergelijkt de grootte van alle
   bibliotheken met die bij het bouwen (<0,2 s). Een afgebroken pull liet bij
   een student afgekapte bestanden achter (twist_mux "file too short", SLAM
