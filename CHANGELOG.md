@@ -12,7 +12,7 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
-## 1.0.12 - nog niet gebouwd
+## 1.0.12 - 2026-11-12
 - **Poort van de webpagina's instelbaar** (`VIS_PORT`, standaard 8080): bezet
   een ander programma op Windows 8080, zet dan `VIS_PORT=8081` in `.env` (of
   `VIS_PORT=8081 ./start.sh`). Lichtblick, de simulator (`/sim/`),
