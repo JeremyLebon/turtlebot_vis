@@ -149,6 +149,10 @@ RUN printf '%s\n' 'source /root/robot_select.sh' \
       'PROMPT_COMMAND="_robot_refresh${PROMPT_COMMAND:+;$PROMPT_COMMAND}"' \
       '[ -e /tmp/vis_checked ] || { touch /tmp/vis_checked; check; }' \
       >> /root/.bashrc
+# Grootte van alle bibliotheken, voor `check`: een afgebroken pull liet eens
+# afgekapte .so-bestanden achter (twist_mux "file too short", SLAM tekende niets).
+RUN find /opt/ros/jazzy /root/turtlebot3_ws/install /usr/lib -type f \( -name '*.so' -o -name '*.so.*' \) \
+      -printf '%s %p\n' > /opt/vis_sizes.txt
 # Versie van turtlebot-vis (VERSION + CHANGELOG.md), in `check`. Bouwen met:
 #   --build-arg VIS_VERSION="v$(cat VERSION) · $(date +%F) $(git rev-parse --short HEAD)"
 # Onderaan: een nieuwe versie bouwt enkel deze laag opnieuw.

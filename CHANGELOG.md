@@ -12,6 +12,13 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## 1.0.13 - nog niet gebouwd
+- **`check` herkent een beschadigde image**: vergelijkt de grootte van alle
+  bibliotheken met die bij het bouwen (<0,2 s). Een afgebroken pull liet bij
+  een student afgekapte bestanden achter (twist_mux "file too short", SLAM
+  tekende niets); een gewone `--pull` herstelt dat niet. Rode regel *Image*
+  met de oplossing (`docker image rm` en opnieuw pullen).
+
 ## 1.0.12 - 2026-11-12
 - **Poort van de webpagina's instelbaar** (`VIS_PORT`, standaard 8080): bezet
   een ander programma op Windows 8080, zet dan `VIS_PORT=8081` in `.env` (of

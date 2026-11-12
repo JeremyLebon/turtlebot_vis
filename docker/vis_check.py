@@ -169,6 +169,26 @@ def memory_check():
          "Live per onderdeel: diagnose. Groeit je eigen node? Zie de GitBook, Setup laptop."])
 
 
+def image_check():
+    """Bibliotheken met een andere grootte dan bij het bouwen = beschadigde image."""
+    try:
+        sizes = open("/opt/vis_sizes.txt").read().splitlines()
+    except OSError:
+        return
+    bad = []
+    for entry in sizes:
+        size, path = entry.split(" ", 1)
+        try:
+            if os.path.getsize(path) != int(size):
+                bad.append(path)
+        except OSError:
+            bad.append(path)
+    if bad:
+        line(BAD, "Image", "beschadigd: %d %s kapot (bv. %s)" % (len(bad), "bibliotheek" if len(bad) == 1 else "bibliotheken", os.path.basename(bad[0])), LAPTOP, [
+             "in WSL: docker compose down; docker image rm nobel86/turtlebot-rpi5-vis:jazzy",
+             "dan ./start.sh --pull op een goed netwerk (een gewone --pull herstelt het niet)"])
+
+
 def ros_checks(sim, html=False):
     import rclpy
     from rclpy.node import Node
@@ -326,6 +346,7 @@ def main():
     line(OK if os.path.isdir("/root/ros2_ws") else WARN, "ros2_ws",
          "/root/ros2_ws" + (" (gebouwd)" if built else " (nog niet gebouwd: colcon build)"), LAPTOP)
     memory_check()
+    image_check()
 
     print()
     show()
