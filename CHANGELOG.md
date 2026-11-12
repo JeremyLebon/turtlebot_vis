@@ -12,6 +12,13 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## 1.0.12 - nog niet gebouwd
+- **Poort van de webpagina's instelbaar** (`VIS_PORT`, standaard 8080): bezet
+  een ander programma op Windows 8080, zet dan `VIS_PORT=8081` in `.env` (of
+  `VIS_PORT=8081 ./start.sh`). Lichtblick, de simulator (`/sim/`),
+  `/geheugen.html`, `check` en de banner volgen die poort. Na het wijzigen:
+  `./start.sh` (maakt de container opnieuw aan).
+
 ## 1.0.11 - 2026-11-12
 - **Python-bibliotheken voor het project van sessie 4** zitten in de image:
   pandas, reportlab, seaborn (en python3-venv). matplotlib, numpy en OpenCV

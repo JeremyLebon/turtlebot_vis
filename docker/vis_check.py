@@ -19,6 +19,9 @@ import textwrap
 import time
 import urllib.request
 
+# poort van Lichtblick en de simulator (docker-compose.yaml, .env)
+VIS_PORT = int(os.environ.get("VIS_PORT") or 8080)
+
 OK, WARN, BAD, OFF = "\033[32m✔\033[0m", "\033[33m!\033[0m", "\033[31m✘\033[0m", "\033[2m·\033[0m"
 BOLD, END = "\033[1m", "\033[0m"
 # Regels per blok, pas aan het einde getoond (in deze volgorde): de controles
@@ -200,7 +203,7 @@ def ros_checks(sim, html=False):
     node.destroy_node()
     rclpy.shutdown()
 
-    sim_url = "http://127.0.0.1:8080/sim/"
+    sim_url = "http://127.0.0.1:%d/sim/" % VIS_PORT
     if html:
         ver = "v" + read_first("/opt/lichtblick/sim/VERSION")
         if "clock" in got:
@@ -305,7 +308,7 @@ def main():
                     line(OK if vr else BAD, "Fenix-pagina", "http://127.0.0.1:%s %s (virtuele robot)" % (port, vr_ver),
                          BROWSER, () if vr else ["antwoordt niet - zie /tmp/vis_services/vr_*.log (of: fenix stop; fenix start)"])
 
-    line(OK if port_open("127.0.0.1", 8080) is not None else WARN, "Lichtblick", "http://127.0.0.1:8080", BROWSER)
+    line(OK if port_open("127.0.0.1", VIS_PORT) is not None else WARN, "Lichtblick", "http://127.0.0.1:%d" % VIS_PORT, BROWSER)
     bridge = port_open("127.0.0.1", 8765) is not None
     line(OK if bridge else WARN, "Bridge", "ws://127.0.0.1:8765 voor Lichtblick (foxglove_bridge)", CONN,
          () if bridge else ["start pas als de robot bereikbaar is"])

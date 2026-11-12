@@ -15,6 +15,10 @@ services:
       # de wifi TB-AP-<nr> zit, krijgt robot <nr>. ROBOT_NR in .env = vast
       # nummer (enkel nodig als er meer dan één robot bereikbaar is).
       - ROBOT_NR=${ROBOT_NR:-}
+      # Poort van de webpagina's (Lichtblick, simulator /sim/, /geheugen.html).
+      # Bezet een ander programma 8080? Zet VIS_PORT=8081 in .env (of start
+      # met VIS_PORT=8081 ./start.sh) en surf naar http://127.0.0.1:8081.
+      - VIS_PORT=${VIS_PORT:-8080}
       - RMW_IMPLEMENTATION=rmw_zenoh_cpp
       # Zenoh client config (ZENOH_CONFIG_OVERRIDE, unicast TCP naar de
       # Zenoh-router van de robot i.p.v. multicast scouting) wordt per

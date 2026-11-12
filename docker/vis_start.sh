@@ -2,7 +2,7 @@
 # Entrypoint van turtlebot-vis: start twee achtergronddiensten en daarna het
 # gewone commando (CMD, standaard `bash`).
 #
-#   Lichtblick (web-versie van Foxglove Studio)  http://127.0.0.1:8080
+#   Lichtblick (web-versie van Foxglove Studio)  http://127.0.0.1:8080 (VIS_PORT)
 #   foxglove_bridge                              ws://127.0.0.1:8765
 #
 # De student surft vanuit Windows naar http://127.0.0.1:8080 (WSL2 stuurt
@@ -33,7 +33,7 @@ python3 /root/vis_diagnose.py --log > /dev/null 2>&1 &
 
 # Zoals python3 -m http.server, maar met Cache-Control: no-cache: na een nieuwe
 # image moet de browser de nieuwe index.html laden (layout-reset, Lichtblick-update).
-python3 - "${LICHTBLICK_PORT:-8080}" > "$LOG/lichtblick.log" 2>&1 <<'PY' &
+python3 - "${VIS_PORT:-8080}" > "$LOG/lichtblick.log" 2>&1 <<'PY' &
 import functools, http.server, json, sys
 sys.path.insert(0, "/root")
 import vis_diagnose   # /geheugen.html: GET /api/geheugen, POST /api/vrijmaken

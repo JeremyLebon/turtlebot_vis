@@ -173,7 +173,7 @@ def live():
             out.append("  WSL          %.1f GB programma's + %.1f GB cache = %.1f GB van %.1f GB (vmmemWSL in Taakbeheer)%s" % (
                 used / 1024, cache / 1024, (used + cache) / 1024, m["MemTotal"] / 1024,
                 "   \033[33m<- bijna vol\033[0m" if warn else ""))
-            out.append("               swap %.0f MB. Cache teruggeven aan Windows: vrijmaken (of de knop op http://127.0.0.1:8080/geheugen.html)" % swap)
+            out.append("               swap %.0f MB. Cache teruggeven aan Windows: vrijmaken (of de knop op http://127.0.0.1:%s/geheugen.html)" % (swap, os.environ.get("VIS_PORT") or 8080))
             if anon is not None:
                 out.append("  Container    %4.0f MB programma's, %.0f MB bestandscache" % (anon, cache))
             k = oom_kills()

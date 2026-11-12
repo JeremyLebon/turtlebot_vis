@@ -139,18 +139,18 @@ _robot_banner() {
     local B=$'\e[1m' E=$'\e[0m'
     if [ "$TB_NR" = htmlsim ]; then
         echo "${B}HTML-simulator${E}  (ROS_DOMAIN_ID=0)"
-        echo "  Simulator    http://127.0.0.1:8080/sim/"
-        echo "  Lichtblick   http://127.0.0.1:8080"
+        echo "  Simulator    http://127.0.0.1:${VIS_PORT:-8080}/sim/"
+        echo "  Lichtblick   http://127.0.0.1:${VIS_PORT:-8080}"
         echo "  Commando's   fenix start (virtuele robot)  ·  robot (echte robot)  ·  check"
     elif [ "$TB_NR" = sim ]; then
         echo "${B}Gazebo-simulatie${E}  (ROS_DOMAIN_ID=0)"
         echo "  Starten      ros2 launch turtlebot3_gazebo turtlebot3_world.launch.py"
-        echo "  Lichtblick   http://127.0.0.1:8080"
+        echo "  Lichtblick   http://127.0.0.1:${VIS_PORT:-8080}"
         echo "  Commando's   robot (echte robot)  ·  robot htmlsim  ·  check"
     else
         echo "${B}TurtleBot $TB_NR${E}  (ROS_DOMAIN_ID=$ROS_DOMAIN_ID, Zenoh-router 10.0.$TB_NR.10)"
         echo "  Fenix-pagina http://10.0.$TB_NR.10:8080"
-        echo "  Lichtblick   http://127.0.0.1:8080"
+        echo "  Lichtblick   http://127.0.0.1:${VIS_PORT:-8080}"
         echo "  Commando's   robot <nr> (andere robot)  ·  robot sim / robot htmlsim  ·  check"
     fi
 }
