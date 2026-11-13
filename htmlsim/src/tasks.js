@@ -1,5 +1,5 @@
 /* ================= opdrachten: automatische tests, opname en proefrapport ================= */
-const SIM_VERSION = "2026-10-21";
+const SIM_VERSION = "2026-11-13";
 const SYSTEM_NODES = /^(rosbridge|rosapi|slam_toolbox|amcl|map_server|map_saver|planner_server|controller_server|bt_navigator|behavior_server|smoother_server|velocity_smoother|waypoint_follower|lifecycle_manager|collision_monitor|docking_server|route_server|robot_state_publisher|rviz|teleop|transform_listener|launch|_ros2cli|ros2cli|rqt|nav2|global_costmap|local_costmap|cartographer|occupancy_grid|twist_mux|cmd_vel_guard|launch_control|nav_web|system_info|sim_bringup)/;
 const NUM_RE = /-?\d+(?:[.,]\d+)?/g;
 const nums = s => (s.match(NUM_RE) || []).map(x => parseFloat(x.replace(",", ".")));
@@ -163,7 +163,8 @@ function overlayData() {
   const st = r.step, left = st.dur ? Math.max(0, st.dur - (sim.simTime - st.t0)) : 0;
   const logs = r.events.filter(e => e.type === "warn" || e.type === "log").slice(-5);
   return { title: r.def.label, step: r.result ? `Resultaat: ${r.result}` : (st.n ? `Stap ${st.i}/${st.n}: ${st.label}` : st.label) + (left ? ` (${left.toFixed(1)} s)` : ""),
-    big: r.result ? "" : st.big, checks: r.checks, logs, node: r.node, result: r.result, flash: sim.simTime < r.flashUntil };
+    big: r.result ? "" : st.big, checks: r.checks, logs, node: r.node, result: r.result, flash: sim.simTime < r.flashUntil,
+    logHead: r.node ? `/rosout van ${r.node}` : r.def.lockNode === false ? "/rosout (alle scripts)" : "/rosout: nog geen logregels van je node" };
 }
 const SYM = { ok: "✓", fail: "✗", run: "…", wait: "○" };
 function testOverlayFrame() {
@@ -178,7 +179,7 @@ function testOverlayFrame() {
   el.classList.toggle("flash", !!o.flash); el.dataset.result = o.result ? (o.result === "GESLAAGD" ? "ok" : "fail") : "";
   el.innerHTML = `<b>${escapeHtml(o.title)}</b><div class="ovstep">${escapeHtml(o.step)}</div>${o.big ? `<div class="ovbig">${escapeHtml(o.big)}</div>` : ""}
     <ul>${o.checks.map(c => `<li data-s="${c.s}">${SYM[c.s]} ${escapeHtml(c.label)}</li>`).join("")}</ul>
-    <div class="ovlog"><span>${o.node ? "/rosout van " + escapeHtml(o.node) : "/rosout: nog geen logregels van je node"}</span>${o.logs.map(e => `<div class="${e.type}">[${fmt(e.t, 1)} s] ${escapeHtml(e.msg ?? e.text)}</div>`).join("")}</div>`;
+    <div class="ovlog"><span>${escapeHtml(o.logHead)}</span>${o.logs.map(e => `<div class="${e.type}">[${fmt(e.t, 1)} s] ${escapeHtml(e.msg ?? e.text)}</div>`).join("")}</div>`;
 }
 function drawOverlayOnCanvas(c, W, H) {
   const o = overlayData(); if (!o) return;
@@ -193,7 +194,7 @@ function drawOverlayOnCanvas(c, W, H) {
   if (o.big) { txt(o.big, "600 17px 'JetBrains Mono', monospace", "#fff"); yy += lh * 0.5; }
   const colS = { ok: "#4cc27e", fail: "#ef6d55", run: "#e3a645", wait: "#9aa59f" };
   for (const ch of o.checks) txt(`${SYM[ch.s]} ${ch.label}`, "12px 'JetBrains Mono', monospace", colS[ch.s]);
-  txt(o.node ? `/rosout van ${o.node}:` : "/rosout: nog geen logregels van je node", "italic 12px Barlow, Arial, sans-serif", "#9aa59f");
+  txt(o.logHead + (o.node ? ":" : ""), "italic 12px Barlow, Arial, sans-serif", "#9aa59f");
   for (const e of o.logs) txt(`[${fmt(e.t, 1)} s] ${e.msg ?? e.text}`, "12px 'JetBrains Mono', monospace", e.type === "warn" ? "#ff8a73" : "#dfe7e2", 6);
 }
 
@@ -488,6 +489,54 @@ async function runMotion(run, square) {
   run.ev("meting", `zijden ${bigSides.map(l => fmt(l, 3)).join("/")} m, hoeken ${bigTurns.map(a => fmt(a, 1)).join("/")}°, eindafwijking ${fmt(dTrue * 100, 1)} cm`);
 }
 
+/* ---- sessie 4: project-meetronde (geen vaste test: de simulator logt de rit) ---- */
+// Klaslokaal + studentnummer: P1-P3 en de bronnen hangen af van het studentnummer (makePlan). De simulator logt elke
+// 0,5 s sim-tijd de echte pose in het map-frame en de gepubliceerde sensorwaarden, en noteert of de robot P1-P3 haalt.
+// Zo kan de docent de CSV en de route van de student naast de echte rit leggen.
+const PROJ_TOL = 0.35, PROJ_MAX_S = 1800;
+TASKS.proj = {
+  label: "Sessie 4 · Project: meetronde",
+  lockNode: false, keepView: true,
+  how: "Wereld Klaslokaal, met je naam en studentnummer vastgelegd: je meetpunten P1-P3 staan op de vloer. Maak eerst je kaart en start Navigatie. Klik dan op Test starten (de opname start mee) en start je script. De simulator logt elke 0,5 s de echte positie (map-frame) en de sensorwaarden, en kijkt of de robot P1, P2 en P3 haalt (binnen 35 cm). Klik Stoppen als je script klaar is. Lever het rapport (.json) en de opname (.mp4) in, samen met je PDF.",
+  checks: [{ id: "p1", label: "P1 bereikt (binnen 35 cm)" }, { id: "p2", label: "P2 bereikt (binnen 35 cm)" }, { id: "p3", label: "P3 bereikt (binnen 35 cm)" },
+    { id: "route", label: "Route en sensorwaarden gelogd", optional: true }],
+  async run(run) {
+    if (sim.worldInfo.name !== PLAN_WORLD || plan.pts.length < 3) {
+      run.ev("fout", sim.worldInfo.name !== PLAN_WORLD ? "niet in het Klaslokaal" : "geen studentnummer: geen meetpunten");
+      $("taskMsg").textContent = sim.worldInfo.name !== PLAN_WORLD ? "Kies eerst de wereld Klaslokaal." : "Vul je studentnummer in bij Student en klik Vastleggen.";
+      return;
+    }
+    const S = run.state; S.rows = []; S.best = [Infinity, Infinity, Infinity]; S.hit = [null, null, null];
+    S.help = { bronnen_getoond: false, veldkaart: false, gemeten_spoor: false, sensoren_uit: false };
+    const ids = ["p1", "p2", "p3"]; ids.forEach(id => run.check(id, null, "nog niet bereikt"));
+    const status = () => plan.pts.map((p, i) => `P${i + 1} ${S.hit[i] != null ? "✓" : "○"}`).join("   ");
+    run.setStep("Meetronde loopt: start je script, klik Stoppen als het klaar is", 0, 0, 0, status());
+    while (activeRun === run && sim.simTime - run.t0 < PROJ_MAX_S) {
+      if (!(await sleepSim(run, 0.5))) break;
+      const T = sim.truthPose(), m = toMap(T.x, T.y, T.th), t = r4(sim.simTime - run.t0), v = sensVals;
+      S.rows.push([+t.toFixed(1), +m.x.toFixed(3), +m.y.toFixed(3), +(m.yaw * 180 / Math.PI).toFixed(1),
+        v.temp == null ? null : +v.temp.toFixed(2), v.hum == null ? null : +v.hum.toFixed(4), v.gas == null ? null : +v.gas.toFixed(0),
+        v.lux == null ? null : +v.lux.toFixed(0), v.snd == null ? null : +v.snd.toFixed(1)]);
+      if ($("fieldsShow").checked) S.help.bronnen_getoond = true;
+      if ($("fieldMap").value) S.help.veldkaart = true;
+      if ($("measMap").value) S.help.gemeten_spoor = true;
+      if (!$("fieldsOn").checked) S.help.sensoren_uit = true;
+      plan.pts.forEach((p, i) => {
+        const d = Math.hypot(T.x - p.x, T.y - p.y);
+        if (d < S.best[i]) S.best[i] = d;
+        if (S.hit[i] == null && d <= PROJ_TOL) { S.hit[i] = t; run.ev("punt", `P${i + 1} bereikt na ${fmt(t, 1)} s (${fmt(d * 100, 0)} cm)`); run.check(ids[i], true, `na ${fmt(t, 1)} s, ${fmt(d * 100, 0)} cm van het punt`); run.setStep(run.step.label, 0, 0, 0, status()); }
+        else if (S.hit[i] == null) run.check(ids[i], null, `dichtst ${fmt(S.best[i] * 100, 0)} cm`);
+      });
+      run.check("route", true, `${S.rows.length} regels (elke 0,5 s)`);
+    }
+  },
+  extra(run) {
+    const S = run.state; if (!S.rows) return {};
+    return { meetronde: { punten: planPtsMap().map((p, i) => ({ ...p, bereikt_s: S.hit[i], dichtst_m: isFinite(S.best[i]) ? +S.best[i].toFixed(3) : null })),
+      hulpweergave: S.help, kolommen: ["t_s", "x", "y", "yaw_deg", "temperature", "humidity", "co2", "illuminance", "sound"], route: S.rows } };
+  },
+};
+
 /* ---- starten, afronden, rapport ---- */
 async function startTask() {
   const id = $("taskSel").value, def = TASKS[id];
@@ -498,7 +547,8 @@ async function startTask() {
   const src = $("recSrc").value;
   if (src !== "none" && !recorder.mr) { const ok = await startRecording(src, def.label); if (!ok) return; }
   activeRun = new Run({ ...def, id });
-  setTimeout(() => frameCameraFor(id), 50); $("pad").classList.add("testing");
+  if (!def.keepView) setTimeout(() => frameCameraFor(id), 50);
+  $("pad").classList.add("testing");
   $("taskStart").disabled = true; $("taskStop").disabled = false; $("taskMsg").textContent = "Test loopt…"; renderChecks();
   activeRun.ev("start", `${def.label} · ${stuLabel()} · wereld ${sim.worldInfo.name}`);
   try { await def.run(activeRun); } catch (e) { activeRun?.ev("fout", e.message); console.error(e); }
@@ -527,6 +577,7 @@ async function finishRun(reason) {
     controles: run.checks.map(c => ({ controle: c.label, ok: c.s === "ok", detail: c.detail, ...(c.optional ? { info: true } : {}) })),
     opname: video ? { bestand: base + ".mp4", bron: video.source, bytes: video.bytes, seconden: video.seconds, sha256: video.sha256 } : null,
     verloop: run.events.slice(0, 400),
+    ...(run.def.extra ? run.def.extra(run) : {}),
   };
   const inhoud = JSON.stringify(body);
   const controle = (await sha256hex(new TextEncoder().encode(STU_SALT + "|" + inhoud))).slice(0, 16);

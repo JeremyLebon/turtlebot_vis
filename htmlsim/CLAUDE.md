@@ -76,6 +76,17 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
   summary (JSON, voor de Fenix-pagina). 2 Hz, eerste-orde-traagheid in sim-tijd. De oude `/sim/gas_value`, `/sim/temperature`,
   `/sim/humidity`, `/sim/illuminance` lopen nog mee. In de virtuele robot start de knop Sensoren geen sim_sensors_node
   (FENIX_SIM): deze simulator is de bron. Test: `node tests/e2e_sensors.cjs`. Bronnen in 3D standaard verborgen.
+- **Sessie 4 (projectplan, template na publishStudent):** enkel in de wereld `PLAN_WORLD` ("Klaslokaal") en met een
+  studentnummer: `makePlan()` → seed = sha256(STU_SALT|plan|nr|wereld) → mulberry32 → 3 punten uit `PLAN_CAND` (≥ 1,5 m
+  uit elkaar, richting k·45°) en 5 bronnen (één per soort, ≥ 1 m van de punten, ≥ 1,5 m onderling, sterkte ± 30 %,
+  sigma ± 20 % rond de wereld). `curFields()` vervangt `sim.worldInfo.fields` voor sensoren, 3D-bollen en veldkaart.
+  `PLAN_CAND` = 40 vrije plekken (≥ 45 cm van alle colliders tot 1,2 m hoog, bereikbaar vanaf de spawn), eenmalig
+  berekend met Rapier-intersecties op de wereld; opnieuw berekenen als het Klaslokaal verandert. Coördinaten voor de
+  student in het map-frame = startpose (`toMap`). Taak `proj` (tasks.js): geen vaste test, logt elke 0,5 s sim-tijd
+  pose + `sensVals`, P1-P3 ≤ 35 cm (Nav2-tolerantie 25 cm + AMCL-fout), hulpweergaven; rapport krijgt `meetronde` via `def.extra`. Test:
+  `node tests/e2e_project.cjs` (nep-rosbridge op 9091, hook `window.__tb3test` enkel met `?test`).
+- **Wereld onthouden:** keuze in de lijst → `localStorage tb3sim.world`, hersteld bij het laden (niet bij de lege
+  kamer van de tests, die gaat via `switchWorld` zonder de lijst).
 - **Gamepad → `/joy`:** knoppen in de pagina of een echte gamepad (Gamepad-API, standaard-indeling) naar de indeling van
   joy_node met de F710 (XInput): 8 assen (links/op = +, triggers rust 1.0), 11 knoppen (A=0 … RB=5), 20 Hz sim-tijd.
   Met LB rijdt de robot met de sticks (zoals teleop_twist_joy, RB = turbo); voorrang na toetsenbord/knoppen in beeld.

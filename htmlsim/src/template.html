@@ -175,6 +175,7 @@
       </div>
       <div class="who"><span id="stuWho"></span><span class="code" id="stuCode2"></span><button class="ghost" id="stuEdit">Wijzigen</button></div>
       <div class="row setrow"><button class="act" id="stuSet">Vastleggen</button><span class="code" id="stuCode">–</span></div>
+      <p class="hint plan" id="stuPlan" hidden></p>
       <p class="hint" id="stuHint">Naam en code verschijnen op de vloer, in het camerabeeld, in de HUD en op <code>/student_id</code>.</p>
     </section>
       <div id="taskSec">
@@ -186,7 +187,8 @@
             <option value="t1x">1 · Extra (optioneel): vier sectoren</option>
             <option value="t2">2 · Batterijwaarschuwing</option>
             <option value="t3">3 · Exact 90° draaien</option>
-            <option value="t3x">3 · Extra (optioneel): vierkant 0,5 m</option></select>
+            <option value="t3x">3 · Extra (optioneel): vierkant 0,5 m</option>
+            <option value="proj">Sessie 4 · Project: meetronde</option></select>
           <label for="recSrc">Opname</label><select id="recSrc">
             <option value="sim">simulatorbeeld (zonder toestemming)</option>
             <option value="screen">volledig scherm, met terminal</option>
@@ -515,12 +517,81 @@ async function setStudent(name, nr) {
   $("stuSet").closest(".student").classList.toggle("set", !!student.name);
   $("stuHint").textContent = student.name ? `Code geldt voor ${sim.worldInfo.name}, ${student.date}.` : "Vul je naam in en klik Vastleggen.";
   try { localStorage.setItem("tb3sim.student", JSON.stringify({ name: student.name, nr: student.nr })); } catch {}
-  drawFloorTexture(); publishStudent();
+  drawFloorTexture(); publishStudent(); makePlan();
 }
 function publishStudent() {
   if (!student.name) return;
   pub("/student_id", { data: JSON.stringify({ name: student.name, nr: student.nr, code: student.code, world: sim.worldInfo.name, date: student.date, sim_time: +sim.simTime.toFixed(2) }) });
 }
+/* ================= projectplan sessie 4: meetpunten en bronnen per studentnummer ================= */
+// Enkel in het Klaslokaal: het studentnummer kiest 3 meetpunten (P1-P3) en legt de vijf bronnen op eigen plaatsen,
+// zodat elke student eigen data meet. Kandidaten: vrije plekken die de robot vanaf de start bereikt, minstens 45 cm
+// van tafels, stoelen, kast en muren (eenmalig berekend met de colliders van de wereld, wereldcoördinaten).
+const PLAN_WORLD = "Klaslokaal";
+const PLAN_CAND = [[-2.8,2.4],[-3.05,-1.85],[0.8,-2.85],[-0.8,-0.05],[-1.55,-2.8],[-3.9,-2.75],[-3.85,-1.9],[-3.8,-1.05],[-2.55,0.2],[-3.1,0.85],[-3.05,1.7],[-2.35,-2.85],[0,-2.9],[-1.6,-0.1],[-0.8,-2.95],[-0.05,-0.2],[-3.15,-2.9],[-3.4,2.85],[-1.85,2.75],[-2.85,-0.7],[1.6,-2.8],[2.9,-0.7],[1.75,-0.25],[2.95,0.15],[0.6,0.2],[3,1],[3.65,2.05],[3.1,2.7],[0.75,2.75],[3.85,-1],[3.9,-0.15],[2.85,2],[3.75,0.85],[2.1,2.8],[2.35,-2.95],[0.05,2.8],[-1.1,2.95],[3.9,2.8],[3.2,-1.35],[2.25,0.25]];
+const plan = { pts: [], fields: null };
+const curFields = () => plan.fields || sim.worldInfo.fields || [];
+const mulberry32 = a => () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+// map-frame = de startpose van de robot (zoals SLAM de kaart begint)
+function toMap(x, y, yaw = 0) {
+  const c = Math.cos(START.th), s = Math.sin(START.th), dx = x - START.x, dy = y - START.y;
+  return { x: c * dx + s * dy, y: -s * dx + c * dy, yaw: Math.atan2(Math.sin(yaw - START.th), Math.cos(yaw - START.th)) };
+}
+const planPtsMap = () => plan.pts.map((p, i) => { const m = toMap(p.x, p.y, p.yaw); return { punt: "P" + (i + 1), x: +m.x.toFixed(2), y: +m.y.toFixed(2), yaw_deg: Math.round(m.yaw * 180 / Math.PI) }; });
+async function makePlan() {
+  plan.pts = []; plan.fields = null;
+  const nr = student.name ? student.nr.trim().toLowerCase() : "";
+  if (nr && sim.worldInfo.name === PLAN_WORLD) {
+    const b = await sha256bytes(new TextEncoder().encode([STU_SALT, "plan", nr, PLAN_WORLD].join("|")));
+    const rnd = mulberry32(b[0] | (b[1] << 8) | (b[2] << 16) | (b[3] << 24));
+    const pool = PLAN_CAND.map(p => p.slice());
+    for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    const far = (p, list, d) => list.every(q => Math.hypot(p[0] - q[0], p[1] - q[1]) >= d);
+    const pts = [];
+    for (const p of pool) if (pts.length < 3 && far(p, pts, 1.5)) pts.push(p);
+    plan.pts = pts.map(p => ({ x: p[0], y: p[1], yaw: Math.floor(rnd() * 8) * Math.PI / 4 }));
+    // bronnen: niet op een meetpunt (≥ 1 m), onderling ≥ 1,5 m; sterkte en grootte ± 30 % / ± 20 % rond de wereld
+    const base = sim.worldInfo.fields || [], used = [];
+    plan.fields = ["gas", "heat", "humidity", "light", "sound"].map(kind => {
+      const p = pool.find(q => far(q, pts, 1.0) && far(q, used, 1.5)) || pool.find(q => far(q, used, 0.8)) || pool[0]; used.push(p);
+      const bf = base.find(f => f.kind === kind) || { strength: 1, sigma: 0.6 };
+      return { kind, x: +(p[0] + (rnd() - 0.5) * 0.3).toFixed(2), y: +(p[1] + (rnd() - 0.5) * 0.3).toFixed(2),
+        strength: +(bf.strength * (0.7 + 0.6 * rnd())).toPrecision(3), sigma: +((bf.sigma || 0.6) * (0.8 + 0.4 * rnd())).toFixed(2) };
+    });
+  }
+  buildPlanMeshes(); buildFieldMeshes(); showPlan();
+}
+// P1-P3 op de vloer: ring, pijl in de gevraagde richting en het nummer (ook zichtbaar voor de robotcamera)
+const planG = new THREE.Group(); scene.add(planG);
+function buildPlanMeshes() {
+  planG.clear();
+  const flat = (geo, col, z) => { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.95,
+    polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, depthWrite: false })); m.position.z = z; m.renderOrder = 2; return m; };
+  plan.pts.forEach((p, i) => {
+    const g = new THREE.Group(); g.position.set(p.x, p.y, 0); g.rotation.z = p.yaw;
+    g.add(flat(new THREE.RingGeometry(0.2, 0.25, 48), 0xd6336c, 0.005));
+    const arrow = new THREE.Shape(); arrow.moveTo(0.42, 0); arrow.lineTo(0.27, 0.07); arrow.lineTo(0.27, -0.07); arrow.closePath();
+    g.add(flat(new THREE.ShapeGeometry(arrow), 0xd6336c, 0.005));
+    const cv = document.createElement("canvas"); cv.width = cv.height = 128; const c = cv.getContext("2d");
+    c.fillStyle = "#d6336c"; c.font = "700 72px Barlow, Arial, sans-serif"; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText("P" + (i + 1), 64, 68);
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+    const lbl = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.3), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+    lbl.position.set(0, 0, 0.006); lbl.rotation.z = -p.yaw; lbl.renderOrder = 2;   // tekst altijd in wereldrichting
+    g.add(lbl); planG.add(g);
+  });
+}
+function showPlan() {
+  const el = $("stuPlan");
+  if (!student.name) { el.hidden = true; return; }
+  el.hidden = false;
+  if (!student.nr.trim()) { el.textContent = "Vul je studentnummer in: daarmee krijg je je eigen meetpunten (sessie 4)."; return; }
+  if (sim.worldInfo.name !== PLAN_WORLD) { el.textContent = "Sessie 4: kies de wereld Klaslokaal, dan verschijnen je meetpunten P1-P3."; return; }
+  el.innerHTML = "<b>Jouw meetpunten</b> (map-frame: (0, 0) = startpositie van de robot)<br>" +
+    planPtsMap().map(p => `${p.punt}: x ${p.x.toFixed(2)} · y ${p.y.toFixed(2)} · ${p.yaw_deg}°`).join("<br>");
+}
+// enkel voor de headless tests (?test): pose zetten en het plan uitlezen
+if (/[?&]test\b/.test(location.search)) window.__tb3test = { sim, plan, rebuild, toMap, planPtsMap, camera, controls };
 $("stuSet").onclick = () => setStudent($("stuName").value, $("stuNr").value);
 for (const id of ["stuName", "stuNr"]) $(id).addEventListener("keydown", e => { if (e.key === "Enter") $("stuSet").click(); });
 
@@ -1257,7 +1328,7 @@ for (const [id, k] of [["sw1", "sw1"], ["sw2", "sw2"]]) {
 }
 function fieldValue(kind, x, y) {
   let v = 0;
-  for (const f of sim.worldInfo.fields || []) if (f.kind === kind) {
+  for (const f of curFields()) if (f.kind === kind) {
     const d2 = (x - f.x) ** 2 + (y - f.y) ** 2, s = f.sigma || 1;
     v += (f.strength || 0) * Math.exp(-d2 / (2 * s * s));
   }
@@ -1341,17 +1412,17 @@ function sensorsStep() {
 const fieldG = new THREE.Group(); fieldG.visible = false; scene.add(fieldG);
 const FIELD_COL = { gas: 0x6fdc8c, heat: 0xff7043, humidity: 0x4fc3f7, light: 0xffe066, sound: 0xc77dff };
 function updateFieldLegend() {   // enkel de soorten die in deze wereld voorkomen, en enkel als de bronnen zichtbaar zijn
-  const kinds = new Set((sim.worldInfo.fields || []).map(f => f.kind));
+  const kinds = new Set((curFields()).map(f => f.kind));
   document.querySelectorAll(".legField").forEach(el => { el.hidden = !(fieldG.visible && kinds.has(el.dataset.kind)); });
 }
 function buildFieldMeshes() {
   fieldG.clear();
-  for (const f of sim.worldInfo.fields || []) {
+  for (const f of curFields()) {
     const m = new THREE.Mesh(new THREE.SphereGeometry(2 * (f.sigma || 1), 24, 16),
       new THREE.MeshBasicMaterial({ color: FIELD_COL[f.kind] || 0xffffff, transparent: true, opacity: 0.12, depthWrite: false }));
     m.position.set(f.x, f.y, 0); m.scale.z = 0.25; fieldG.add(m);
   }
-  const n = (sim.worldInfo.fields || []).length;
+  const n = (curFields()).length;
   $("fieldMsg").textContent = n ? `${n} bron(nen) in deze wereld.` : "Geen bronnen in deze wereld: vaste basiswaarden.";
   updateFieldLegend();
   buildFieldMap();
@@ -1563,7 +1634,9 @@ function switchWorld(def, label) {
     $("worldMsg").className = "msg"; $("worldMsg").textContent = `${label}: ${sim.statics.length - 1} vaste objecten, ${sim.movables.length} dozen. Herstart slam_toolbox voor een nieuwe kaart.`;
   } catch (e) { $("worldMsg").className = "msg err"; $("worldMsg").textContent = "Wereld niet geladen: " + e.message; }
 }
-$("worldSel").onchange = () => { const k = $("worldSel").value; if (WORLDS[k]) switchWorld(WORLDS[k], WORLDS[k].name); };
+// gekozen wereld onthouden (enkel een keuze in de lijst, niet de lege kamer van de tests): na herladen van de
+// pagina staat de robot weer in dezelfde wereld, anders past de kaart van de student niet meer (sessie 4: Klaslokaal)
+$("worldSel").onchange = () => { const k = $("worldSel").value; if (WORLDS[k]) { switchWorld(WORLDS[k], WORLDS[k].name); try { localStorage.setItem("tb3sim.world", k); } catch {} } };
 $("worldFile").onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
   try { const def = JSON.parse(await f.text()); $("worldSel").value = "custom"; $("worldSel").querySelector('[value="custom"]').hidden = false; switchWorld(def, def.name || f.name); }
@@ -1612,6 +1685,7 @@ new ResizeObserver(() => { const rc = stage.getBoundingClientRect(); renderer.se
 loadBuiltin();
 $("clearBoxes").onclick = () => { while (movableMeshes.length) removeMovable(movableMeshes.length - 1); };
 $("stuEdit").addEventListener("click", () => { $("stuSet").closest(".student").classList.remove("set"); $("stuName").focus(); });
+try { const k = localStorage.getItem("tb3sim.world"); if (k && WORLDS[k] && WORLDS[k].name !== sim.worldInfo.name && $("worldSel").querySelector(`option[value="${k}"]`)) { $("worldSel").value = k; switchWorld(WORLDS[k], WORLDS[k].name); } } catch {}
 try { const s = JSON.parse(localStorage.getItem("tb3sim.student") || "null"); if (s && s.name) { $("stuName").value = s.name; $("stuNr").value = s.nr || ""; setStudent(s.name, s.nr || ""); } } catch {}
 $("loading").remove();
 renderTopics();

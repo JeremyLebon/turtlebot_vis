@@ -12,6 +12,16 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## 1.0.14 - 2026-11-13
+- **Simulator 1.5.0: sessie 4 volledig in de simulator.** In de wereld
+  *Klaslokaal* kiest het studentnummer (Opdrachten > Student) 3 meetpunten
+  P1-P3 (op de vloer, ook in het camerabeeld, en als map-frame-coördinaten bij
+  Student) en legt het de vijf sensorbronnen op eigen plaatsen: elke student
+  meet eigen data. Nieuwe taak *Sessie 4 · Project: meetronde*: opname +
+  rapport met de echte route en sensorwaarden (elke 0,5 s), P1-P3 gehaald
+  (≤ 35 cm) en of de hulpweergaven (bronnen, veldkaart, spoor) aan stonden.
+  De gekozen wereld blijft bewaard na het herladen van de pagina.
+
 ## 1.0.13 - 2026-11-12
 - **`check` herkent een beschadigde image**: vergelijkt de grootte van alle
   bibliotheken met die bij het bouwen (<0,2 s). Een afgebroken pull liet bij
