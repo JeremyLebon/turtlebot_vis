@@ -53,11 +53,12 @@ body{background:var(--bg);color:var(--fg);font:15px/1.45 var(--f-body);display:f
 .cam{position:absolute;right:12px;top:12px;width:240px;max-width:40%;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--surface)}
 .cam canvas{display:block;width:100%;height:auto;position:static}
 .cam span{display:block;font:11px var(--f-mono);color:var(--muted);padding:3px 7px}
-.pad{position:absolute;right:12px;bottom:52px;display:grid;grid-template-columns:repeat(3,40px);grid-template-rows:repeat(3,40px);gap:4px}
+.pad{position:absolute;right:12px;bottom:52px;touch-action:none;display:grid;grid-template-columns:repeat(3,40px);grid-template-rows:repeat(3,40px);grid-auto-rows:26px;gap:4px}
 .pad button{border:1px solid var(--line);border-radius:6px;background:color-mix(in srgb,var(--surface) 90%,transparent);color:var(--fg);
   font:600 15px var(--f-mono);cursor:pointer;touch-action:none;user-select:none}
 .pad button.held{background:var(--robot);color:var(--surface);border-color:var(--robot)}
-.pad .f{grid-area:1/2} .pad .l{grid-area:2/1} .pad .x{grid-area:2/2;font-size:11px} .pad .r{grid-area:2/3} .pad .b{grid-area:3/2}
+.pad .f{grid-area:1/2} .pad .l{grid-area:2/1} .pad .x{grid-area:2/2;font-size:11px} .pad .r{grid-area:2/3} .pad .b{grid-area:3/2} .pad .fl{grid-area:1/1} .pad .fr{grid-area:1/3} .pad .bl{grid-area:3/1} .pad .br{grid-area:3/3}
+.pad .fl,.pad .fr,.pad .bl,.pad .br{font-size:13px;opacity:.85} .pad .strafe{grid-column:1/4;font-size:11px;height:26px}
 
 .panel{border-left:1px solid var(--line);background:var(--surface);overflow-y:auto;min-width:0}
 body.panel-hidden .layout{grid-template-columns:minmax(0,1fr)}
@@ -146,7 +147,14 @@ button:disabled{opacity:.45;cursor:default}
 .testov .ovlog span{color:#9aa59f;font:italic 12px var(--f-body)}
 .testov .ovlog .warn{color:#ff8a73}
 
-.pad.testing{display:none}
+.pad.testing,.pad.mode-off{display:none}
+.pad .joy{grid-area:1/1/4/4;position:relative;border-radius:50%;border:1px solid var(--line);touch-action:none;cursor:grab;
+  background:radial-gradient(circle,color-mix(in srgb,var(--surface) 70%,transparent) 0 60%,color-mix(in srgb,var(--surface) 92%,transparent) 61%)}
+.pad .joy i{position:absolute;inset:50% 12px auto;height:1px;background:var(--line)} .pad .joy i::after{content:"";position:absolute;left:50%;top:-52px;width:1px;height:104px;background:var(--line)}
+.pad .joy b{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;background:var(--robot);opacity:.85;
+  box-shadow:0 2px 6px rgb(0 0 0 / .25);transition:transform .12s ease-out;pointer-events:none}
+.pad .joy.held{cursor:grabbing} .pad .joy.held b{transition:none;opacity:1}
+.pad:not(.mode-joy) .joy,.pad.mode-joy button[data-d]{display:none}
 .hudsel{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center}
 .hudsel .hint{flex-basis:100%}
 .panel h3.sub{margin:6px 0 0}

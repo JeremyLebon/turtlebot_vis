@@ -31,6 +31,19 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
 - **Aandrijving:** aandrijfwielen worden automatisch herkend (continuous, as ≈ ±y, links/rechts). Wiel-colliders zijn
   bollen (cilinders geven schuurwrijving bij draaien ter plaatse). Snelheidsmotor (factor 500) + versnellings-
   begrenzing 2 m/s². Overige revolute/prismatic joints: positiemotor (20000/300) + integrerende term.
+- **Aandrijftypes (`cfg.drive`, analyzeModel):** `diff` (1 wiel per kant), `skid` (meer wielen per kant: alle wielen van een
+  kant krijgen dezelfde snelheid; ook rupsen = verborgen wielen; slipt bij draaien, ~60 % van de gevraagde hoek, zoals echt),
+  `mecanum` (wielen met "mecanum" in de jointnaam: wielen zonder wrijving, het lichaam krijgt de gevraagde vx/vy/ω met
+  versnellingsbegrenzing via setLinvel; `/cmd_vel` linear.y, toetsen Shift + ← →), `ackermann` (revolute om z met een wiel
+  eronder = stuurjoint, role `steer`, ForceBased-motor; δ = atan(L·w/v), binnenwiel stuurt meer, achterwielen met
+  bochtdifferentieel; draait niet ter plaatse). Ingebouwde robots: `ROBOT_PRESETS` + `presetURDF(k)` in core.js (eigen
+  ontwerp, primitieven), keuzelijst `#presetSel`. `cfg.leftWheel`/`rightWheel` blijven het eerste wiel (encoders, odometrie).
+- **Rijknoppen in beeld = joystick:** indrukken en slepen op `#pad`; richting en grootte t.o.v. de STOP-knop (dode zone 25 %),
+  ook schuin (vooruit + draaien, nodig voor Ackermann). Mecanum: knop `#padStrafe` of Shift → links/rechts = zijwaarts.
+  Optie `#padMode` (Simulatie, `localStorage tb3sim.padMode`): knoppen, joystick (`#joy` in `#pad`, traploos, veert terug) of
+  verborgen (klassen `mode-joy`/`mode-off` op `#pad`, zodat `testing` en `hidden` van `#pad` blijven werken).
+  Numpad 7 9 1 3 = schuin (`CODEMAP`, op `e.code`). Keuzelijsten (wereld, robot) verliezen de focus na een keuze, anders
+  veranderen de pijltjes de lijst i.p.v. de robot te sturen.
 - **Rem bij stilstand** (step in core.js): bij nulcommando en uitgelopen wielen worden de horizontale snelheid en de
   pose (x, y, yaw) vastgehouden. Zonder rem kruipt de robot ~2°/40 s door trillingen van de bolcontacten. Niet weghalen.
 - **Contacten:** `contact_natural_frequency = 120`, 8 solver-iteraties. De standaard (30 Hz) laat robots mm's zakken.
@@ -43,8 +56,24 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
 - **Scan "geen echo":** 0.0 (echte LDS) of inf (Gazebo). inf gaat als `Infinity` in de JSON (rosbridge/Python accepteert dat).
 - **Kaartlagen:** OccupancyGrid als DataTexture, geplaatst via `map → odom` uit `/tf` (zonder throttle subscriben).
   Lagen op 8/14/20 mm met polygonOffset; camera-near 0,05 (anders z-fighting met de vloer).
-- **Werelden:** data-gedreven (`loadWorld(def)`), elementen `wall/box/cyl/rack/conveyor/pallet/table/chair/movable/mark`.
-  Dozen 35 cm hoog: lidar van de Burger zit op 18 cm, lagere objecten scheert de scan voorbij.
+- **Werelden:** data-gedreven (`loadWorld(def)`), elementen `wall/box/cyl/rack/conveyor/pallet/table/chair/movable/mark`,
+  buiten `tree/orchard/fence/sphere` (static kind `ball` voor de kruin; `fence` = palen + doorzichtig paneel via `def.opacity`).
+  Wereldvelden `ground`/`sky` (kleur) en `geo` {lat, lon, alt} (GPS). Dozen 35 cm hoog: lidar van de Burger zit op 18 cm,
+  lagere objecten scheert de scan voorbij. `worlds/*.json` en `WORLDS` in core.js samen aanpassen.
+- **Extra sensoren (htmlsim-next, Robot > Sensoren, `.xSens`, standaard uit, `localStorage tb3sim.x.<id>`):** GPS
+  `/gps/fix` 5 Hz (wereld = ENU: x oost, y noord, vanaf `geo`), sonar `/range/front|left|right` 10 Hz (`sim.rangeCone`,
+  3 × 11 stralen in een kegel van 30°, zonder de vloer; Infinity = geen echo), bumper `/bumper` 20 Hz (`sim.bumper()`,
+  contacten van het hoofdlichaam behalve de vloer; ook in `/sensor_state.bumper`), magnetometer `/imu/mag` 20 Hz.
+  Dieptecamera (`xDepth`): `depthCam` op de plaats van de robotcamera, `scene.overrideMaterial = MeshDepthMaterial(RGBADepthPacking)`,
+  witte achtergrond = geen meting (NaN), 160×120 32FC1 + 80×60 punten in het optische frame. Radar (`xRadar`, `sim.radarScan`): 121 × 3
+  stralen, treffers op hetzelfde object samengevoegd, Doppler = (v_object − v_robot)·richting, PointCloud2 x y z velocity rcs.
+  Gekleurde 3D-lidar (`l3Color`): `scan3d` geeft per punt de kleur van het object (`bodyColor`); in het bericht sRGB, in three.js lineair.
+  Frames uit `XMOUNT` (t.o.v. de rootlink) in `/tf_static`. Test: `node tests/e2e_extra.cjs` (nep-rosbridge op 9092).
+- **Terrein (`terrain` in de wereld):** analytische hoogte (`terrainFn`: tilt, gauss-heuvels, golving) → Rapier-heightfield (ligt
+  in xz: +90° om x, rij i naar −y, kolom j naar +x). `groundZ(x, y)` zet statics, dozen, palen en de robot op de grond; vloer en
+  markeringen worden gedrapeerd (`drape`), geen raster. Kaartlagen, veldkaart en spoor blijven vlak op z = 0.
+  `crops` = smalle doos per 2 m (collider) + InstancedMesh-planten. De wielmotor heeft een integrerende term (anders -30 %
+  snelheid op 15 % helling); op vlakke grond 90° draaien op tijd: 87,7° i.p.v. 86,0°.
 - **Opdrachten (tasks.js):** log van de studentnode via `/rosout` (rcl_interfaces/Log), match op berichttekst
   (niet de nodenaam: "battery_warning" bevat "warn"). `/rosout` met `queue_length: 100` (bij 1 laat rosbridge een info-regel vallen
   als dezelfde callback meteen ook een warn logt). Taak 1 kijkt naar **links** (`T1_SECTOR` = 90° ± 15°, sinds 28-10;

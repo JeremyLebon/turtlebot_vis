@@ -31,12 +31,12 @@ Een gepubliceerde versie (artifact, `dist/artifact.html`) werkt ook, maar dan bl
 
 | Onderdeel | Details |
 |---|---|
-| Robot | Ingebouwde Burger (primitieven, met camera en 3D-lidar) of eigen URDF met STL/DAE/OBJ-meshes; mini-xacro (`arg`, `property`, `${}`) |
+| Robot | Ingebouwde Burger (primitieven, met camera en 3D-lidar), robots per aandrijftype (buitenrobot 4 wielen skid-steer, rupsvoertuig, mecanum, auto met Ackermann-sturing) of eigen URDF met STL/DAE/OBJ-meshes; mini-xacro (`arg`, `property`, `${}`) |
 | Fysica | Rapier 200 Hz, wielen op scharnieren met snelheidsmotor + versnellingsbegrenzing, rem bij stilstand, joints uit URDF (revolute/prismatic/continuous) met PI-positieregeling |
-| Sensoren | `/scan` (LDS-01/LDS-02/eigen bereik, ruis, geen echo = 0.0 of inf), `/imu`, `/odom` (perfect of wielencoders), `/joint_states`, `/camera/image_raw/compressed` + `camera_info`, `/points` (16 lagen) |
+| Sensoren | `/scan` (LDS-01/LDS-02/eigen bereik, ruis, geen echo = 0.0 of inf), `/imu`, `/odom` (perfect of wielencoders), `/joint_states`, `/camera/image_raw/compressed` + `camera_info`, `/points` (16 lagen); extra (Robot > Sensoren, standaard uit): `/gps/fix`, `/range/front\|left\|right` (sonar), `/bumper`, `/imu/mag`, dieptecamera `/camera/depth/*`, radar `/radar/points`, gekleurde 3D-lidar (`intensity`, `rgb`) |
 | ROS | `/clock` (sim-tijd), `/tf`, `/tf_static`, `/ground_truth`, `/student_id`; leest `/cmd_vel`, `/joint_commands`, `/rosout`, `/map`, costmaps, `/plan`, `/local_plan`, `/robot_description` |
 | Nav2/SLAM | kaart en costmaps op de vloer via `map → odom`, Startpositie (`/initialpose`) en Doel (`/goal_pose`) aanklikken |
-| Werelden | TurtleBot3-wereld, Fabriekshal (16 × 12 m), Lege kamer; eigen werelden als JSON (zie `worlds/`) |
+| Werelden | TurtleBot3-wereld, Fabriekshal (16 × 12 m), Klaslokaal, Bedrijfsterrein (buiten, 29 × 23 m), Boomgaard (29 × 25 m), Akker (36 × 28 m, licht hellend, maïs- en koolrijen), Heuvelland (hoogteverschillen tot 1,4 m), Lege kamer; eigen werelden als JSON (zie `worlds/`) |
 | Labo-robot | `/cmd_vel`-type automatisch herkend (Twist/TwistStamped) met melding bij een verkeerd type; batterij op `/battery_state` zoals de labo-robot; controle "Klaar voor de echte robot?" |
 | Opdrachten | automatische tests voor taak 1 (obstakelalarm + 4 sectoren), taak 2 (batterij), taak 3 (90° + vierkant); proefrapport met controlecode, opname met testpaneel |
 | Identificatie | student + code (SHA-256 over naam/nr/wereld/datum), watermerk op vloer en camerabeeld |
