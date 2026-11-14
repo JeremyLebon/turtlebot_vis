@@ -12,7 +12,7 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
-## 1.0.19 - nog niet gebouwd
+## 1.0.19 - 2026-11-14
 - **Virtuele robot 1.9.11: joystick op de Fenix-pagina.** Knop met de cirkel
   in de balk *Rijden*: slepen = vooruit en draaien tegelijk, traploos, stopt
   bij loslaten. Op het toetsenbord tellen twee toetsen nu samen (pijl omhoog +
