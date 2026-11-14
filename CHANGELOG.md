@@ -12,7 +12,7 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
-## 1.0.15 - nog niet gebouwd
+## 1.0.15 - 2026-11-14
 - **Simulator 1.5.1: HUD inklapbaar.** Knop *HUD ▴/▾* linksboven in de
   3D-wereld; de keuze blijft bewaard. Zonder keuze start de HUD ingeklapt als
   de 3D-wereld smaller is dan 760 px (simulator en Fenix-pagina naast elkaar
