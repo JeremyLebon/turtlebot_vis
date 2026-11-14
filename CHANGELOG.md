@@ -12,6 +12,16 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## 1.0.16 - 2026-11-14
+- **Simulator 1.5.2: knop *Beginpositie zetten* (tabblad Simulatie).** Bij
+  *Kaart opslaan* op de Fenix-pagina onthoudt de simulator waar die kaart in
+  de wereld ligt (per browser). Draait Navigatie later met die kaart, dan zet
+  de knop `/initialpose` op de plek waar de robot echt staat, ook als het
+  mappen ergens anders begon dan de startpositie. P1-P3 en de HUD-rij `map`
+  rekenen dan met die ligging, los van AMCL. Klikken met *Startpositie*
+  onderaan gebruikt ze ook. Onbekende kaart (andere browser, oudere versie):
+  melding om de beginpositie zelf te zetten.
+
 ## 1.0.15 - 2026-11-14
 - **Simulator 1.5.1: HUD inklapbaar.** Knop *HUD ▴/▾* linksboven in de
   3D-wereld; de keuze blijft bewaard. Zonder keuze start de HUD ingeklapt als

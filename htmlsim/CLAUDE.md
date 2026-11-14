@@ -86,6 +86,11 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
   terugval tijdens het opstarten). Taak `proj` (tasks.js): geen vaste test, logt elke 0,5 s sim-tijd
   pose + `sensVals`, P1-P3 ≤ 35 cm (Nav2-tolerantie 25 cm + AMCL-fout), hulpweergaven; rapport krijgt `meetronde` via `def.extra`. Test:
   `node tests/e2e_project.cjs` (nep-rosbridge op 9091, hook `window.__tb3test` enkel met `?test`).
+- **Kaartankers (knop Beginpositie zetten):** bij "Kaart opslaan" (`/web/nav_cmd` zones_adopt, of een nieuwe naam in
+  `/launch_status.maps` tijdens SLAM) bewaart `saveAnchor` `worldMap()` in `localStorage tb3sim.mapAnchors`
+  ("<wereld>|<kaart>"). Draait Navigatie (`/launch_status.navigation`, `map_running`) met een kaart met anker, dan gebruikt
+  `worldToMap` het anker i.p.v. /tf; de knop publiceert `/initialpose` = echte pose in dat frame. Cartographer legt de
+  oorsprong op de pose bij de start van SLAM (niet op odom). Zelfde gegevens als `<kaart>.simworld.json` van nav_web_node.
 - **HUD inklapbaar:** knop `#hudToggle` (`hud.hidden`, `localStorage tb3sim.hudClosed`); zonder keuze ingeklapt als
   `#stage` < 760 px breed. De HUD wordt ook ingeklapt elke frame gevuld: `drawComposite()` leest `textContent`
   (niet `innerText`, dat is leeg bij een verborgen element), zodat de opname de HUD altijd toont.

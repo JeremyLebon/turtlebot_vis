@@ -81,7 +81,9 @@
           <button class="ghost" id="resetOdom">Odometrie op nul</button>
           <button class="ghost" id="respawn">Robot terugzetten</button>
           <button class="ghost" id="clearBoxes" title="Ook de verschuifbare dozen van de wereld">Alle dozen weg</button>
+          <button class="ghost" id="initRobot" title="Navigatie: /initialpose = waar de robot echt staat, in de kaart waarmee Navigatie draait">Beginpositie zetten</button>
         </div>
+        <p class="msg" id="initMsg" hidden></p>
         <label class="chk"><input type="checkbox" id="follow" checked> Camera volgt robot</label>
         <p class="hint">Rijden: knoppen in beeld, of <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> en pijltjes (klik eerst in de 3D-weergave), <kbd>spatie</kbd> stopt. Lokaal rijden heeft voorrang op <code>/cmd_vel</code>.</p>
       </section>
@@ -554,13 +556,37 @@ function toMap(x, y, yaw = 0) {
   return { x: c * dx + s * dy, y: -s * dx + c * dy, yaw: Math.atan2(Math.sin(yaw - START.th), Math.cos(yaw - START.th)) };
 }
 // Wereld → het echte frame `map` van SLAM/Nav2: via odomOrigin en map → odom uit /tf (zelfde transform als de kaartlaag
-// in 3D). Zonder map → odom: map = odom (slam_toolbox begint zo). Zo kloppen P1-P3 ook als de robot verplaatst is of de
+// in 3D). Zonder map → odom: map = odom (terugval; Cartographer begint op de pose bij de start van SLAM). Zo kloppen P1-P3 ook als de robot verplaatst is of de
 // odometrie op nul gezet werd vóór het mappen; toMap (startpose) is enkel de terugval tijdens het opstarten.
+// Kaartankers: waar het frame map van een opgeslagen kaart in de wereld ligt, bewaard bij "Kaart opslaan" (Fenix-pagina,
+// /web/nav_cmd zones_adopt, of een nieuwe naam in /launch_status tijdens SLAM). Draait Navigatie met zo'n kaart, dan
+// rekent de simulator P1-P3 en de knop Beginpositie zetten met het anker, los van AMCL. Per browser (localStorage).
+// De robotsoftware bewaart hetzelfde in <kaart>.simworld.json, maar die kan de pagina niet lezen.
+const navState = { slam: false, navigation: false, map: null, maps: null };
+const anchorKey = name => sim.worldInfo.name + "|" + name;
+function loadAnchors() { try { return JSON.parse(localStorage.getItem("tb3sim.mapAnchors") || "{}"); } catch { return {}; } }
+function saveAnchor(name) {
+  if (!mapOdom) return;   // geen map → odom: SLAM draait niet
+  const T = worldMap(), a = loadAnchors();
+  a[anchorKey(name)] = { x: +T.p.x.toFixed(4), y: +T.p.y.toFixed(4), yaw: +yawOf(T.q).toFixed(5) };
+  try { localStorage.setItem("tb3sim.mapAnchors", JSON.stringify(a)); } catch {}
+}
+function onLaunchStatus(data) {
+  let s; try { s = JSON.parse(data); } catch { return; }
+  if (s.slam && navState.maps && Array.isArray(s.maps)) for (const m of s.maps) if (!navState.maps.includes(m)) saveAnchor(m);
+  navState.slam = !!s.slam; navState.navigation = !!s.navigation; navState.map = s.map_running || null;
+  if (Array.isArray(s.maps)) navState.maps = s.maps;
+}
+function navAnchor() {   // anker van de kaart waarmee Navigatie draait, of null
+  if (!navState.navigation || !navState.map) return null;
+  const a = loadAnchors()[anchorKey(navState.map)];
+  return a ? { p: V(a.x, a.y, 0), q: qyaw(a.yaw) } : null;
+}
 function worldToMap(x, y, yaw = 0) {
   try {
-    const T = tmul(tinv(worldMap()), { p: V(x, y, 0), q: qyaw(yaw) });
-    return { x: T.p.x, y: T.p.y, yaw: yawOf(T.q), live: !!mapOdom };
-  } catch { return { ...toMap(x, y, yaw), live: false }; }   // TDZ bij het opstarten
+    const A = navAnchor(), T = tmul(tinv(A || worldMap()), { p: V(x, y, 0), q: qyaw(yaw) });
+    return { x: T.p.x, y: T.p.y, yaw: yawOf(T.q), live: !!(A || mapOdom), src: A ? "kaart" : mapOdom ? "tf" : "start" };
+  } catch { return { ...toMap(x, y, yaw), live: false, src: "start" }; }   // TDZ bij het opstarten
 }
 const planPtsMap = () => plan.pts.map((p, i) => { const m = worldToMap(p.x, p.y, p.yaw); return { punt: "P" + (i + 1), x: +m.x.toFixed(2), y: +m.y.toFixed(2), yaw_deg: Math.round(m.yaw * 180 / Math.PI) }; });
 async function makePlan() {
@@ -612,15 +638,16 @@ function showPlan() {
   el.hidden = false;
   if (!student.nr.trim()) { el.textContent = "Vul je studentnummer in: daarmee krijg je je eigen meetpunten (sessie 4)."; return; }
   if (sim.worldInfo.name !== PLAN_WORLD) { el.textContent = "Sessie 4: kies de wereld Klaslokaal, dan verschijnen je meetpunten P1-P3."; return; }
-  const live = worldToMap(0, 0).live, html = "<b>Jouw meetpunten</b> " + (live
-    ? "(in je kaart, frame <code>map</code>, live uit /tf)"
-    : "(frame <code>map</code>: (0, 0) = waar de robot stond toen het mappen begon; start Navigatie met je kaart voor de exacte waarden)") + "<br>" +
+  const m0 = worldToMap(0, 0), html = "<b>Jouw meetpunten</b> " + (
+    m0.src === "kaart" ? `(in je kaart <code>${navState.map}</code>, frame <code>map</code>)`
+    : m0.src === "tf" ? "(in je kaart, frame <code>map</code>, live uit /tf)"
+    : "(nog geen kaart: (0, 0) = startpositie; start SLAM of Navigatie voor de waarden in je kaart)") + "<br>" +
     planPtsMap().map(p => `${p.punt}: x ${p.x.toFixed(2)} · y ${p.y.toFixed(2)} · ${p.yaw_deg}°`).join("<br>");
   if (el.innerHTML !== html) el.innerHTML = html;
 }
 setInterval(() => { if (plan.pts.length) showPlan(); }, 1000);   // map → odom verandert (AMCL, SLAM)
 // enkel voor de headless tests (?test): pose zetten en het plan uitlezen
-if (/[?&]test\b/.test(location.search)) window.__tb3test = { sim, plan, rebuild, toMap, worldToMap, planPtsMap, camera, controls, setMapOdom: T => { mapOdom = T; } };
+if (/[?&]test\b/.test(location.search)) window.__tb3test = { sim, plan, rebuild, toMap, worldToMap, planPtsMap, camera, controls, navState, loadAnchors, setMapOdom: T => { mapOdom = T; } };
 $("stuSet").onclick = () => setStudent($("stuName").value, $("stuNr").value);
 for (const id of ["stuName", "stuNr"]) $(id).addEventListener("keydown", e => { if (e.key === "Enter") $("stuSet").click(); });
 
@@ -943,6 +970,8 @@ const IN = {   // topic: [type, throttle ms]
   "/plan": ["nav_msgs/msg/Path", 250], "/local_plan": ["nav_msgs/msg/Path", 250], "/robot_description": ["std_msgs/msg/String", 0],
   "/rosout": ["rcl_interfaces/msg/Log", 0],
   "/system_info": ["std_msgs/msg/String", 2000],   // virtuele robot (system_info_node): CPU van de laptop
+  "/launch_status": ["std_msgs/msg/String", 1000],  // launch_control: SLAM/Navigatie aan, kaartlijst, kaart van Navigatie
+  "/web/nav_cmd": ["std_msgs/msg/String", 0],       // Fenix-pagina: "Kaart opslaan" → zones_adopt
 };
 const stats = {};
 for (const k in OUT) stats[k] = { dir: "→", n: 0, hz: 0 };
@@ -994,6 +1023,8 @@ function connect() {
     const t = m.topic, msg = m.msg;
     if (stats[t + " "]) stats[t + " "].n++;
     if (t === "/cmd_vel") { const tw = msg.twist || msg; rosCmd = { v: tw.linear.x, w: tw.angular.z, t: sim.simTime }; cmdState.lastMsg = performance.now(); }
+    else if (t === "/launch_status") onLaunchStatus(msg.data);
+    else if (t === "/web/nav_cmd") { try { const c = JSON.parse(msg.data); if (c.cmd === "zones_adopt" && c.map) saveAnchor(c.map); } catch {} }
     else if (t === "/cmd_vel_out") { const tw = msg.twist || msg; outCmd = { v: tw.linear.x, w: tw.angular.z, t: sim.simTime, seen: performance.now() }; }
     else if (t === "/joint_commands") msg.name.forEach((n, i) => {
       const o = sim.robot.byName[n]; if (!o || msg.position[i] == null) return;
@@ -1200,7 +1231,7 @@ function render() {
   if (mobile()) {
     const err = Math.hypot(ow.x - p.x, ow.y - p.y);
     const slipping = Math.abs(cmd.v) > 0.02 && Math.abs(o.v) > 0.02 && Math.hypot(rb.x, rb.y) < 0.3 * Math.abs(o.v);
-    if (mapOdom) { const m = worldToMap(p.x, p.y, p.th); txt += `map        x ${m.x.toFixed(3)}  y ${m.y.toFixed(3)}  θ ${deg(m.yaw)}°\n`; }
+    { const m = worldToMap(p.x, p.y, p.th); if (m.live) txt += `map        x ${m.x.toFixed(3)}  y ${m.y.toFixed(3)}  θ ${deg(m.yaw)}°\n`; }
     txt += `/odom      x ${o.x.toFixed(3)}  y ${o.y.toFixed(3)}  θ ${deg(o.th)}°\n` + `odom-fout  ${(err * 100).toFixed(1)} cm\n` +
       `roll/pitch ${deg(roll)}° ${deg(pitch)}°\n` + `commando   ${cmdSrc}`;
     if (goalWorld) txt += `\ndoel       ${(Math.hypot(goalWorld.x - p.x, goalWorld.y - p.y) * 100).toFixed(1)} cm, Δθ ${deg(Math.atan2(Math.sin(goalWorld.th - p.th), Math.cos(goalWorld.th - p.th)))}°`;
@@ -1603,16 +1634,27 @@ renderer.domElement.addEventListener("pointerup", () => {
   if (!placing) return;
   const P = placing; placing = null;
   if (mode === "place") { rebuild(P.x, P.y, P.th); return; }
-  // klik in de simulatiewereld → pose in het map-frame
-  const T = tmul(tinv(worldMap()), { p: V(P.x, P.y, 0), q: qyaw(P.th) }), hdr = { stamp: stamp(), frame_id: "map" };
-  const pose = { position: { x: T.p.x, y: T.p.y, z: 0 }, orientation: qyaw(yawOf(T.q)) };
+  // klik in de simulatiewereld → pose in het map-frame (met het kaartanker als Navigatie met een bekende kaart draait)
+  const m = worldToMap(P.x, P.y, P.th), hdr = { stamp: stamp(), frame_id: "map" };
+  const pose = { position: { x: m.x, y: m.y, z: 0 }, orientation: qyaw(m.yaw) };
   if (mode === "goal") { goalWorld = P; pub("/goal_pose", { header: hdr, pose }); }
-  if (mode === "init") {
-    const cov = new Array(36).fill(0); cov[0] = 0.25; cov[7] = 0.25; cov[35] = 0.06853891945200942;   // zelfde als RViz
-    pub("/initialpose", { header: hdr, pose: { pose, covariance: cov } });
-  }
+  if (mode === "init") pubInitialPose(pose);
   if (!live()) $("navMsg").textContent = "Niet verbonden: " + (mode === "goal" ? "/goal_pose" : "/initialpose") + " werd niet verstuurd.";
 });
+function pubInitialPose(pose) {
+  const cov = new Array(36).fill(0); cov[0] = 0.25; cov[7] = 0.25; cov[35] = 0.06853891945200942;   // zelfde als RViz
+  pub("/initialpose", { header: { stamp: stamp(), frame_id: "map" }, pose: { pose, covariance: cov } });
+}
+// Knop Beginpositie zetten: /initialpose = echte pose van de robot in de kaart van Navigatie (kaartanker)
+$("initRobot").onclick = () => {
+  const say = (txt, err) => { const el = $("initMsg"); el.hidden = false; el.className = "msg" + (err ? " err" : ""); el.textContent = txt; };
+  if (!live()) return say("Niet verbonden met de virtuele robot.", true);
+  if (!navState.navigation) return say("Start eerst Navigatie met je kaart (Fenix-pagina).", true);
+  if (!navAnchor()) return say(`De simulator weet niet waar kaart '${navState.map || "?"}' ligt: ze werd in een andere browser, in een andere wereld of met een oudere versie opgeslagen. Zet de beginpositie zelf: Startpositie onderaan of 2D Pose Estimate op de Fenix-pagina. Een kaart die je opnieuw opslaat, onthoudt de simulator wel.`, true);
+  const p = sim.truthPose(), m = worldToMap(p.x, p.y, p.th);
+  pubInitialPose({ position: { x: m.x, y: m.y, z: 0 }, orientation: qyaw(m.yaw) });
+  say(`Beginpositie gezet in kaart '${navState.map}': x ${m.x.toFixed(2)} · y ${m.y.toFixed(2)} · ${Math.round(m.yaw * 180 / Math.PI)}°`);
+};
 
 const keys = new Set();
 const KEYMAP = { arrowup: "f", w: "f", z: "f", arrowdown: "b", s: "b", arrowleft: "l", a: "l", q: "l", arrowright: "r", d: "r" };
@@ -1659,9 +1701,9 @@ function switchWorld(def, label) {
     useWorld(def); buildWorldMeshes(); rebuild(); buildFieldMeshes(); $("measClear").click();   // oud spoor hoort niet bij de nieuwe wereld
     if (student.name) setStudent(student.name, student.nr);              // code hangt af van de wereld
     for (const k in grids) { scene.remove(grids[k].mesh); delete grids[k]; }   // oude kaart hoort niet bij de nieuwe wereld
-    mapOdom = null; $("navMsg").textContent = "Nieuwe wereld: herstart slam_toolbox voor een nieuwe kaart.";
+    mapOdom = null; $("navMsg").textContent = "Nieuwe wereld: herstart SLAM voor een nieuwe kaart.";
     { const c = Math.cos(START.th), s = Math.sin(START.th), ox = 0.6, oy = 2.4; camera.position.set(START.x + c * ox - s * oy, START.y + s * ox + c * oy, 2.4); controls.target.set(START.x + c * 0.8, START.y + s * 0.8, 0.1); }
-    $("worldMsg").className = "msg"; $("worldMsg").textContent = `${label}: ${sim.statics.length - 1} vaste objecten, ${sim.movables.length} dozen. Herstart slam_toolbox voor een nieuwe kaart.`;
+    $("worldMsg").className = "msg"; $("worldMsg").textContent = `${label}: ${sim.statics.length - 1} vaste objecten, ${sim.movables.length} dozen. Herstart SLAM voor een nieuwe kaart.`;
   } catch (e) { $("worldMsg").className = "msg err"; $("worldMsg").textContent = "Wereld niet geladen: " + e.message; }
 }
 // gekozen wereld onthouden (enkel een keuze in de lijst, niet de lege kamer van de tests): na herladen van de

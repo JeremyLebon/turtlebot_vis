@@ -52,11 +52,17 @@ let fails = 0; const ok = (name, c, info = '') => { console.log(`${c ? '✓' : '
       const s2 = Math.SQRT1_2; t.setMapOdom({ p: { x: 1, y: 0.5, z: 0 }, q: { x: 0, y: 0, z: s2, w: s2 } });   // AMCL: odom 90° gedraaid
       const tf = t.worldToMap(P.x, P.y, P.yaw);
       t.setMapOdom(null); t.rebuild();
-      return { startOk, moved: [r(moved.x), r(moved.y), r(moved.yaw)], tf: [r(tf.x), r(tf.y), r(tf.yaw)], live: tf.live };
+      // kaartanker: Navigatie met een opgeslagen kaart → anker gaat voor op /tf (AMCL)
+      localStorage.setItem('tb3sim.mapAnchors', JSON.stringify({ ['Klaslokaal|ankertest']: { x: P.x, y: P.y, yaw: P.yaw } }));
+      Object.assign(t.navState, { navigation: true, map: 'ankertest' }); t.setMapOdom({ p: { x: 5, y: 5, z: 0 }, q: { x: 0, y: 0, z: 0, w: 1 } });
+      const an = t.worldToMap(P.x, P.y, P.yaw);
+      Object.assign(t.navState, { navigation: false, map: null }); t.setMapOdom(null); localStorage.removeItem('tb3sim.mapAnchors');
+      return { startOk, moved: [r(moved.x), r(moved.y), r(moved.yaw)], tf: [r(tf.x), r(tf.y), r(tf.yaw)], live: tf.live, an: [r(an.x), r(an.y), r(an.yaw)], anSrc: an.src };
     });
     ok('zonder kaart en robot op de start: P1 t.o.v. de startpose', fr.startOk);
     ok('robot verplaatst vóór het mappen: P1 volgt de nieuwe oorsprong', Math.hypot(fr.moved[0], fr.moved[1]) < 0.01 && Math.abs(fr.moved[2]) < 0.01, JSON.stringify(fr.moved));
     ok('map → odom uit /tf wordt toegepast', Math.abs(fr.tf[0] - 1) < 0.01 && Math.abs(fr.tf[1] - 0.5) < 0.01 && Math.abs(fr.tf[2] - Math.PI / 2) < 0.01 && fr.live, JSON.stringify(fr.tf));
+    ok('kaartanker gaat voor op /tf bij Navigatie', fr.anSrc === 'kaart' && Math.hypot(fr.an[0], fr.an[1]) < 0.01 && Math.abs(fr.an[2]) < 0.01, JSON.stringify(fr.an) + ' ' + fr.anSrc);
     if (OUT) {
       await page.evaluate(() => { document.querySelectorAll('.tabpane').forEach(p => { p.hidden = p.id !== 'tab-task'; }); document.querySelectorAll('[role=tab]').forEach(t => t.setAttribute('aria-selected', t.id === 'tabBtn-task')); });
       await wait(500); await page.screenshot({ path: path.join(OUT, 'proj_paneel.png') });
