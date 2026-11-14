@@ -90,6 +90,16 @@
   .dpad .stop { grid-column: 2; grid-row: 2; }
   .dpad .right { grid-column: 3; grid-row: 2; }
   .dpad .down { grid-column: 2; grid-row: 3; }
+  /* joystick (knop Joystick in de balk): slepen = vooruit en draaien tegelijk, traploos tot de snelheden hieronder */
+  .joy { display: none; position: relative; width: 174px; height: 174px; border-radius: 50%; touch-action: none; cursor: grab;
+         border: 1px solid var(--border); background: radial-gradient(circle, #2a2e35b3 0 58%, #2a2e35e6 59%); }
+  .joy::before, .joy::after { content: ""; position: absolute; background: #ffffff22; }
+  .joy::before { left: 14px; right: 14px; top: 50%; height: 1px; }
+  .joy::after { top: 14px; bottom: 14px; left: 50%; width: 1px; }
+  .joy b { position: absolute; left: 50%; top: 50%; width: 62px; height: 62px; margin: -31px 0 0 -31px; border-radius: 50%; z-index: 1;
+           background: var(--accent); opacity: .85; box-shadow: 0 2px 8px #0008; transition: transform .12s ease-out; pointer-events: none; }
+  .joy.held { cursor: grabbing; } .joy.held b { transition: none; opacity: 1; }
+  #pad.joymode .dpad { display: none; } #pad.joymode .joy { display: block; }
   #stageWrap { position: relative; }
   #speedBox { right: 10px; bottom: 10px; width: 250px; }
   /* gesimuleerde sensoren (sim_sensors_node) */
@@ -112,6 +122,7 @@
     #stage.split .pane { width: 100%; height: 50%; left: 0; right: 0; }
     #stage.split #paneMap { top: 0; } #stage.split #paneCam { top: 50%; border-left: 0; border-top: 1px solid var(--border); }
     .dpad { grid-template-columns: repeat(3, 46px); grid-template-rows: repeat(3, 46px); gap: 5px; }
+    .joy { width: 150px; height: 150px; } .joy b { width: 54px; height: 54px; margin: -27px 0 0 -27px; }
     #pad { left: 6px; bottom: 6px; padding: 6px; background: #14161a99; }
     /* speed sliders below the stage on a phone, so the view stays free */
     #speedBox { position: static; width: auto; margin-top: 8px; background: var(--card); backdrop-filter: none; }
@@ -169,6 +180,7 @@
       <span class="lbl">Rijden</span>
       <button class="ib" id="bringupToggle" data-tip="Bringup">--</button>
       <button class="ib on" id="driveToggle" data-tip="Pijlen en snelheden tonen/verbergen (toetsenbord en joystick werken altijd)"></button>
+      <button class="ib" id="padMode" data-tip="Joystick in beeld i.p.v. pijlen: slepen = vooruit en draaien tegelijk"></button>
       <button class="ib" id="joyToggle" data-tip="Joystick F710 aan/uit">--</button>
       <button class="ib" id="motorToggle" data-tip="Motoren">--</button>
     </span>
@@ -197,6 +209,7 @@
         <button class="right" data-dir="right" aria-label="Rechts draaien" data-tip="Rechts draaien (pijl rechts / D)"></button>
         <button class="down" data-dir="back" aria-label="Achteruit" data-tip="Achteruit (pijl omlaag / S)"></button>
       </div>
+      <div class="joy" id="joy" aria-label="Joystick: slepen om te rijden"><b id="joyKnob"></b></div>
     </div>
   </div>
     <div class="overlay" id="speedBox">
@@ -531,31 +544,30 @@
   if (ros.isConnected) loadSpeedMax();
   ros.on("connection", loadSpeedMax);
 
-  var activeDir = null, publishInterval = null;
-  function twistFor(dir) {
+  // axes = [vooruit, draaien], elk -1..1 x de snelheden van de schuifjes; pijlen, toetsenbord (ook twee tegelijk) en joystick
+  var DIR_AXES = { fwd: [1, 0], back: [-1, 0], left: [0, 1], right: [0, -1] };
+  var axes = null, activeDir = null, publishInterval = null;
+  function twistFor(a) {
     var v = parseFloat(linSlider.value), w = parseFloat(angSlider.value);
-    var t = { linear: { x: 0, y: 0, z: 0 }, angular: { x: 0, y: 0, z: 0 } };
-    if (dir === "fwd") t.linear.x = v;
-    else if (dir === "back") t.linear.x = -v;
-    else if (dir === "left") t.angular.z = w;
-    else if (dir === "right") t.angular.z = -w;
-    return t;
+    return { linear: { x: a ? a[0] * v : 0, y: 0, z: 0 }, angular: { x: 0, y: 0, z: a ? a[1] * w : 0 } };
   }
-  function publishTwist(dir) { cmdVel.publish(new ROSLIB.Message({ header: { frame_id: "base_link" }, twist: twistFor(dir) })); }
-  function startDir(dir) {
-    if (dir === "stop") { stopDir(); return; }
+  function publishTwist() { cmdVel.publish(new ROSLIB.Message({ header: { frame_id: "base_link" }, twist: twistFor(axes) })); }
+  function showAxes(a) {
+    var on = { fwd: a && a[0] > 0.2, back: a && a[0] < -0.2, left: a && a[1] > 0.2, right: a && a[1] < -0.2 };
+    document.querySelectorAll(".dpad button").forEach(function (b) { b.classList.toggle("active", !!on[b.dataset.dir]); });
+  }
+  function setAxes(a, dir) {
+    if (!a || (!a[0] && !a[1])) { stopDir(); return; }
     if (document.body.classList.contains("fx-offline")) return;   // no connection (t80)
-    activeDir = dir;
-    document.querySelectorAll(".dpad button").forEach(function (b) { b.classList.toggle("active", b.dataset.dir === dir); });
-    publishTwist(dir);
-    if (publishInterval) clearInterval(publishInterval);
-    publishInterval = setInterval(function () { publishTwist(activeDir); }, 150);
+    axes = a; activeDir = dir || null; showAxes(a);
+    publishTwist();
+    if (!publishInterval) publishInterval = setInterval(publishTwist, 150);
   }
+  function startDir(dir) { if (dir === "stop") stopDir(); else setAxes(DIR_AXES[dir], dir); }
   function stopDir() {
-    activeDir = null;
-    document.querySelectorAll(".dpad button").forEach(function (b) { b.classList.remove("active"); });
+    axes = null; activeDir = null; showAxes(null);
     if (publishInterval) { clearInterval(publishInterval); publishInterval = null; }
-    publishTwist("stop");
+    publishTwist();
   }
   document.querySelectorAll(".dpad button").forEach(function (btn) {
     var dir = btn.dataset.dir;
@@ -569,23 +581,53 @@
   var KEY_DIR = { ArrowUp: "fwd", ArrowDown: "back", ArrowLeft: "left", ArrowRight: "right",
                   w: "fwd", s: "back", a: "left", d: "right", W: "fwd", S: "back", A: "left", D: "right", " ": "stop" };
   function typing(e) { return e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) && e.target.type !== "range"; }
+  // toetsen tellen samen: pijl omhoog + pijl links = vooruit en links draaien
+  var keysDown = {};
+  function keyAxes() {
+    var f = (keysDown.fwd ? 1 : 0) - (keysDown.back ? 1 : 0), t = (keysDown.left ? 1 : 0) - (keysDown.right ? 1 : 0);
+    return f || t ? [f, t] : null;
+  }
   document.addEventListener("keydown", function (e) {
     if (typing(e) || !KEY_DIR[e.key]) return;
     e.preventDefault();
-    if (activeDir !== KEY_DIR[e.key]) startDir(KEY_DIR[e.key]);
+    var d = KEY_DIR[e.key];
+    if (d === "stop") { keysDown = {}; stopDir(); return; }
+    if (keysDown[d]) return;                                         // automatische herhaling
+    keysDown[d] = true; setAxes(keyAxes());
   });
   document.addEventListener("keyup", function (e) {
     if (typing(e) || !KEY_DIR[e.key]) return;
-    e.preventDefault(); stopDir();
+    e.preventDefault();
+    delete keysDown[KEY_DIR[e.key]];
+    var a = keyAxes(); if (a) setAxes(a); else stopDir();
   });
-  window.addEventListener("blur", stopDir);
+  window.addEventListener("blur", function () { keysDown = {}; stopDir(); });
+
+  // joystick in beeld (knop Joystick): slepen, veert terug bij loslaten
+  var joy = document.getElementById("joy"), joyKnob = document.getElementById("joyKnob"), joyId = null;
+  function joyMove(e) {
+    var r = joy.getBoundingClientRect(), R = (r.width - joyKnob.offsetWidth) / 2;
+    var dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2), l = Math.hypot(dx, dy);
+    if (l > R) { dx *= R / l; dy *= R / l; }
+    joyKnob.style.transform = "translate(" + dx + "px, " + dy + "px)";
+    var dz = function (v) { return Math.abs(v) < 0.1 ? 0 : v; };    // dode zone rond het midden
+    var a = [dz(-dy / R), dz(-dx / R)];
+    if (a[0] || a[1]) setAxes(a); else if (axes) stopDir();
+  }
+  joy.addEventListener("pointerdown", function (e) {
+    joyId = e.pointerId; try { joy.setPointerCapture(joyId); } catch (err) {}
+    joy.classList.add("held"); joyMove(e); e.preventDefault();
+  });
+  joy.addEventListener("pointermove", function (e) { if (e.pointerId === joyId) joyMove(e); });
+  function joyEnd(e) { if (e.pointerId !== joyId) return; joyId = null; joyKnob.style.transform = ""; joy.classList.remove("held"); stopDir(); }
+  joy.addEventListener("pointerup", joyEnd); joy.addEventListener("pointercancel", joyEnd);
   // tab hidden (phone locked, other app) or connection gone: stop right away;
   // a hidden tab still runs the interval (throttled) and would keep driving.
   // cmd_vel_guard on the robot stops it too if nothing arrives any more.
   document.addEventListener("visibilitychange", function () { if (document.hidden) stopDir(); });
   window.addEventListener("pagehide", stopDir);
-  ros.on("close", function () { if (activeDir) stopDir(); });
-  ros.on("fx-offline", function () { if (activeDir) stopDir(); });   // heartbeat lost, socket maybe still open
+  ros.on("close", function () { if (axes) stopDir(); });
+  ros.on("fx-offline", function () { if (axes) stopDir(); });   // heartbeat lost, socket maybe still open
 
   // ---- Kaart maken: enkel op Mappen (nav.html#mappen); hier enkel de uitleg ----
   var viewMsg = document.getElementById("viewMsg");
@@ -744,6 +786,16 @@
   document.getElementById("lySwap").innerHTML = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4L3 8l4 4"/><path d="M3 8h14"/><path d="M17 12l4 4-4 4"/><path d="M21 16H7"/></svg>';
   document.getElementById("lySplit").innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg>';
   document.getElementById("driveToggle").innerHTML = fxIcon("index");
+  document.getElementById("padMode").innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg>';
+  var padJoy = lsGet("rijdenPad", "dpad") === "joy";
+  function applyPad() {
+    document.getElementById("pad").classList.toggle("joymode", padJoy);
+    document.getElementById("padMode").classList.toggle("on", padJoy);
+  }
+  document.getElementById("padMode").addEventListener("click", function () {
+    padJoy = !padJoy; lsSet("rijdenPad", padJoy ? "joy" : "dpad"); stopDir(); applyPad();
+  });
+  applyPad();
   var PIP = { S: "22%", M: "30%", L: "42%" };
   var layout = lsGet("rijdenLayout", "map"), pip = lsGet("rijdenPip", "M");
   var driveShown = lsGet("rijdenDrive", "1") === "1";
