@@ -82,9 +82,13 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
   sigma ± 20 % rond de wereld). `curFields()` vervangt `sim.worldInfo.fields` voor sensoren, 3D-bollen en veldkaart.
   `PLAN_CAND` = 40 vrije plekken (≥ 45 cm van alle colliders tot 1,2 m hoog, bereikbaar vanaf de spawn), eenmalig
   berekend met Rapier-intersecties op de wereld; opnieuw berekenen als het Klaslokaal verandert. Coördinaten voor de
-  student in het map-frame = startpose (`toMap`). Taak `proj` (tasks.js): geen vaste test, logt elke 0,5 s sim-tijd
+  student via `worldToMap()` = `tinv(worldMap())` (odomOrigin + map → odom uit /tf; `toMap` = startpose is enkel de
+  terugval tijdens het opstarten). Taak `proj` (tasks.js): geen vaste test, logt elke 0,5 s sim-tijd
   pose + `sensVals`, P1-P3 ≤ 35 cm (Nav2-tolerantie 25 cm + AMCL-fout), hulpweergaven; rapport krijgt `meetronde` via `def.extra`. Test:
   `node tests/e2e_project.cjs` (nep-rosbridge op 9091, hook `window.__tb3test` enkel met `?test`).
+- **HUD inklapbaar:** knop `#hudToggle` (`hud.hidden`, `localStorage tb3sim.hudClosed`); zonder keuze ingeklapt als
+  `#stage` < 760 px breed. De HUD wordt ook ingeklapt elke frame gevuld: `drawComposite()` leest `textContent`
+  (niet `innerText`, dat is leeg bij een verborgen element), zodat de opname de HUD altijd toont.
 - **Wereld onthouden:** keuze in de lijst → `localStorage tb3sim.world`, hersteld bij het laden (niet bij de lege
   kamer van de tests, die gaat via `switchWorld` zonder de lijst).
 - **Gamepad → `/joy`:** knoppen in de pagina of een echte gamepad (Gamepad-API, standaard-indeling) naar de indeling van

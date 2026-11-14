@@ -36,8 +36,11 @@ body{background:var(--bg);color:var(--fg);font:15px/1.45 var(--f-body);display:f
 .layout{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px}
 .stage{position:relative;min-width:0;min-height:420px;background:var(--sky);overflow:hidden}
 .stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
-.hud{position:absolute;left:12px;top:12px;font:12px/1.6 var(--f-mono);background:color-mix(in srgb,var(--surface) 88%,transparent);
-  border:1px solid var(--line);border-radius:6px;padding:8px 10px;pointer-events:none;font-variant-numeric:tabular-nums;white-space:pre}
+.hudwrap{position:absolute;left:12px;top:12px;display:flex;flex-direction:column;align-items:flex-start;gap:4px;pointer-events:none;max-width:calc(100% - 24px)}
+.hudbtn{pointer-events:auto;font:500 11px var(--f-mono);padding:2px 8px;border-radius:5px;border:1px solid var(--line);cursor:pointer;
+  background:color-mix(in srgb,var(--surface) 88%,transparent);color:var(--fg)}
+.hud{font:12px/1.6 var(--f-mono);background:color-mix(in srgb,var(--surface) 88%,transparent);
+  border:1px solid var(--line);border-radius:6px;padding:8px 10px;pointer-events:none;font-variant-numeric:tabular-nums;white-space:pre;max-width:100%;overflow:hidden}
 .hud .bump{color:var(--bad);font-weight:500}
 .loading{position:absolute;inset:0;display:grid;place-items:center;font:500 14px var(--f-mono);color:var(--muted)}
 .modes{position:absolute;left:12px;bottom:12px;display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--surface)}

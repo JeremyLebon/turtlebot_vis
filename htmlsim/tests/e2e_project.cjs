@@ -43,6 +43,20 @@ let fails = 0; const ok = (name, c, info = '') => { console.log(`${c ? '✓' : '
     ok('40 nummers → verschillende puntensets', seen.size >= 38, `${seen.size} verschillend`);
     await setStu('Jan Peeters', 'r0123456'); await wait(400);
     console.log('Paneel:', await page.$eval('#stuPlan', e => e.innerText.replace(/\n/g, ' | ')));
+    // frames: P1-P3 in het echte map-frame (odomOrigin + map → odom), niet vast t.o.v. de startpose
+    const fr = await page.evaluate(() => {
+      const t = window.__tb3test, s = t.sim, P = t.plan.pts[0], r = v => +v.toFixed(3);
+      const startOk = JSON.stringify(t.planPtsMap()[0]) === JSON.stringify((m => ({ punt: 'P1', x: +m.x.toFixed(2), y: +m.y.toFixed(2), yaw_deg: Math.round(m.yaw * 180 / Math.PI) }))(t.toMap(P.x, P.y, P.yaw)));
+      t.rebuild(P.x, P.y, P.yaw);                      // robot op P1 vóór het mappen: map-oorsprong = P1
+      const moved = t.worldToMap(P.x, P.y, P.yaw);
+      const s2 = Math.SQRT1_2; t.setMapOdom({ p: { x: 1, y: 0.5, z: 0 }, q: { x: 0, y: 0, z: s2, w: s2 } });   // AMCL: odom 90° gedraaid
+      const tf = t.worldToMap(P.x, P.y, P.yaw);
+      t.setMapOdom(null); t.rebuild();
+      return { startOk, moved: [r(moved.x), r(moved.y), r(moved.yaw)], tf: [r(tf.x), r(tf.y), r(tf.yaw)], live: tf.live };
+    });
+    ok('zonder kaart en robot op de start: P1 t.o.v. de startpose', fr.startOk);
+    ok('robot verplaatst vóór het mappen: P1 volgt de nieuwe oorsprong', Math.hypot(fr.moved[0], fr.moved[1]) < 0.01 && Math.abs(fr.moved[2]) < 0.01, JSON.stringify(fr.moved));
+    ok('map → odom uit /tf wordt toegepast', Math.abs(fr.tf[0] - 1) < 0.01 && Math.abs(fr.tf[1] - 0.5) < 0.01 && Math.abs(fr.tf[2] - Math.PI / 2) < 0.01 && fr.live, JSON.stringify(fr.tf));
     if (OUT) {
       await page.evaluate(() => { document.querySelectorAll('.tabpane').forEach(p => { p.hidden = p.id !== 'tab-task'; }); document.querySelectorAll('[role=tab]').forEach(t => t.setAttribute('aria-selected', t.id === 'tabBtn-task')); });
       await wait(500); await page.screenshot({ path: path.join(OUT, 'proj_paneel.png') });

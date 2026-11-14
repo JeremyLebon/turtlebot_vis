@@ -1,5 +1,5 @@
 /* ================= opdrachten: automatische tests, opname en proefrapport ================= */
-const SIM_VERSION = "2026-11-13";
+const SIM_VERSION = "2026-11-14";
 const SYSTEM_NODES = /^(rosbridge|rosapi|slam_toolbox|amcl|map_server|map_saver|planner_server|controller_server|bt_navigator|behavior_server|smoother_server|velocity_smoother|waypoint_follower|lifecycle_manager|collision_monitor|docking_server|route_server|robot_state_publisher|rviz|teleop|transform_listener|launch|_ros2cli|ros2cli|rqt|nav2|global_costmap|local_costmap|cartographer|occupancy_grid|twist_mux|cmd_vel_guard|launch_control|nav_web|system_info|sim_bringup)/;
 const NUM_RE = /-?\d+(?:[.,]\d+)?/g;
 const nums = s => (s.match(NUM_RE) || []).map(x => parseFloat(x.replace(",", ".")));
@@ -92,7 +92,7 @@ function drawComposite() {
   const c = compCtx, W = comp.width, H = comp.height;
   c.drawImage(renderer.domElement, 0, 0, W, H);
   c.font = "12px 'JetBrains Mono', monospace"; c.textBaseline = "top";
-  const lines = $("hud").innerText.split("\n"), lw = Math.max(...lines.map(l => c.measureText(l).width)) + 16;
+  const lines = $("hud").textContent.split("\n"), lw = Math.max(...lines.map(l => c.measureText(l).width)) + 16;
   c.fillStyle = "rgba(255,255,255,0.85)"; c.fillRect(10, 40, lw, lines.length * 16 + 10);
   c.fillStyle = "#17201b"; lines.forEach((l, i) => c.fillText(l, 18, 46 + i * 16));
   if (cfg && cfg.camera) { const cw = Math.min(260, W * 0.3), ch = cw * 0.75; c.drawImage($("camPreview"), W - cw - 10, 40, cw, ch); }
@@ -513,7 +513,7 @@ TASKS.proj = {
     run.setStep("Meetronde loopt: start je script, klik Stoppen als het klaar is", 0, 0, 0, status());
     while (activeRun === run && sim.simTime - run.t0 < PROJ_MAX_S) {
       if (!(await sleepSim(run, 0.5))) break;
-      const T = sim.truthPose(), m = toMap(T.x, T.y, T.th), t = r4(sim.simTime - run.t0), v = sensVals;
+      const T = sim.truthPose(), m = worldToMap(T.x, T.y, T.th), t = r4(sim.simTime - run.t0), v = sensVals;
       S.rows.push([+t.toFixed(1), +m.x.toFixed(3), +m.y.toFixed(3), +(m.yaw * 180 / Math.PI).toFixed(1),
         v.temp == null ? null : +v.temp.toFixed(2), v.hum == null ? null : +v.hum.toFixed(4), v.gas == null ? null : +v.gas.toFixed(0),
         v.lux == null ? null : +v.lux.toFixed(0), v.snd == null ? null : +v.snd.toFixed(1)]);

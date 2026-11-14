@@ -30,7 +30,7 @@
 <main class="layout">
   <section class="stage" id="stage">
     <div class="loading" id="loading">Fysica-engine laden…</div>
-    <div class="hud" id="hud"></div>
+    <div class="hudwrap"><button class="hudbtn" id="hudToggle" type="button" aria-controls="hud" aria-expanded="true">HUD ▴</button><div class="hud" id="hud"></div></div>
     <div class="cam" id="camBox"><canvas id="camPreview" width="320" height="240" aria-label="Beeld van de robotcamera"></canvas><span id="camLabel">/camera/image_raw · 320×240</span></div>
     <div class="testov" id="testOv" hidden aria-live="polite"></div>
     <div class="modes" role="group" aria-label="Muismodus">
@@ -364,6 +364,22 @@ ros2 topic list             # zie je /scan en /odom?</pre>
   try { start = localStorage.getItem("tb3sim.panelHidden") === "1"; } catch (e) {}
   set(start);
 })();
+// HUD in- en uitklappen (onthouden). Zonder keuze: ingeklapt als de 3D-wereld smal is (simulator en Fenix naast elkaar).
+// De opname tekent de HUD altijd (tekst uit #hud, ook ingeklapt).
+(function () {
+  var btn = document.getElementById("hudToggle"), hud = document.getElementById("hud");
+  function set(closed, save) {
+    hud.hidden = closed;
+    btn.setAttribute("aria-expanded", closed ? "false" : "true");
+    btn.textContent = closed ? "HUD ▾" : "HUD ▴";
+    btn.title = closed ? "HUD tonen (positie, odometrie, sensoren)" : "HUD inklappen: meer zicht op de 3D-wereld";
+    if (save) try { localStorage.setItem("tb3sim.hudClosed", closed ? "1" : "0"); } catch (e) {}
+  }
+  btn.addEventListener("click", function () { set(!hud.hidden, true); });
+  var v = null;
+  try { v = localStorage.getItem("tb3sim.hudClosed"); } catch (e) {}
+  set(v === null ? document.getElementById("stage").clientWidth < 760 : v === "1", false);
+})();
 // Tabs van de zijbalk (laatste keuze onthouden)
 (function () {
   var tabs = Array.prototype.slice.call(document.querySelectorAll('.panel [role="tab"]'));
@@ -537,7 +553,16 @@ function toMap(x, y, yaw = 0) {
   const c = Math.cos(START.th), s = Math.sin(START.th), dx = x - START.x, dy = y - START.y;
   return { x: c * dx + s * dy, y: -s * dx + c * dy, yaw: Math.atan2(Math.sin(yaw - START.th), Math.cos(yaw - START.th)) };
 }
-const planPtsMap = () => plan.pts.map((p, i) => { const m = toMap(p.x, p.y, p.yaw); return { punt: "P" + (i + 1), x: +m.x.toFixed(2), y: +m.y.toFixed(2), yaw_deg: Math.round(m.yaw * 180 / Math.PI) }; });
+// Wereld → het echte frame `map` van SLAM/Nav2: via odomOrigin en map → odom uit /tf (zelfde transform als de kaartlaag
+// in 3D). Zonder map → odom: map = odom (slam_toolbox begint zo). Zo kloppen P1-P3 ook als de robot verplaatst is of de
+// odometrie op nul gezet werd vóór het mappen; toMap (startpose) is enkel de terugval tijdens het opstarten.
+function worldToMap(x, y, yaw = 0) {
+  try {
+    const T = tmul(tinv(worldMap()), { p: V(x, y, 0), q: qyaw(yaw) });
+    return { x: T.p.x, y: T.p.y, yaw: yawOf(T.q), live: !!mapOdom };
+  } catch { return { ...toMap(x, y, yaw), live: false }; }   // TDZ bij het opstarten
+}
+const planPtsMap = () => plan.pts.map((p, i) => { const m = worldToMap(p.x, p.y, p.yaw); return { punt: "P" + (i + 1), x: +m.x.toFixed(2), y: +m.y.toFixed(2), yaw_deg: Math.round(m.yaw * 180 / Math.PI) }; });
 async function makePlan() {
   plan.pts = []; plan.fields = null;
   const nr = student.name ? student.nr.trim().toLowerCase() : "";
@@ -587,11 +612,15 @@ function showPlan() {
   el.hidden = false;
   if (!student.nr.trim()) { el.textContent = "Vul je studentnummer in: daarmee krijg je je eigen meetpunten (sessie 4)."; return; }
   if (sim.worldInfo.name !== PLAN_WORLD) { el.textContent = "Sessie 4: kies de wereld Klaslokaal, dan verschijnen je meetpunten P1-P3."; return; }
-  el.innerHTML = "<b>Jouw meetpunten</b> (map-frame: (0, 0) = startpositie van de robot)<br>" +
+  const live = worldToMap(0, 0).live, html = "<b>Jouw meetpunten</b> " + (live
+    ? "(in je kaart, frame <code>map</code>, live uit /tf)"
+    : "(frame <code>map</code>: (0, 0) = waar de robot stond toen het mappen begon; start Navigatie met je kaart voor de exacte waarden)") + "<br>" +
     planPtsMap().map(p => `${p.punt}: x ${p.x.toFixed(2)} · y ${p.y.toFixed(2)} · ${p.yaw_deg}°`).join("<br>");
+  if (el.innerHTML !== html) el.innerHTML = html;
 }
+setInterval(() => { if (plan.pts.length) showPlan(); }, 1000);   // map → odom verandert (AMCL, SLAM)
 // enkel voor de headless tests (?test): pose zetten en het plan uitlezen
-if (/[?&]test\b/.test(location.search)) window.__tb3test = { sim, plan, rebuild, toMap, planPtsMap, camera, controls };
+if (/[?&]test\b/.test(location.search)) window.__tb3test = { sim, plan, rebuild, toMap, worldToMap, planPtsMap, camera, controls, setMapOdom: T => { mapOdom = T; } };
 $("stuSet").onclick = () => setStudent($("stuName").value, $("stuNr").value);
 for (const id of ["stuName", "stuNr"]) $(id).addEventListener("keydown", e => { if (e.key === "Enter") $("stuSet").click(); });
 
@@ -1171,6 +1200,7 @@ function render() {
   if (mobile()) {
     const err = Math.hypot(ow.x - p.x, ow.y - p.y);
     const slipping = Math.abs(cmd.v) > 0.02 && Math.abs(o.v) > 0.02 && Math.hypot(rb.x, rb.y) < 0.3 * Math.abs(o.v);
+    if (mapOdom) { const m = worldToMap(p.x, p.y, p.th); txt += `map        x ${m.x.toFixed(3)}  y ${m.y.toFixed(3)}  θ ${deg(m.yaw)}°\n`; }
     txt += `/odom      x ${o.x.toFixed(3)}  y ${o.y.toFixed(3)}  θ ${deg(o.th)}°\n` + `odom-fout  ${(err * 100).toFixed(1)} cm\n` +
       `roll/pitch ${deg(roll)}° ${deg(pitch)}°\n` + `commando   ${cmdSrc}`;
     if (goalWorld) txt += `\ndoel       ${(Math.hypot(goalWorld.x - p.x, goalWorld.y - p.y) * 100).toFixed(1)} cm, Δθ ${deg(Math.atan2(Math.sin(goalWorld.th - p.th), Math.cos(goalWorld.th - p.th)))}°`;

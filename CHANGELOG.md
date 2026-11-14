@@ -12,6 +12,19 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## 1.0.15 - nog niet gebouwd
+- **Simulator 1.5.1: HUD inklapbaar.** Knop *HUD ▴/▾* linksboven in de
+  3D-wereld; de keuze blijft bewaard. Zonder keuze start de HUD ingeklapt als
+  de 3D-wereld smaller is dan 760 px (simulator en Fenix-pagina naast elkaar
+  op één scherm). De opname tekent de HUD altijd, ook ingeklapt.
+- **Meetpunten P1-P3 in het echte map-frame.** De punten waren vast t.o.v. de
+  startpose; stond de robot elders of was de odometrie op nul gezet toen het
+  mappen begon, dan klopten ze niet met de kaart. Nu rekent de simulator ze om
+  met de odometrie-oorsprong en `map → odom` uit `/tf` (live, zelfde transform
+  als de kaartlaag in 3D): *in je kaart, live uit /tf* zodra SLAM of
+  Navigatie draait. Nieuwe HUD-rij `map` (robotpositie in de kaart). De route
+  in het rapport staat ook in dat frame.
+
 ## 1.0.14 - 2026-11-13
 - **Simulator 1.5.0: sessie 4 volledig in de simulator.** In de wereld
   *Klaslokaal* kiest het studentnummer (Opdrachten > Student) 3 meetpunten
