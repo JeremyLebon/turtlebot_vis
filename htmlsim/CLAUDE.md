@@ -86,6 +86,10 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
   half doorzichtig masker + IoU tegen de echte segmentatie van hetzelfde beeld (`segGT`, op header.stamp; gemiddelde over
   de klassen die de student voorspelt). Zolang er een masker binnenkomt rendert de simulator de segmentatie ook zonder
   vinkje. Voorbeeld: `examples/aruco_detections.py` (OpenCV ArUco → detecties + masker, OpenCV 4.6 en ≥ 4.7).
+  AI-voorbeeld: `examples/yolox_detections.py` (YOLOX-S int8 uit de OpenCV Model Zoo, Apache-2.0, cv2.dnn op de CPU, werkt in
+  OpenCV 4.6 ondanks "≥ 4.8" in de zoo; ~0,1 s per beeld; `--test foto.jpg` zonder ROS). Model in de image op
+  `/opt/models/yolox` (Dockerfile, vastgepinde commit + sha256), anders ~/ros2_ws/models of eenmalig downloaden. Herkent
+  op de primitieve werelden niets (getest: 0 detecties in het Klaslokaal), op foto's en het beeld van de echte robot wel.
 - **Terrein (`terrain` in de wereld):** analytische hoogte (`terrainFn`: tilt, gauss-heuvels, golving) → Rapier-heightfield (ligt
   in xz: +90° om x, rij i naar −y, kolom j naar +x). `groundZ(x, y)` zet statics, dozen, palen en de robot op de grond; vloer en
   markeringen worden gedrapeerd (`drape`), geen raster. Kaartlagen, veldkaart en spoor blijven vlak op z = 0.

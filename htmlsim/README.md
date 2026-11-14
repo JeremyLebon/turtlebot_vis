@@ -39,7 +39,7 @@ Een gepubliceerde versie (artifact, `dist/artifact.html`) werkt ook, maar dan bl
 | Werelden | TurtleBot3-wereld, Fabriekshal (16 × 12 m), Klaslokaal, Proefhal (lijnparcours, ArUco, UWB, platform), Bedrijfsterrein (buiten, 29 × 23 m), Boomgaard (29 × 25 m), Akker (36 × 28 m, licht hellend, maïs- en koolrijen), Heuvelland (hoogteverschillen tot 1,4 m), Lege kamer; eigen werelden als JSON (zie `worlds/`) |
 | Labo-robot | `/cmd_vel`-type automatisch herkend (Twist/TwistStamped) met melding bij een verkeerd type; batterij op `/battery_state` zoals de labo-robot; controle "Klaar voor de echte robot?" |
 | Opdrachten | automatische tests voor taak 1 (obstakelalarm + 4 sectoren), taak 2 (batterij), taak 3 (90° + vierkant); proefrapport met controlecode, opname met testpaneel |
-| Beeldverwerking | eigen script publiceert `/detections` (Detection2DArray) en/of `/student/segmentation` (mono8): kaders en masker op het camerabeeld, IoU tegen de echte segmentatie; voorbeeld `examples/aruco_detections.py` |
+| Beeldverwerking | eigen script publiceert `/detections` (Detection2DArray) en/of `/student/segmentation` (mono8): kaders en masker op het camerabeeld, IoU tegen de echte segmentatie; voorbeelden `examples/aruco_detections.py` (OpenCV ArUco) en `examples/yolox_detections.py` (AI-model YOLOX, 80 COCO-klassen, CPU) |
 | Identificatie | student + code (SHA-256 over naam/nr/wereld/datum), watermerk op vloer en camerabeeld |
 
 ## Docent: rapporten controleren

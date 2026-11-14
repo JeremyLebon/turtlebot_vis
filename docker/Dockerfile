@@ -118,6 +118,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends ros-${ROS_DISTR
 RUN apt-get update && apt-get install -y --no-install-recommends \
       python3-pandas python3-reportlab python3-seaborn python3-venv \
     && rm -rf /var/lib/apt/lists/*
+# AI-model voor objectdetectie (htmlsim/examples/yolox_detections.py, cv2.dnn op de CPU): YOLOX-S int8 (9 MB, 80
+# COCO-klassen) uit de OpenCV Model Zoo, Apache-2.0; vastgepind op een commit en gecontroleerd met sha256, zodat het
+# ook zonder internet (robotwifi) werkt.
+ARG OPENCV_ZOO_COMMIT=48b10fa505aeb51fbd127fc60a5c660040e823b7
+RUN M=/opt/models/yolox && mkdir -p $M \
+    && Z=https://github.com/opencv/opencv_zoo/raw/${OPENCV_ZOO_COMMIT}/models/object_detection_yolox \
+    && curl -fsSL -o $M/object_detection_yolox_2022nov_int8.onnx $Z/object_detection_yolox_2022nov_int8.onnx \
+    && curl -fsSL -o $M/LICENSE $Z/LICENSE \
+    && echo "01a3b0f400b30bc1e45230e991b2e499ab42622485a330021947333fbaf03935  $M/object_detection_yolox_2022nov_int8.onnx" | sha256sum -c -
 COPY docker/virtual_robot /tmp/virtual_robot
 RUN V=/tmp/virtual_robot && W=/root/turtlebot3_ws \
     && install -m 755 $V/bin/* /usr/local/bin/ \
