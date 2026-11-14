@@ -63,8 +63,9 @@ const check = (good, txt) => { ok &&= !!good; console.log(`${good ? '✓' : '✗
     check(fi.some(([r]) => r > 0.75 && r < 1.0) && fi.every(([, , v]) => Math.abs(v) < 0.15), `radar: ${rp.width} detecties, vooruit ${fi.map(([r, , v]) => r.toFixed(2) + ' m ' + v.toFixed(2) + ' m/s').join(', ')}`);
     // gekleurde 3D-lidar: velden en kleur van de oranje container (#c8642c)
     const pc = last['/points'], names = pc.fields.map(f => f.name).join(','), buf = Buffer.from(pc.data, 'base64');
-    let orange = 0; for (let o = 16; o < buf.length; o += 20) if (buf.readUInt32LE(o) === 0xc8642c) orange++;
-    check(names === 'x,y,z,intensity,rgb' && orange > 20, `/points ${names}, ${orange} punten in de kleur van de container`);
+    const rgbOff = pc.fields.find(f => f.name === 'rgb')?.offset ?? -1;
+    let orange = 0; for (let o = rgbOff; rgbOff >= 0 && o < buf.length; o += pc.point_step) if (buf.readUInt32LE(o) === 0xc8642c) orange++;
+    check(names === 'x,y,z,intensity,ring,time,rgb' && orange > 20, `/points ${names}, ${orange} punten in de kleur van de container`);
     // naar de container rijden tot de bumper raakt
     await page.focus('body'); await page.keyboard.down('ArrowUp');
     let hit = false, vmin = 0;

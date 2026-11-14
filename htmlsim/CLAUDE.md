@@ -68,7 +68,24 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
   witte achtergrond = geen meting (NaN), 160×120 32FC1 + 80×60 punten in het optische frame. Radar (`xRadar`, `sim.radarScan`): 121 × 3
   stralen, treffers op hetzelfde object samengevoegd, Doppler = (v_object − v_robot)·richting, PointCloud2 x y z velocity rcs.
   Gekleurde 3D-lidar (`l3Color`): `scan3d` geeft per punt de kleur van het object (`bodyColor`); in het bericht sRGB, in three.js lineair.
-  Frames uit `XMOUNT` (t.o.v. de rootlink) in `/tf_static`. Test: `node tests/e2e_extra.cjs` (nep-rosbridge op 9092).
+  Lijnsensor (`xLine`): 5 punten, reflectie = luminantie van de bovenste markering of de grond (`floorRefl`), 0 boven 5 cm.
+  Cliff (`xCliff`): `sim.downRange` vanaf 4 hoeken. UWB (`xUwb`): ankers = wereldelement `uwb` (`worldInfo.uwb`), NLOS via
+  `sim.lineOfSight` (+0,3–0,7 m, meer ruis); `/uwb/anchors` in het frame van `/ground_truth`. Stereo (`xStereo`): twee klonen van
+  `robotCam` op ±3 cm, rechts `P[3] = -f·B`. Thermisch/segmentatie (`renderFlat`): elke mesh tijdelijk een ander materiaal; thermisch = ShaderMaterial
+  die per pixel eigen temperatuur (`temp` in de wereld-JSON, robot 32, vloer 20, rest 21) + de heat-velden van `curFields()`
+  rekent (zelfde formule als `fieldValue`/de temperatuursensor), 16 bits in rood/groen; segmentatie = label-id in rood.
+  InstancedMesh zonder instanceColor; labels uit
+  `mesh.userData.lab` = soort wereldelement (`statics[].item`, gezet in loadWorld via `curItem`). ArUco: wereldelement `aruco`
+  (DICT_4X4_50 uit OpenCV in `ARUCO_4X4`), vlak met canvastextuur op de voorkant (`arucoPlane`); OpenCV herkent ze in het
+  camerabeeld (test). 3D-lidar: `L3_PRESETS` + `sim.sweep3d` per stap (bewegingsvervorming, tijd per punt), `/points` als
+  PointXYZIRT (Velodyne: x y z intensity f32, ring u16 op 16, time f32 op 18, step 22; met kleur rgb op 22). IMU: `#imuHz`.
+  Frames uit `XMOUNT` (t.o.v. de rootlink) in `/tf_static`. Tests: `node tests/e2e_extra.cjs` (9092), `node tests/e2e_sensors2.cjs` (9093).
+- **Beeldverwerking van de student (geen AI in de simulator):** abonnement op `/detections` (vision_msgs/Detection2DArray, pixels
+  van het camerabeeld; vision_msgs 4.x `center.position` en ouder `center.x`) → kaders op `#camPreview` na elke capture
+  (`drawVisionOverlay`, ook in de opname), en `/student/segmentation` (mono8, label-id's van `/segmentation/labels`) →
+  half doorzichtig masker + IoU tegen de echte segmentatie van hetzelfde beeld (`segGT`, op header.stamp; gemiddelde over
+  de klassen die de student voorspelt). Zolang er een masker binnenkomt rendert de simulator de segmentatie ook zonder
+  vinkje. Voorbeeld: `examples/aruco_detections.py` (OpenCV ArUco → detecties + masker, OpenCV 4.6 en ≥ 4.7).
 - **Terrein (`terrain` in de wereld):** analytische hoogte (`terrainFn`: tilt, gauss-heuvels, golving) → Rapier-heightfield (ligt
   in xz: +90° om x, rij i naar −y, kolom j naar +x). `groundZ(x, y)` zet statics, dozen, palen en de robot op de grond; vloer en
   markeringen worden gedrapeerd (`drape`), geen raster. Kaartlagen, veldkaart en spoor blijven vlak op z = 0.

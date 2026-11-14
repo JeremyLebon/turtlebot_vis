@@ -55,4 +55,31 @@ for (const [k, drive] of [["skid", "skid"], ["tracked", "skid"], ["mecanum", "me
   const cx = (Math.max(...xs) + Math.min(...xs)) / 2, cy = (Math.max(...ys) + Math.min(...ys)) / 2, r = xs.reduce((a, x, i) => a + Math.hypot(x - cx, ys[i] - cy), 0) / xs.length;
   ok("ackermann: cirkel met straal v/w = 1 m", Math.abs(r - 1.0) < 0.2, `straal ${r.toFixed(2)} m (wielbasis ${L} m)`);
   const s2 = preset("ackermann"); run(s2, { v: 0, w: 1 }, 2); const p2 = s2.truthPose(); ok("ackermann: draait niet ter plaatse", Math.abs(p2.th) < 0.05 && Math.hypot(p2.x, p2.y) < 0.02, `θ ${(p2.th * 57.3).toFixed(1)}°`); }
+// 3D-lidar-presets: verdeeld over de omwenteling, tijd per punt, ringen; rozet verandert per scan
+for (const k of ["vlp16", "mid360"]) {
+  const s = burger(), P = s.L3_PRESETS[k], st = {}; s.addBox(1.5, 0, 0, 1.0, 1.0); let scan = null, steps = 0;
+  while (!scan && steps < 1000) { s.step({ v: 0, w: 0 }); scan = s.sweep3d("lidar_3d_link", P, st); steps++; }
+  const n = scan.pts.length / 5, ts = [], rings = new Set();
+  for (let i = 0; i < n; i++) { ts.push(scan.pts[i * 5 + 4]); rings.add(scan.pts[i * 5 + 3]); }
+  const mono = ts.every((t, i) => !i || t >= ts[i - 1] - 1e-9);
+  ok(`3D-lidar ${k}: scan over ${steps} stappen, tijd per punt`, steps === Math.round(200 / P.hz) && mono && ts[ts.length - 1] < 1 / P.hz && n > 50,
+    `${n} punten, t ${ts[0].toFixed(3)}–${ts[ts.length - 1].toFixed(3)} s, ${rings.size} ringen`);
+  if (k === "mid360") { let s2 = null; while (!s2) { s.step({ v: 0, w: 0 }); s2 = s.sweep3d("lidar_3d_link", P, st); }
+    ok("MID-360: volgende scan een ander patroon", s2.pts.length !== scan.pts.length || s2.pts[0] !== scan.pts[0]); }
+}
+{ // bewegingsvervorming: tijdens het draaien liggen de punten van een muur niet op één rechte in het sensorframe van het begin
+  const s = burger(), P = s.L3_PRESETS.vlp16, st = {}; let scan = null;
+  run(s, { v: 0, w: 1.5 }, 1);
+  while (!scan) { s.step({ v: 0, w: 1.5 }); scan = s.sweep3d("lidar_3d_link", P, st); }
+  ok("3D-lidar meet tijdens de beweging (tijdveld voor deskew)", scan.pts.length > 100); }
+{ // cliff: robot aan de rand van de vloer van de lege kamer (vloer tot 6 + 2 m)
+  const s = M.createSim(R); s.loadWorld({ name: "rand", floor: [4, 4], items: [] }); const m = M.parseURDF(M.BURGER_URDF, DOMParser);
+  s.buildRobot(m, M.analyzeModel(m).cfg, 0, 0, 0); const T = s.linkWorld("base_footprint");
+  const near = s.downRange({ x: T.p.x, y: T.p.y, z: T.p.z + 0.02 }, 0.5), edge = s.downRange({ x: 4.05, y: 0, z: 0.02 }, 0.5);
+  ok("cliff: vloer onder de robot, niets voorbij de rand", near < 0.04 && !isFinite(edge), `onder ${near.toFixed(3)} m, voorbij de rand ${edge}`); }
+{ // UWB-zichtlijn: muur ertussen
+  const s = M.createSim(R); s.loadWorld({ name: "uwb", floor: [6, 6], items: [{ type: "wall", x0: 0, y0: -1, x1: 0, y1: 1, h: 1 }, { type: "uwb", x: 2, y: 0, z: 0.5 }] });
+  s.world.step();   // query-pipeline bijwerken (normaal gebeurt dat in step)
+  const free = s.lineOfSight({ x: -2, y: 2, z: 0.5 }, { x: 2, y: 2, z: 0.5 }), blocked = s.lineOfSight({ x: -2, y: 0, z: 0.5 }, { x: 2, y: 0, z: 0.5 });
+  ok("UWB: zichtlijn vrij / muur ertussen", !isFinite(free) && blocked > 1.9 && blocked < 2.1 && s.worldInfo.uwb.length === 1, `geblokkeerd op ${blocked.toFixed(2)} m`); }
 console.log(fails ? `\n${fails} test(s) mislukt` : "\nAlle tests geslaagd"); process.exit(fails ? 1 : 0);

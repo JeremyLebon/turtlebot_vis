@@ -31,7 +31,7 @@
   <section class="stage" id="stage">
     <div class="loading" id="loading">Fysica-engine laden…</div>
     <div class="hudwrap"><button class="hudbtn" id="hudToggle" type="button" aria-controls="hud" aria-expanded="true">HUD ▴</button><div class="hud" id="hud"></div></div>
-    <div class="cam" id="camBox"><canvas id="camPreview" width="320" height="240" aria-label="Beeld van de robotcamera"></canvas><span id="camLabel">/camera/image_raw · 320×240</span><canvas id="depthPreview" width="160" height="120" hidden aria-label="Beeld van de dieptecamera"></canvas><span id="depthLabel" hidden>/camera/depth/image_raw · rood = dichtbij</span></div>
+    <div class="cam" id="camBox"><canvas id="camPreview" width="320" height="240" aria-label="Beeld van de robotcamera"></canvas><span id="camLabel">/camera/image_raw · 320×240</span><div class="camx"><figure><canvas id="depthPreview" width="160" height="120" hidden aria-label="Beeld van de dieptecamera"></canvas><span id="depthLabel" hidden>diepte</span></figure><figure><canvas id="thermPreview" width="160" height="120" hidden aria-label="Beeld van de thermische camera"></canvas><span id="thermLabel" hidden>thermisch</span></figure><figure><canvas id="segPreview" width="160" height="120" hidden aria-label="Beeld van de segmentatiecamera"></canvas><span id="segLabel" hidden>segmentatie</span></figure></div></div>
     <div class="testov" id="testOv" hidden aria-live="polite"></div>
     <div class="modes" role="group" aria-label="Muismodus">
       <button data-mode="orbit" class="on">Camera</button>
@@ -80,6 +80,7 @@
           <option value="turtlebot3">TurtleBot3-wereld (6 × 6 m)</option>
           <option value="factory">Fabriekshal (16 × 12 m)</option>
           <option value="classroom">Klaslokaal (9 × 7 m)</option>
+          <option value="lab">Proefhal: lijn, ArUco, UWB, platform (9 × 7 m)</option>
           <option value="yard">Bedrijfsterrein, buiten (29 × 23 m)</option>
           <option value="orchard">Boomgaard (29 × 25 m)</option>
           <option value="field">Akker, licht hellend (36 × 28 m)</option>
@@ -315,6 +316,10 @@
         <p class="msg" id="lidarMsg"></p>
         <label class="chk"><input type="checkbox" id="camOn" checked> Robotcamera publiceren (5 Hz, JPEG)</label>
         <label class="chk"><input type="checkbox" id="l3On"> 3D-lidar (16 lagen, ±15°, 5 Hz)</label>
+        <div class="grid2"><label for="l3Preset">3D-lidar</label><select id="l3Preset"></select>
+          <label for="imuHz">IMU</label><select id="imuHz"><option value="20" selected>20 Hz</option><option value="100">100 Hz</option><option value="200">200 Hz (LIO)</option></select></div>
+        <p class="hint"><code>/points</code>: x y z intensity (float32), ring (uint16), time (float32, s na het begin van de scan), zoals de Velodyne-driver.
+          De scan loopt over de omwenteling (bewegingsvervorming, voor deskew en LIO). Zware types vragen veel van de laptop.</p>
         <label class="chk"><input type="checkbox" class="xSens" id="l3Color"> 3D-lidar in kleur: elk punt de kleur van het object, <code>/points</code> met <code>intensity</code> en <code>rgb</code></label>
         <h3 class="sub">Extra sensoren (zoals in Gazebo)</h3>
         <label class="chk"><input type="checkbox" class="xSens" id="xGps"> GPS: <code>/gps/fix</code> (NavSatFix, 5 Hz, σ 0,3 m)</label>
@@ -324,7 +329,13 @@
         <label class="chk"><input type="checkbox" class="xSens" id="xDepth"> Dieptecamera (zoals een RealSense): <code>/camera/depth/image_raw</code> (32FC1, 160×120, 0,1–10 m),
           <code>/camera/depth/points</code> (80×60), <code>/camera/depth/camera_info</code>, 5 Hz</label>
         <label class="chk"><input type="checkbox" class="xSens" id="xRadar"> Radar (77 GHz): <code>/radar/points</code> (PointCloud2: x y z velocity rcs), 10 Hz, 120°, tot 30 m, Doppler-snelheid</label>
-        <label class="chk"><input type="checkbox" class="xSens" id="xShow" checked> Sonarkegels, radardetecties en dieptepunten tonen in 3D</label>
+        <label class="chk"><input type="checkbox" class="xSens" id="xLine"> Lijnsensor (5 IR onder de voorkant): <code>/line_sensor</code> (Float32MultiArray, 0 = zwart, 1 = wit, 20 Hz)</label>
+        <label class="chk"><input type="checkbox" class="xSens" id="xCliff"> Cliff-sensoren (4 hoeken): <code>/cliff</code> (Float32MultiArray: afstand tot de grond vl vr al ar, 20 Hz), ook <code>cliff</code> in <code>/sensor_state</code></label>
+        <label class="chk"><input type="checkbox" class="xSens" id="xUwb"> UWB-tag: <code>/uwb/ranges</code> (Float32MultiArray, m, 10 Hz), <code>/uwb/anchors</code> (JSON, frame zoals <code>/ground_truth</code>); muur ertussen = te lang (NLOS)</label>
+        <label class="chk"><input type="checkbox" class="xSens" id="xStereo"> Stereocamera (basis 6 cm): <code>/stereo/left|right/image_raw/compressed</code> + <code>camera_info</code>, 5 Hz</label>
+        <label class="chk"><input type="checkbox" class="xSens" id="xThermal"> Thermische camera: <code>/thermal/image_raw</code> (mono16, 0,01 K, 160×120), 5 Hz; warm bij de warmtebronnen</label>
+        <label class="chk"><input type="checkbox" class="xSens" id="xSeg"> Segmentatiecamera: <code>/segmentation/labels_map</code> (mono8, 160×120), <code>/segmentation/colored_map/compressed</code>, <code>/segmentation/labels</code> (JSON), 5 Hz</label>
+        <label class="chk"><input type="checkbox" class="xSens" id="xShow" checked> Sonarkegels, radardetecties, dieptepunten en UWB-lijnen tonen in 3D</label>
         <p class="hint">Vaste frames aan de robot in <code>/tf_static</code>: <code>gps_link</code>, <code>sonar_front_link</code>,
           <code>sonar_left_link</code>, <code>sonar_right_link</code>, <code>radar_link</code>; de dieptecamera gebruikt het frame van de robotcamera. De wereld-x wijst naar het oosten, y naar het noorden;
           de GPS rekent vanaf <code>geo</code> in de wereld (lat, lon, alt). Waarden ook in de HUD.</p>
@@ -345,7 +356,9 @@
           <code>movable</code> x y [sx sy sz mass], <code>mark</code> x y sx sy [yaw]; elk met optioneel <code>color</code>.
           Buiten: <code>tree</code> x y [h crown r], <code>orchard</code> x y [rows n row gap yaw h crown jitter missing],
           <code>fence</code> x0 y0 x1 y1 [h gap opacity], <code>sphere</code> x y [z] r,
-          <code>crops</code> x y [plant rows l row w h gap yaw] (plant: mais, kool, aardappel).
+          <code>crops</code> x y [plant rows l row w h gap yaw] (plant: mais, kool, aardappel),
+          <code>aruco</code> x y [z] yaw id [size], <code>uwb</code> x y [z id], <code>line</code> pts [[x, y], …] [w closed];
+          elk element optioneel <code>temp</code> (°C, voor de thermische camera).
           Hoogteverschillen: <code>terrain</code> {res, base, tilt [ax, ay], hills [{x, y, h, s}], wave {amp, len}}; alles staat dan op de grond.
           Verder <code>floor</code> [sx, sy], <code>spawn</code> [x, y, θ], <code>ground</code> en <code>sky</code> (kleur) en
           <code>geo</code> {lat, lon, alt} voor de GPS.</p>
@@ -727,7 +740,7 @@ function buildCrops(list) {
       m4.compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), rot), new THREE.Vector3(w, w, h));
       mesh.setMatrixAt(i, m4); mesh.setColorAt(i, base.clone().multiplyScalar(br));
     });
-    mesh.castShadow = mesh.receiveShadow = true; worldGroup.add(mesh);
+    mesh.castShadow = mesh.receiveShadow = true; mesh.userData.lab = "crops"; worldGroup.add(mesh);
   }
 }
 function buildWorldMeshes() {
@@ -736,14 +749,16 @@ function buildWorldMeshes() {
   const [fx, fy] = sim.worldInfo.floor;
   for (const s of sim.statics) {
     let mesh;
-    if (s.kind === "floor") { mesh = new THREE.Mesh(drape(new THREE.PlaneGeometry(fx, fy, ...terrSeg(fx, fy)), 0, 0, 0, 0), M.floor); mesh.receiveShadow = true; worldGroup.add(mesh); continue; }
+    if (s.kind === "floor") { mesh = new THREE.Mesh(drape(new THREE.PlaneGeometry(fx, fy, ...terrSeg(fx, fy)), 0, 0, 0, 0), M.floor); mesh.receiveShadow = true; mesh.userData.lab = "floor"; worldGroup.add(mesh); continue; }
     if (s.kind === "crop") { crops.push(s); continue; }
-    if (s.kind === "box") mesh = new THREE.Mesh(new THREE.BoxGeometry(s.size.x, s.size.y, s.size.z), matFor(s.color));
+    if (s.kind === "box" || s.kind === "aruco") mesh = new THREE.Mesh(new THREE.BoxGeometry(s.size.x, s.size.y, s.size.z), matFor(s.color));
     if (s.kind === "cyl") { mesh = new THREE.Mesh(new THREE.CylinderGeometry(s.size.r, s.size.r, s.size.h, 32), matFor(s.color)); mesh.geometry.rotateX(Math.PI / 2); }
     if (s.kind === "ball") mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(s.size.r, 2), matFor(s.color));
     if (s.def?.opacity != null) { mesh.material = mesh.material.clone(); mesh.material.transparent = true; mesh.material.opacity = s.def.opacity; mesh.material.depthWrite = false; }
     const t = s.body.translation(), q = s.body.rotation();
     mesh.position.set(t.x, t.y, t.z); mesh.quaternion.set(q.x, q.y, q.z, q.w);
+    mesh.userData.lab = s.item || s.kind; if (s.def?.temp != null) mesh.userData.temp = s.def.temp;
+    if (s.kind === "aruco") mesh.add(arucoPlane(s.def.id ?? 0, s.size.y));
     mesh.castShadow = mesh.receiveShadow = true; worldGroup.add(mesh);
   }
   // vloermarkeringen: alleen beeld (ook zichtbaar voor de robotcamera), geen collider
@@ -751,6 +766,7 @@ function buildWorldMeshes() {
     const mat = matFor(mk.color || "#f2c230").clone(); mat.polygonOffset = true; mat.polygonOffsetFactor = -2; mat.polygonOffsetUnits = -2;
     const yaw = (mk.yaw || 0) * Math.PI / 180, mesh = new THREE.Mesh(drape(new THREE.PlaneGeometry(mk.sx, mk.sy, ...terrSeg(mk.sx, mk.sy)), mk.x, mk.y, yaw, 0.02), mat);
     if (!sim.worldInfo.terrain) mesh.position.z = 0.003 - 0.02;
+    mesh.userData.lab = "mark";
     mesh.position.x = mk.x; mesh.position.y = mk.y; mesh.rotation.z = yaw; mesh.receiveShadow = true; worldGroup.add(mesh);
   }
   buildCrops(crops);
@@ -770,8 +786,22 @@ function removeProbeMesh(pr) { const m = probeMeshes.get(pr); if (m) { scene.rem
 function removeMovable(i) {
   const [m, mesh] = movableMeshes[i]; sim.removeBox(m); worldGroup.remove(mesh); mesh.geometry.dispose(); movableMeshes.splice(i, 1);
 }
+// ArUco DICT_4X4_50 (uit OpenCV): 16 bits per id, rij per rij vanaf linksboven, 1 = wit; zwarte rand van 1 cel
+const ARUCO_4X4 = [46386, 3994, 13101, 39238, 21662, 31181, 40494, 50418, 65242, 53078, 63889, 4519, 3767, 10767, 9393, 9790, 18021, 26112, 27742, 30383, 34443, 45099, 52437, 56706, 65095, 38001, 44260, 42324, 8483, 13423, 17429, 22450, 40655, 61643, 2222, 2345, 6261, 1279, 3574, 7258, 5912, 10792, 12940, 14514, 9448, 12011, 11583, 19300, 20526, 20499];
+const arucoTex = new Map();
+function arucoPlane(id, board) {                             // vlak op de voorkant (+x) van het bord, tekst rechtop
+  if (!arucoTex.has(id)) {
+    const c = document.createElement("canvas"); c.width = c.height = 120; const g = c.getContext("2d"), bits = ARUCO_4X4[id % 50], cell = 16, o = 12;
+    g.fillStyle = "#fff"; g.fillRect(0, 0, 120, 120); g.fillStyle = "#000"; g.fillRect(o, o, 96, 96); g.fillStyle = "#fff";
+    for (let r = 0; r < 4; r++) for (let k = 0; k < 4; k++) if ((bits >> (15 - (r * 4 + k))) & 1) g.fillRect(o + (k + 1) * cell, o + (r + 1) * cell, cell, cell);
+    const tx = new THREE.CanvasTexture(c); tx.magFilter = THREE.NearestFilter; tx.colorSpace = THREE.SRGBColorSpace; arucoTex.set(id, tx);
+  }
+  const geo = new THREE.PlaneGeometry(board, board);
+  geo.applyMatrix4(new THREE.Matrix4().makeBasis(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0)));   // X→y, Y→z, normaal→x
+  const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: arucoTex.get(id) })); m.position.x = 0.0055; m.userData.lab = "aruco"; return m;
+}
 function addMovableMesh(m) {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(m.size.x, m.size.y, m.size.z), m.color ? matFor(m.color) : M.box);
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(m.size.x, m.size.y, m.size.z), m.color ? matFor(m.color) : M.box); mesh.userData.lab = "movable";
   mesh.castShadow = mesh.receiveShadow = true; worldGroup.add(mesh); movableMeshes.push([m, mesh]);
 }
 
@@ -791,8 +821,9 @@ function makePoints(n, size) {
   const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(n * 3), 3)); g.setDrawRange(0, 0);
   const p = new THREE.Points(g, new THREE.PointsMaterial({ size })); p.frustumCulled = false; scene.add(onL1(p)); return p;
 }
-const lidarPts = makePoints(360, 0.03), cloudPts = makePoints(16 * 360, 0.02);
-cloudPts.geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(16 * 360 * 3), 3));
+const CLOUD_MAX = 40000;                                    // OS1-64: 64 × 512 punten
+const lidarPts = makePoints(360, 0.03), cloudPts = makePoints(CLOUD_MAX, 0.02);
+cloudPts.geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(CLOUD_MAX * 3), 3));
 const ghost = new THREE.Group();
 { const ring = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.003, 6, 40), new THREE.MeshBasicMaterial()); ring.position.z = 0.003; ghost.add(ring);
   const arrow = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.006, 0.002), new THREE.MeshBasicMaterial()); arrow.position.set(0.09, 0, 0.003); ghost.add(arrow); }
@@ -940,7 +971,7 @@ function buildRobotVisuals() {
     }
     return g;
   });
-  if (cfg.camera && linkNodes[cfg.camera]) { linkNodes[cfg.camera].add(robotCam); linkNodes[cfg.camera].add(depthCam); }
+  if (cfg.camera && linkNodes[cfg.camera]) { linkNodes[cfg.camera].add(robotCam); linkNodes[cfg.camera].add(depthCam); stereo.forEach(c => linkNodes[cfg.camera].add(c.cam)); }
   $("camBox").hidden = !cfg.camera;
   $("l3On").disabled = !cfg.lidar3d; if (!cfg.lidar3d) $("l3On").checked = false;
   syncL3();
@@ -961,7 +992,18 @@ const depthRT = new THREE.WebGLRenderTarget(DEPTH.w, DEPTH.h), depthMat = new TH
 const depthPix = new Uint8Array(DEPTH.w * DEPTH.h * 4), depthBuf = new Float32Array(DEPTH.w * DEPTH.h);
 const DEPTH_F = (DEPTH.h / 2) / Math.tan(DEPTH.vfov * Math.PI / 360);
 const depthCtx = $("depthPreview").getContext("2d"), depthImg = depthCtx.createImageData(DEPTH.w, DEPTH.h);
-let depthDue = null;
+let depthDue = null, specialDue = null;
+// stereocamera: twee camera's 6 cm uit elkaar in het cameraframe (links +y), zelfde beeld als de robotcamera
+const STEREO_B = 0.06, stereo = ["left", "right"].map((k, i) => {
+  const cam = robotCam.clone(); cam.position.set(0, i ? -STEREO_B / 2 : STEREO_B / 2, 0);
+  const rt = new THREE.WebGLRenderTarget(CAM.w, CAM.h); rt.texture.colorSpace = THREE.SRGBColorSpace;
+  const cv = document.createElement("canvas"); cv.width = CAM.w; cv.height = CAM.h;
+  return { k, cam, rt, pix: new Uint8Array(CAM.w * CAM.h * 4), cv, ctx: cv.getContext("2d"), img: null };
+});
+stereo.forEach(c => c.img = c.ctx.createImageData(CAM.w, CAM.h));
+// thermisch en segmentatie: elk object een vlakke kleur (temperatuur of label), 160 × 120 met de robotcamera
+const SPEC = { w: 160, h: 120 }, specRT = new THREE.WebGLRenderTarget(SPEC.w, SPEC.h), specPix = new Uint8Array(SPEC.w * SPEC.h * 4);
+const SPEC_F = (SPEC.h / 2) / Math.tan(CAM.vfov * Math.PI / 360);
 
 /* ---- model laden en bouwen ---- */
 function fillSelect(id, opts, val) {
@@ -991,7 +1033,7 @@ function buildJointUI() {
   box.querySelectorAll("input").forEach(inp => inp.oninput = () => { sim.robot.byName[inp.dataset.j].target = +inp.value; });
 }
 function rebuild(x = START.x, y = START.y, th = START.th) {
-  sim.buildRobot(model, cfg, x, y, th);
+  sim.buildRobot(model, cfg, x, y, th); l3State = {};
   // (padStrafe is hier bij het opstarten nog niet gedeclareerd: via de klasse van de knop)
   $("padStrafe").hidden = cfg.drive !== "mecanum"; if (cfg.drive !== "mecanum" && $("padStrafe").classList.contains("held")) $("padStrafe").click();
   const p0 = sim.truthPose(); odomOrigin = { x: p0.x, y: p0.y, th: p0.th }; clearTrails(); prevRobot = null;
@@ -1036,6 +1078,11 @@ function loadPreset(k) {
   showConfig(); sim.params.ballWheels = true; rebuild();
   $("robotMsg").className = "msg"; $("robotMsg").textContent = `${P.label} geladen. Aandrijving ${DRIVE_INFO[cfg.drive]}. Max ${P.vmax} m/s, ${P.wmax} rad/s.`;
 }
+for (const [k, P] of Object.entries(sim.L3_PRESETS)) $("l3Preset").insertAdjacentHTML("beforeend", `<option value="${k}">${P.label}</option>`);
+$("l3Preset").onchange = () => { const P = sim.L3_PRESETS[$("l3Preset").value]; $("l3min").value = P.rmin; $("l3max").value = P.rmax; applyLidarRange(); l3State = {};
+  try { localStorage.setItem("tb3sim.l3Preset", $("l3Preset").value); } catch {} $("l3Preset").blur(); };
+try { const v = localStorage.getItem("tb3sim.l3Preset"); if (v && sim.L3_PRESETS[v]) $("l3Preset").value = v; } catch {}
+$("imuHz").onchange = () => { RATES.imu = +$("imuHz").value; next.imu = sim.simTime; $("imuHz").blur(); };
 for (const [k, P] of Object.entries(ROBOT_PRESETS)) $("presetSel").insertAdjacentHTML("beforeend", `<option value="${k}">${P.label}</option>`);
 $("presetSel").onchange = () => { loadPreset($("presetSel").value); $("presetSel").blur(); };   // anders sturen de pijltjes de keuzelijst
 function onFiles(list) {
@@ -1072,6 +1119,12 @@ const OUT = {
   "/range/right": "sensor_msgs/msg/Range", "/bumper": "std_msgs/msg/Bool", "/imu/mag": "sensor_msgs/msg/MagneticField",
   "/camera/depth/image_raw": "sensor_msgs/msg/Image", "/camera/depth/camera_info": "sensor_msgs/msg/CameraInfo",
   "/camera/depth/points": "sensor_msgs/msg/PointCloud2", "/radar/points": "sensor_msgs/msg/PointCloud2",
+  "/line_sensor": "std_msgs/msg/Float32MultiArray", "/cliff": "std_msgs/msg/Float32MultiArray", "/uwb/ranges": "std_msgs/msg/Float32MultiArray",
+  "/uwb/anchors": "std_msgs/msg/String", "/stereo/left/image_raw/compressed": "sensor_msgs/msg/CompressedImage",
+  "/stereo/left/camera_info": "sensor_msgs/msg/CameraInfo", "/stereo/right/image_raw/compressed": "sensor_msgs/msg/CompressedImage",
+  "/stereo/right/camera_info": "sensor_msgs/msg/CameraInfo", "/thermal/image_raw": "sensor_msgs/msg/Image",
+  "/segmentation/labels_map": "sensor_msgs/msg/Image", "/segmentation/colored_map/compressed": "sensor_msgs/msg/CompressedImage",
+  "/segmentation/labels": "std_msgs/msg/String",
   "/sim/gas_value": "std_msgs/msg/Float32", "/sim/temperature": "sensor_msgs/msg/Temperature", "/sim/humidity": "sensor_msgs/msg/RelativeHumidity", "/sim/illuminance": "sensor_msgs/msg/Illuminance", "/joy": "sensor_msgs/msg/Joy",
 };
 const IN = {   // topic: [type, throttle ms]
@@ -1082,6 +1135,8 @@ const IN = {   // topic: [type, throttle ms]
   "/system_info": ["std_msgs/msg/String", 2000],   // virtuele robot (system_info_node): CPU van de laptop
   "/launch_status": ["std_msgs/msg/String", 1000],  // launch_control: SLAM/Navigatie aan, kaartlijst, kaart van Navigatie
   "/web/nav_cmd": ["std_msgs/msg/String", 0],       // Fenix-pagina: "Kaart opslaan" → zones_adopt
+  "/detections": ["vision_msgs/msg/Detection2DArray", 0],   // script van de student (objectdetectie): kaders op het camerabeeld
+  "/student/segmentation": ["sensor_msgs/msg/Image", 0],    // script van de student: masker (mono8, label-id's) → IoU met de echte segmentatie
 };
 const stats = {};
 for (const k in OUT) stats[k] = { dir: "→", n: 0, hz: 0 };
@@ -1107,6 +1162,8 @@ function publishStatic() {
   const st = stamp(), list = model.joints.filter(j => j.type === "fixed").map(j => tfMsg(j.parent, j.child, j.origin, st));
   if (addOptical) list.push(tfMsg(cfg.camera, opticalFrame, { p: V(), q: { x: -0.5, y: 0.5, z: -0.5, w: 0.5 } }, st));
   for (const [name, m] of Object.entries(XMOUNT)) if (xOn(m.need)) list.push(tfMsg(model.root, name, { p: m.p, q: qyaw(m.yaw) }, st));
+  if (xOn("xStereo") && cfg.camera) for (const [k, y] of [["left", 0.03], ["right", -0.03]])
+    list.push(tfMsg(cfg.camera, `stereo_${k}_optical_frame`, { p: V(0, y, 0), q: { x: -0.5, y: 0.5, z: -0.5, w: 0.5 } }, st));
   pub("/tf_static", { transforms: list });
 }
 function connect() {
@@ -1135,6 +1192,8 @@ function connect() {
     if (stats[t + " "]) stats[t + " "].n++;
     if (t === "/cmd_vel") { const tw = msg.twist || msg; rosCmd = { v: tw.linear.x, vy: tw.linear.y || 0, w: tw.angular.z, t: sim.simTime }; cmdState.lastMsg = performance.now(); }
     else if (t === "/launch_status") onLaunchStatus(msg.data);
+    else if (t === "/detections") onDetections(msg);
+    else if (t === "/student/segmentation") onStudentSeg(msg);
     else if (t === "/web/nav_cmd") { try { const c = JSON.parse(msg.data); if (c.cmd === "zones_adopt" && c.map) saveAnchor(c.map); } catch {} }
     else if (t === "/cmd_vel_out") { const tw = msg.twist || msg; outCmd = { v: tw.linear.x, vy: tw.linear.y || 0, w: tw.angular.z, t: sim.simTime, seen: performance.now() }; }
     else if (t === "/joint_commands") msg.name.forEach((n, i) => {
@@ -1277,36 +1336,187 @@ function simStep() {
       angle_increment: s.inc, time_increment: 0, scan_time: 1 / RATES.scan, range_min: sim.LIDAR.rmin, range_max: sim.LIDAR.rmax, ranges: s.ranges, intensities: [] });
     const a = lidarPts.geometry.attributes.position; a.array.set(s.pts); a.needsUpdate = true; lidarPts.geometry.setDrawRange(0, s.pts.length / 3);
   }
-  if (cfg.camera && t >= next.cam) { next.cam += 1 / CAM.hz; camDue = stamp(); if (xOn("xDepth")) depthDue = stamp(); }
-  if (t >= next.l3) {
-    next.l3 += 1 / 5;
-    if ($("l3On").checked && cfg.lidar3d) {
-      const c = sim.scan3d(cfg.lidar3d), n = c.sensor.length / 3, a = cloudPts.geometry.attributes.position;
-      a.array.set(c.worldPts.slice(0, a.array.length)); a.needsUpdate = true; cloudPts.geometry.setDrawRange(0, Math.min(n, a.count));
-      const colored = xOn("l3Color"), ca = cloudPts.geometry.attributes.color;
-      if (colored) { for (let i = 0; i < Math.min(n, ca.count); i++) ca.array.set(hitRGB(c.cols[i]).l, i * 3); ca.needsUpdate = true; }
-      if (cloudPts.material.vertexColors !== colored) { cloudPts.material.vertexColors = colored; cloudPts.material.color = colored ? new THREE.Color(1, 1, 1) : colors.cloud; cloudPts.material.needsUpdate = true; }
-      if (live() && colored) {
-        // x y z intensity rgb (rgb = 0x00RRGGBB als float32-bits, zoals PCL/RViz)
-        const buf = new ArrayBuffer(n * 20), dv = new DataView(buf);
-        for (let i = 0; i < n; i++) {
-          const [r, g, b] = hitRGB(c.cols[i]).s, o = i * 20;
-          dv.setFloat32(o, c.sensor[3 * i], true); dv.setFloat32(o + 4, c.sensor[3 * i + 1], true); dv.setFloat32(o + 8, c.sensor[3 * i + 2], true);
-          dv.setFloat32(o + 12, Math.round((0.2126 * r + 0.7152 * g + 0.0722 * b) * 255), true);
-          dv.setUint32(o + 16, (Math.round(r * 255) << 16) | (Math.round(g * 255) << 8) | Math.round(b * 255), true);
-        }
-        pub("/points", { header: { stamp: stamp(), frame_id: cfg.lidar3d }, height: 1, width: n,
-          fields: ["x", "y", "z", "intensity", "rgb"].map((name, i) => ({ name, offset: 4 * i, datatype: 7, count: 1 })),
-          is_bigendian: false, point_step: 20, row_step: 20 * n, data: b64(new Uint8Array(buf)), is_dense: true });
-      } else if (live()) pub("/points", { header: { stamp: stamp(), frame_id: cfg.lidar3d }, height: 1, width: n,
-        fields: ["x", "y", "z"].map((name, i) => ({ name, offset: 4 * i, datatype: 7, count: 1 })),
-        is_bigendian: false, point_step: 12, row_step: 12 * n, data: b64(new Float32Array(c.sensor)), is_dense: true });
-    }
+  if (cfg.camera && t >= next.cam) { next.cam += 1 / CAM.hz; camDue = stamp(); if (xOn("xDepth")) depthDue = stamp(); if (xOn("xStereo") || xOn("xThermal") || xOn("xSeg") || stuSegActive()) specialDue = stamp(); }
+  if ($("l3On").checked && cfg.lidar3d) {
+    if (!l3State.pts) l3State.t0 = sim.simTime;                // begin van de scan = stempel van het bericht
+    const sc = sim.sweep3d(cfg.lidar3d, l3Preset(), l3State);
+    if (sc) publishCloud(sc, l3State.t0);
   }
   if (t >= next.trail) { next.trail += 0.1; const p = sim.truthPose(), ow = odomWorld(); pushTrail(trailT, p.x, p.y); if (mobile()) pushTrail(trailO, ow.x, ow.y); }
   staticT += sim.DT; if (staticT >= 5) { staticT = 0; publishStatic(); }
 }
 
+const T_MIN = -10, T_MAX = 70;                              // thermisch bereik in het grijs (°C)
+const SEG_LABELS = ["geen", "vloer", "muur", "doos", "cilinder", "stelling", "transportband", "pallet", "tafel", "stoel", "boom", "hek",
+  "gewas", "aruco", "uwb", "bol", "markering", "verplaatsbare doos", "robot", "overig"];
+const SEG_OF = { floor: 1, wall: 2, box: 3, cyl: 4, rack: 5, conveyor: 6, pallet: 7, table: 8, chair: 9, tree: 10, orchard: 10, fence: 11,
+  crops: 12, aruco: 13, uwb: 14, sphere: 15, mark: 16, line: 16, movable: 17, robot: 18 };
+const SEG_RGB = SEG_LABELS.map((_, i) => i ? new THREE.Color().setHSL((i * 0.618034) % 1, 0.65, 0.5).toArray().map(x => Math.round(x * 255)) : [0, 0, 0]);
+const specMats = new Map();
+const specMat = key => { if (!specMats.has(key)) { const [kind, v] = key.split(":"), m = new THREE.MeshBasicMaterial({ toneMapped: false });
+  m.color.setRGB(kind === "s" ? +v / 255 : +v / 255, kind === "s" ? 0 : +v / 255, kind === "s" ? 0 : +v / 255); specMats.set(key, m); } return specMats.get(key); };
+const inRobot = o => { for (let q = o; q; q = q.parent) if (q === robotG) return true; return false; };
+// thermisch: temperatuur per pixel = eigen temperatuur van het object + de warmtebronnen (zelfde velden en formule als de
+// temperatuursensor, fieldValue), op de plaats van de pixel in de wereld. 16 bits over rood (hoog) en groen (laag).
+const HEAT_MAX = 16;
+const thermUniforms = { uF: { value: Array.from({ length: HEAT_MAX }, () => new THREE.Vector4()) }, uN: { value: 0 } };
+const thermMats = new Map();
+function thermMat(base) {
+  if (!thermMats.has(base)) thermMats.set(base, new THREE.ShaderMaterial({ toneMapped: false,
+    uniforms: { ...thermUniforms, uBase: { value: base }, uMin: { value: T_MIN }, uMax: { value: T_MAX } },
+    vertexShader: `varying vec3 vW;
+      void main() { vec4 p = vec4(position, 1.0);
+        #ifdef USE_INSTANCING
+          p = instanceMatrix * p;
+        #endif
+        vec4 w = modelMatrix * p; vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `uniform vec4 uF[${HEAT_MAX}]; uniform int uN; uniform float uBase, uMin, uMax; varying vec3 vW;
+      void main() { float T = uBase;
+        for (int i = 0; i < ${HEAT_MAX}; i++) { if (i >= uN) break; vec2 d = vW.xy - uF[i].xy; T += uF[i].z * exp(-dot(d, d) / (2.0 * uF[i].w * uF[i].w)); }
+        float v = clamp((T - uMin) / (uMax - uMin), 0.0, 1.0) * 255.0;
+        gl_FragColor = vec4(floor(v) / 255.0, fract(v), 0.0, 1.0); }` }));
+  return thermMats.get(base);
+}
+// eigen temperatuur zonder bronnen: wereld-JSON "temp" (bv. radiator 45), robot 32 (motoren), vloer 20, de rest 21 (lucht)
+function meshInfo(o) {
+  const lab = o.userData.lab ?? (inRobot(o) ? "robot" : null), id = SEG_OF[lab] ?? 19;
+  const base = o.userData.temp ?? (lab === "robot" ? 32 : lab === "floor" ? SENS_BASE.temp - 1 : SENS_BASE.temp);
+  return { id, base };
+}
+function renderFlat(mode) {                                 // mode "s" = segmentatie (label in rood), "t" = temperatuur
+  const saved = [], bg = scene.background;
+  if (mode === "t") {
+    const hs = curFields().filter(f => f.kind === "heat").slice(0, HEAT_MAX);
+    hs.forEach((f, i) => thermUniforms.uF.value[i].set(f.x, f.y, f.strength || 0, f.sigma || 1)); thermUniforms.uN.value = hs.length;
+  }
+  scene.traverse(o => {
+    if (!o.isMesh || !o.visible) return;
+    const { id, base } = meshInfo(o);
+    saved.push([o, o.material, o.instanceColor]); o.material = mode === "s" ? specMat("s:" + id) : thermMat(base); if (o.isInstancedMesh) o.instanceColor = null;
+  });
+  const sky = Math.max(0, Math.min(1, (8 - T_MIN) / (T_MAX - T_MIN))) * 255;   // lucht 8 °C
+  scene.background = mode === "s" ? new THREE.Color(0, 0, 0) : new THREE.Color().setRGB(Math.floor(sky) / 255, sky % 1, 0);
+  renderer.setRenderTarget(specRT); renderer.render(scene, robotCam); renderer.readRenderTargetPixels(specRT, 0, 0, SPEC.w, SPEC.h, specPix); renderer.setRenderTarget(null);
+  for (const [o, m, ic] of saved) { o.material = m; if (o.isInstancedMesh) o.instanceColor = ic; }
+  scene.background = bg;
+}
+// ironbow-palet zoals bij warmtecamera's: zwart → paars → rood → oranje → geel → wit
+const IRON = [[0, 0, 0], [70, 0, 120], [190, 25, 90], [240, 100, 20], [255, 200, 40], [255, 255, 230]];
+const ironbow = k => { const x = Math.max(0, Math.min(1, k)) * (IRON.length - 1), i = Math.min(IRON.length - 2, Math.floor(x)), f = x - i;
+  return IRON[i].map((c, j) => c + (IRON[i + 1][j] - c) * f); };
+function specInfo(st, frame, w, h, f) {
+  return { header: { stamp: st, frame_id: frame }, height: h, width: w, distortion_model: "plumb_bob", d: [0, 0, 0, 0, 0],
+    k: [f, 0, w / 2, 0, f, h / 2, 0, 0, 1], r: [1, 0, 0, 0, 1, 0, 0, 0, 1], p: [f, 0, w / 2, 0, 0, f, h / 2, 0, 0, 0, 1, 0],
+    binning_x: 0, binning_y: 0, roi: { x_offset: 0, y_offset: 0, height: 0, width: 0, do_rectify: false } };
+}
+/* ---- resultaten van het script van de student: detecties en segmentatie ---- */
+// /detections: vision_msgs/Detection2DArray in pixels van het camerabeeld (320 × 240); kaders 1,5 s zichtbaar
+// /student/segmentation: mono8 met de label-id's van /segmentation/labels (elk formaat); vergeleken met de echte
+// segmentatie van hetzelfde beeld (zelfde header.stamp als het camerabeeld, anders het dichtstbijzijnde)
+const vision = { det: null, detT: 0, seg: null, segT: 0, iou: null };
+const segGT = [];
+const stuSegActive = () => performance.now() - vision.segT < 3000;
+function onDetections(msg) {
+  vision.det = (msg.detections || []).map(d => {
+    const b = d.bbox || {}, c = b.center || {}, pos = c.position || c;      // vision_msgs 4.x: center.position, ouder: center.x
+    const h = (d.results || [])[0]?.hypothesis || (d.results || [])[0] || {};
+    return { x: pos.x, y: pos.y, w: b.size_x, h: b.size_y, cls: String(h.class_id ?? h.id ?? d.id ?? "?"), score: h.score };
+  });
+  vision.detT = performance.now();
+}
+function onStudentSeg(msg) {
+  if (msg.encoding !== "mono8" && msg.encoding !== "8UC1") { vision.err = `masker: encoding ${msg.encoding}, verwacht mono8`; return; }
+  const raw = atob(msg.data), w = msg.width, h = msg.height, step = msg.step || w, ids = new Uint8Array(SPEC.w * SPEC.h);
+  for (let v = 0; v < SPEC.h; v++) for (let u = 0; u < SPEC.w; u++)                   // naar 160 × 120 (dichtstbijzijnde pixel)
+    ids[v * SPEC.w + u] = raw.charCodeAt(Math.floor(v * h / SPEC.h) * step + Math.floor(u * w / SPEC.w));
+  const st = msg.header?.stamp || {}, key = `${st.sec}.${st.nanosec}`, t = (st.sec || 0) + (st.nanosec || 0) * 1e-9;
+  const gt = segGT.find(g => g.key === key) || segGT.reduce((b, g) => !b || Math.abs(g.t - t) < Math.abs(b.t - t) ? g : b, null);
+  vision.seg = ids; vision.segT = performance.now(); vision.err = "";
+  if (!gt) { vision.iou = null; return; }
+  const inter = new Map(), uni = new Map();
+  for (let i = 0; i < ids.length; i++) {
+    const a = ids[i], b = gt.ids[i];
+    if (a === b) { inter.set(a, (inter.get(a) || 0) + 1); uni.set(a, (uni.get(a) || 0) + 1); }
+    else { uni.set(a, (uni.get(a) || 0) + 1); uni.set(b, (uni.get(b) || 0) + 1); }
+  }
+  // gemiddelde over de klassen die de student voorspelt (een ArUco-script hoeft de vloer niet te kennen)
+  const mine = new Set(ids); mine.delete(0);
+  const per = [...mine].map(k => [SEG_LABELS[k] || "id " + k, (inter.get(k) || 0) / uni.get(k)]).sort((x, y) => y[1] - x[1]);
+  vision.iou = { mean: per.length ? per.reduce((a, [, v]) => a + v, 0) / per.length : 0, per, exact: gt.key === key };
+}
+function drawVisionOverlay() {
+  const now = performance.now(), sx = $("camPreview").width / CAM.w, sy = $("camPreview").height / CAM.h;
+  if (stuSegActive() && vision.seg) {                         // masker half doorzichtig over het beeld
+    const img = camCtx.getImageData(0, 0, CAM.w, CAM.h);
+    for (let v = 0; v < CAM.h; v++) for (let u = 0; u < CAM.w; u++) {
+      const id = vision.seg[Math.floor(v * SPEC.h / CAM.h) * SPEC.w + Math.floor(u * SPEC.w / CAM.w)]; if (!id) continue;
+      const c = SEG_RGB[id] || SEG_RGB[19], o = (v * CAM.w + u) * 4;
+      img.data[o] = (img.data[o] + c[0]) >> 1; img.data[o + 1] = (img.data[o + 1] + c[1]) >> 1; img.data[o + 2] = (img.data[o + 2] + c[2]) >> 1;
+    }
+    camCtx.putImageData(img, 0, 0);
+  }
+  if (vision.det && now - vision.detT < 1500) {
+    camCtx.lineWidth = 2; camCtx.font = "600 11px Barlow, Arial, sans-serif";
+    for (const d of vision.det) {
+      if (!(d.w > 0 && d.h > 0)) continue;
+      const x = (d.x - d.w / 2) * sx, y = (d.y - d.h / 2) * sy, lbl = d.cls + (d.score != null ? ` ${Math.round(d.score * 100)}%` : "");
+      camCtx.strokeStyle = "#ffd400"; camCtx.strokeRect(x, y, d.w * sx, d.h * sy);
+      const tw = camCtx.measureText(lbl).width + 6; camCtx.fillStyle = "#ffd400"; camCtx.fillRect(x, Math.max(0, y - 14), tw, 14);
+      camCtx.fillStyle = "#111"; camCtx.fillText(lbl, x + 3, Math.max(0, y - 14) + 11);
+    }
+  }
+}
+function visionHud() {
+  let t = "";
+  if (vision.det && performance.now() - vision.detT < 1500) t += `\ndetecties  ${vision.det.length}${vision.det.length ? ": " + [...new Set(vision.det.map(d => d.cls))].slice(0, 6).join(", ") : ""}`;
+  if (vision.err) t += `\n<span class="bump">${vision.err}</span>`;
+  else if (stuSegActive() && vision.iou) t += `\nsegment. student  IoU ${(vision.iou.mean * 100).toFixed(0)} %${vision.iou.exact ? "" : " (ander beeld)"}  ` +
+    vision.iou.per.slice(0, 4).map(([n, v]) => `${n} ${(v * 100).toFixed(0)}`).join(" · ");
+  return t;
+}
+function captureSpecial(st) {
+  const { w, h } = SPEC;
+  if (xOn("xStereo")) for (const c of stereo) {
+    renderer.setRenderTarget(c.rt); renderer.render(scene, c.cam); renderer.readRenderTargetPixels(c.rt, 0, 0, CAM.w, CAM.h, c.pix); renderer.setRenderTarget(null);
+    const row = CAM.w * 4; for (let y = 0; y < CAM.h; y++) c.img.data.set(c.pix.subarray((CAM.h - 1 - y) * row, (CAM.h - y) * row), y * row);
+    c.ctx.putImageData(c.img, 0, 0);
+    if (live()) {
+      const url = c.cv.toDataURL("image/jpeg", 0.7), frame = `stereo_${c.k}_optical_frame`, info = specInfo(st, frame, CAM.w, CAM.h, CAM_F);
+      if (c.k === "right") info.p[3] = -CAM_F * STEREO_B;      // Tx = -f·B, zoals stereo_image_proc verwacht
+      pub(`/stereo/${c.k}/image_raw/compressed`, { header: { stamp: st, frame_id: frame }, format: "jpeg", data: url.slice(url.indexOf(",") + 1) });
+      pub(`/stereo/${c.k}/camera_info`, info);
+    }
+  }
+  if (xOn("xThermal")) {
+    renderFlat("t");
+    const ctx = $("thermPreview").getContext("2d"), img = ctx.createImageData(w, h), data = new Uint16Array(w * h);
+    for (let v = 0; v < h; v++) for (let u = 0; u < w; u++) {
+      const i4 = ((h - 1 - v) * w + u) * 4, g = (specPix[i4] + specPix[i4 + 1] / 255) / 255, T = T_MIN + g * (T_MAX - T_MIN) + 0.1 * gauss(), o = (v * w + u) * 4;
+      data[v * w + u] = Math.round((T + 273.15) * 100);
+      const c = ironbow(Math.max(0, Math.min(1, (T - 5) / 40))); img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    let mx = -Infinity; for (const d of data) mx = Math.max(mx, d); xVal.thermMax = mx / 100 - 273.15;
+    if (live()) pub("/thermal/image_raw", { header: { stamp: st, frame_id: opticalFrame }, height: h, width: w, encoding: "mono16", is_bigendian: 0, step: w * 2, data: b64(new Uint8Array(data.buffer)) });
+  }
+  if (xOn("xSeg") || stuSegActive()) {
+    renderFlat("s");
+    const ctx = $("segPreview").getContext("2d"), img = ctx.createImageData(w, h), ids = new Uint8Array(w * h), seen = new Set();
+    for (let v = 0; v < h; v++) for (let u = 0; u < w; u++) {
+      const id = specPix[((h - 1 - v) * w + u) * 4], o = (v * w + u) * 4, c = SEG_RGB[id] || SEG_RGB[19];
+      ids[v * w + u] = id; seen.add(id); img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0); xVal.seg = [...seen].filter(i => i).map(i => SEG_LABELS[i]);
+    segGT.push({ key: `${st.sec}.${st.nanosec}`, t: st.sec + st.nanosec * 1e-9, ids }); if (segGT.length > 25) segGT.shift();
+    if (live() && xOn("xSeg")) {
+      const url = $("segPreview").toDataURL("image/jpeg", 0.9);
+      pub("/segmentation/labels_map", { header: { stamp: st, frame_id: opticalFrame }, height: h, width: w, encoding: "mono8", is_bigendian: 0, step: w, data: b64(ids) });
+      pub("/segmentation/colored_map/compressed", { header: { stamp: st, frame_id: opticalFrame }, format: "jpeg", data: url.slice(url.indexOf(",") + 1) });
+      if (!xVal.segLabelsSent || sim.simTime - xVal.segLabelsSent > 1) { xVal.segLabelsSent = sim.simTime;
+        pub("/segmentation/labels", { data: JSON.stringify(Object.fromEntries(SEG_LABELS.map((n, i) => [i, n]))) }); }
+    }
+  }
+}
 function captureDepth(st) {
   const bg = scene.background, cc = renderer.getClearColor(new THREE.Color()), ca = renderer.getClearAlpha();
   scene.background = null; scene.overrideMaterial = depthMat; renderer.setClearColor(0xffffff, 1);
@@ -1345,6 +1555,34 @@ function captureDepth(st) {
     binning_x: 0, binning_y: 0, roi: { x_offset: 0, y_offset: 0, height: 0, width: 0, do_rectify: false } });
   pub("/camera/depth/points", { header: hdr, height: sh, width: sw, fields: ["x", "y", "z"].map((name, i) => ({ name, offset: 4 * i, datatype: 7, count: 1 })),
     is_bigendian: false, point_step: 12, row_step: 12 * sw, data: b64(pts), is_dense: false });
+}
+// 3D-lidar: preset (L3_PRESETS) met het bereik uit de invoervakken; sweep-toestand opnieuw bij een andere robot of preset
+let l3State = {};
+const l3Preset = () => ({ ...sim.L3_PRESETS[$("l3Preset").value || "tb3"], rmin: sim.L3.rmin, rmax: sim.L3.rmax });
+function publishCloud(sc, t0) {
+  const n = sc.pts.length / 5, a = cloudPts.geometry.attributes.position, ca = cloudPts.geometry.attributes.color, T = sim.linkWorld(cfg.lidar3d);
+  const colored = xOn("l3Color"), m = Math.min(n, CLOUD_MAX);
+  for (let i = 0; i < m; i++) {                               // weergave: met de pose van nu (de vervorming is klein)
+    const w = vadd(T.p, qrot(T.q, V(sc.pts[i * 5], sc.pts[i * 5 + 1], sc.pts[i * 5 + 2]))); a.array[i * 3] = w.x; a.array[i * 3 + 1] = w.y; a.array[i * 3 + 2] = w.z;
+    if (colored) ca.array.set(hitRGB(sc.cols[i]).l, i * 3);
+  }
+  a.needsUpdate = true; if (colored) ca.needsUpdate = true; cloudPts.geometry.setDrawRange(0, m);
+  if (cloudPts.material.vertexColors !== colored) { cloudPts.material.vertexColors = colored; cloudPts.material.color = colored ? new THREE.Color(1, 1, 1) : colors.cloud; cloudPts.material.needsUpdate = true; }
+  if (!live()) return;
+  // PointXYZIRT zoals de Velodyne-driver: x y z intensity (float32), ring (uint16), time (float32); met kleur ook rgb
+  const step = colored ? 26 : 22, buf = new ArrayBuffer(n * step), dv = new DataView(buf);
+  for (let i = 0; i < n; i++) {
+    const o = i * step, [r, g, b] = hitRGB(sc.cols[i]).s;
+    dv.setFloat32(o, sc.pts[i * 5], true); dv.setFloat32(o + 4, sc.pts[i * 5 + 1], true); dv.setFloat32(o + 8, sc.pts[i * 5 + 2], true);
+    dv.setFloat32(o + 12, Math.round((0.2126 * r + 0.7152 * g + 0.0722 * b) * 255), true);
+    dv.setUint16(o + 16, sc.pts[i * 5 + 3], true); dv.setFloat32(o + 18, sc.pts[i * 5 + 4], true);
+    if (colored) dv.setUint32(o + 22, (Math.round(r * 255) << 16) | (Math.round(g * 255) << 8) | Math.round(b * 255), true);
+  }
+  const F = (name, offset, datatype) => ({ name, offset, datatype, count: 1 });
+  const fields = [F("x", 0, 7), F("y", 4, 7), F("z", 8, 7), F("intensity", 12, 7), F("ring", 16, 4), F("time", 18, 7), ...(colored ? [F("rgb", 22, 7)] : [])];
+  const sec = Math.floor(t0);
+  pub("/points", { header: { stamp: { sec, nanosec: Math.min(999999999, Math.round((t0 - sec) * 1e9)) }, frame_id: cfg.lidar3d }, height: 1, width: n,
+    fields, is_bigendian: false, point_step: step, row_step: step * n, data: b64(new Uint8Array(buf)), is_dense: true });
 }
 function captureCamera(st) {
   renderer.setRenderTarget(camRT); renderer.render(scene, robotCam); renderer.readRenderTargetPixels(camRT, 0, 0, CAM.w, CAM.h, camPix); renderer.setRenderTarget(null);
@@ -1385,8 +1623,9 @@ function render() {
     camera.position.x += dx; camera.position.y += dy; controls.target.x += dx; controls.target.y += dy;
   }
   prevRobot = p;
-  if (camDue) { captureCamera(camDue); camDue = null; }
+  if (camDue) { captureCamera(camDue); camDue = null; drawVisionOverlay(); }
   if (depthDue) { captureDepth(depthDue); depthDue = null; }
+  if (specialDue) { captureSpecial(specialDue); specialDue = null; }
   testOverlayFrame(); extraFrame();
   controls.update(); renderer.render(scene, camera); drawComposite();
 
@@ -1402,7 +1641,7 @@ function render() {
       `roll/pitch ${deg(roll)}° ${deg(pitch)}°\n` + `commando   ${cmdSrc}`;
     if (goalWorld) txt += `\ndoel       ${(Math.hypot(goalWorld.x - p.x, goalWorld.y - p.y) * 100).toFixed(1)} cm, Δθ ${deg(Math.atan2(Math.sin(goalWorld.th - p.th), Math.cos(goalWorld.th - p.th)))}°`;
     if (slipping) txt += `\n<span class="bump">wielslip: wielen draaien, robot schuift niet mee</span>`;
-    txt += sensorHud() + extraHud();
+    txt += sensorHud() + extraHud() + visionHud();
   } else txt += `joints     ${r.joints.filter(j => j.role === "position").map(j => j.j.name + " " + j.pos.toFixed(3)).join("  ")}`;
   $("hud").innerHTML = txt;
 }
@@ -1598,7 +1837,8 @@ function sensorsStep() {
   const dt = 0.1; nextS.state = t + dt;
   batteryStep(dt);
   const st = stamp(), volt = batVolt();
-  if (mobile()) pub("/sensor_state", { header: { stamp: st, frame_id: "" }, bumper: xOn("xBump") ? xVal.bump : 0, cliff: 0, sonar: 0, illumination: 0, led: 0,
+  if (mobile()) pub("/sensor_state", { header: { stamp: st, frame_id: "" }, bumper: xOn("xBump") ? xVal.bump : 0,
+    cliff: xOn("xCliff") && xVal.cliff ? Math.min(0.5, Math.max(...xVal.cliff)) : 0, sonar: 0, illumination: 0, led: 0,
     button: (btn.sw1 ? 1 : 0) | (btn.sw2 ? 2 : 0), torque: !bat.dead,
     left_encoder: Math.round(wheelPos("L") / (2 * Math.PI) * TICKS) | 0, right_encoder: Math.round(wheelPos("R") / (2 * Math.PI) * TICKS) | 0, battery: volt });
   if (t >= nextS.bat) {
@@ -1663,7 +1903,25 @@ const XMOUNT = {
   sonar_left_link: { p: V(0, 0.075, 0.07), yaw: Math.PI / 2, need: "xSonar" },
   sonar_right_link: { p: V(0, -0.075, 0.07), yaw: -Math.PI / 2, need: "xSonar" },
   radar_link: { p: V(0.07, 0, 0.12), yaw: 0, need: "xRadar" },
+  line_sensor_link: { p: V(0.06, 0, 0.01), yaw: 0, need: "xLine" },
+  cliff_front_left_link: { p: V(0.05, 0.06, 0.02), yaw: 0, need: "xCliff" }, cliff_front_right_link: { p: V(0.05, -0.06, 0.02), yaw: 0, need: "xCliff" },
+  cliff_back_left_link: { p: V(-0.1, 0.06, 0.02), yaw: 0, need: "xCliff" }, cliff_back_right_link: { p: V(-0.1, -0.06, 0.02), yaw: 0, need: "xCliff" },
+  uwb_tag_link: { p: V(0, 0, 0.2), yaw: 0, need: "xUwb" },
 };
+const LINE_Y = [0.024, 0.012, 0, -0.012, -0.024];            // 5 IR-sensoren, links → rechts, 12 mm uit elkaar
+const CLIFFS = ["front_left", "front_right", "back_left", "back_right"];
+const FAM = (label, data) => ({ layout: { dim: [{ label, size: data.length, stride: data.length }], data_offset: 0 }, data });
+// vloerkleur onder een punt: bovenste markering (lijn, zone) of de grond; reflectie = luminantie (0 zwart … 1 wit)
+function floorRefl(x, y) {
+  let col = null;
+  for (let i = sim.markings.length - 1; i >= 0 && !col; i--) {
+    const mk = sim.markings[i], a = -(mk.yaw || 0) * Math.PI / 180, dx = x - mk.x, dy = y - mk.y;
+    const u = Math.cos(a) * dx - Math.sin(a) * dy, v = Math.sin(a) * dx + Math.cos(a) * dy;
+    if (Math.abs(u) <= mk.sx / 2 && Math.abs(v) <= mk.sy / 2) col = mk.color || "#f2c230";
+  }
+  const c = col ? new THREE.Color(col) : sim.worldInfo.ground ? new THREE.Color(sim.worldInfo.ground) : colors.floor;
+  return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;          // lineaire luminantie
+}
 const RADAR = { fov: 120, res: 1, els: [-3, 0, 3], rmax: 30, maxW: 6, rSigma: 0.05, azSigma: 0.4, vSigma: 0.03 };
 // kleur van een lidartreffer: objectkleur uit de wereld, anders muur/vloer/doos uit het thema
 const rgbCache = new Map();
@@ -1680,12 +1938,29 @@ const SONAR = { fov: 30 * Math.PI / 180, rmin: 0.02, rmax: 4.0, sigma: 0.01 };
 const GEO0 = { lat: 50.9528, lon: 3.1235, alt: 20 }, R_EARTH = 6378137;
 const B_EARTH = V(0.5e-6, 19.6e-6, -44.6e-6);         // België, wereld = ENU: ~19,6 µT noord, 44,6 µT omlaag, 1,5° oost
 const xOn = id => $(id).checked;
-const xVal = { gps: null, sonar: {}, bump: 0, heading: null, radar: null, depth: null };
-const nextX = { gps: 0, sonar: 0, fast: 0, radar: 0 };
+const xVal = { gps: null, sonar: {}, bump: 0, heading: null, radar: null, depth: null, line: null, cliff: null, uwb: null, thermMax: null, seg: null };
+const nextX = { gps: 0, sonar: 0, fast: 0, radar: 0, uwb: 0, anchors: 0 };
 const mountWorld = name => tmul(sim.linkWorld(model.root), { p: XMOUNT[name].p, q: qyaw(XMOUNT[name].yaw) });
 function extraStep() {
   const t = sim.simTime; if (!model) return;
-  if (t < nextX.gps && t < nextX.sonar && t < nextX.fast && t < nextX.radar) return;
+  if (t < nextX.gps && t < nextX.sonar && t < nextX.fast && t < nextX.radar && t < nextX.uwb) return;
+  if (xOn("xUwb") && t >= nextX.uwb) {
+    nextX.uwb = t + 0.1;
+    const tag = mountWorld("uwb_tag_link").p, A = sim.worldInfo.uwb || [];
+    xVal.uwb = A.map(a => {
+      const ap = V(a.x, a.y, a.z), d = vlen(vsub(ap, tag)), nlos = isFinite(sim.lineOfSight(tag, ap));
+      // NLOS: het signaal gaat om of door de muur: altijd te lang, meer ruis
+      const r = d + (nlos ? 0.3 + 0.4 * Math.random() : 0) + (nlos ? 0.15 : 0.05) * gauss();
+      return { id: a.id, r: d > 30 ? Infinity : +r.toFixed(3), nlos, ap };
+    });
+    pub("/uwb/ranges", FAM("anchor", xVal.uwb.map(u => u.r)));
+    if (t >= nextX.anchors) {
+      nextX.anchors = t + 1;
+      const Tw = tinv(worldOdom());                              // zelfde frame als /ground_truth (startpose)
+      pub("/uwb/anchors", { data: JSON.stringify({ frame: "sim_world", anchors: A.map(a => { const q = tmul(Tw, { p: V(a.x, a.y, a.z), q: Q0() }).p;
+        return { id: a.id, x: +q.x.toFixed(3), y: +q.y.toFixed(3), z: +q.z.toFixed(3) }; }) }) });
+    }
+  }
   if (xOn("xRadar") && t >= nextX.radar) {
     nextX.radar = t + 0.1;
     const T = mountWorld("radar_link"), lv = sim.robot.rootBody.rb.linvel(), dets = sim.radarScan(T, RADAR, V(lv.x, lv.y, lv.z));
@@ -1717,6 +1992,16 @@ function extraStep() {
   if (t >= nextX.fast) {
     nextX.fast = t + 0.05;
     if (xOn("xBump")) { xVal.bump = sim.bumper(); pub("/bumper", { data: !!xVal.bump }); }
+    if (xOn("xLine")) {
+      const T = mountWorld("line_sensor_link"), hgt = T.p.z - sim.groundZ(T.p.x, T.p.y);
+      xVal.line = LINE_Y.map(y => { const p = tmul(T, { p: V(0, y, 0), q: Q0() }).p;
+        return hgt > 0.05 ? 0 : Math.max(0, Math.min(1, floorRefl(p.x, p.y) + 0.02 * gauss())); });   // te hoog: geen weerkaatsing
+      pub("/line_sensor", FAM("sensor", xVal.line.map(v => +v.toFixed(3))));
+    }
+    if (xOn("xCliff")) {
+      xVal.cliff = CLIFFS.map(k => { const p = mountWorld(`cliff_${k}_link`).p; return sim.downRange(p, 0.5); });
+      pub("/cliff", FAM("cliff", xVal.cliff.map(d => isFinite(d) ? +d.toFixed(3) : Infinity)));
+    }
     if (xOn("xMag")) {
       const fr = cfg.imu || model.root, q = sim.linkWorld(fr).q, b = qrot(qconj(q), B_EARTH), s = 0.3e-6;
       const m = V(b.x + s * gauss(), b.y + s * gauss(), b.z + s * gauss());
@@ -1739,6 +2024,12 @@ bumper     –`;
     t += `\nradar      ${xVal.radar.length} detecties` + (nb ? `, dichtstbij ${nb.r.toFixed(2)} m op ${(nb.az * 180 / Math.PI).toFixed(0)}°, ${nb.v >= 0 ? "+" : ""}${nb.v.toFixed(2)} m/s` : "");
   }
   if (xOn("xDepth") && xVal.depth) t += `\ndiepte     midden ${isNaN(xVal.depth.center) ? "–" : xVal.depth.center.toFixed(2) + " m"}, dichtstbij ${isFinite(xVal.depth.min) ? xVal.depth.min.toFixed(2) + " m" : "–"}`;
+  if (xOn("xLine") && xVal.line) t += `\nlijn       ${xVal.line.map(v => "▁▂▃▄▅▆▇█"[Math.min(7, Math.floor(v * 8))]).join("")}  ${xVal.line.map(v => v.toFixed(2)).join(" ")}`;
+  if (xOn("xCliff") && xVal.cliff) { const c = xVal.cliff, edge = c.some(d => !(d < 0.05)), f = d => isFinite(d) ? d.toFixed(2) : "∞";
+    t += `\n${edge ? '<span class="bump">' : ""}cliff      vl ${f(c[0])} vr ${f(c[1])} al ${f(c[2])} ar ${f(c[3])} m${edge ? "  RAND" : ""}${edge ? "</span>" : ""}`; }
+  if (xOn("xUwb") && xVal.uwb) t += `\nuwb        ${xVal.uwb.length ? xVal.uwb.map(u => `${u.id}: ${isFinite(u.r) ? u.r.toFixed(2) : "–"}${u.nlos ? " NLOS" : ""}`).join("  ") : "geen ankers in deze wereld"}`;
+  if (xOn("xThermal") && xVal.thermMax != null) t += `\nthermisch  warmste punt ${xVal.thermMax.toFixed(1)} °C`;
+  if (xOn("xSeg") && xVal.seg) t += `\nsegment.   ${xVal.seg.join(", ") || "–"}`;
   if (xOn("xMag") && xVal.heading != null) t += `
 kompas     ${((xVal.heading * 180 / Math.PI + 360) % 360).toFixed(0)}° (0 = noorden)`;
   return t;
@@ -1756,6 +2047,10 @@ radarPts.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32
 radarPts.geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(512 * 3), 3));
 radarPts.frustumCulled = false; scene.add(onL1(radarPts));
 const depthPts = makePoints(80 * 60, 0.018); depthPts.material.color = new THREE.Color(0xe0457b);
+const uwbLines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.8 }));
+uwbLines.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(16 * 6), 3));
+uwbLines.geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(16 * 6), 3));
+uwbLines.frustumCulled = false; scene.add(onL1(uwbLines));
 function extraFrame() {
   const sh = !!model && xOn("xShow");
   radarPts.visible = sh && xOn("xRadar") && !!xVal.radar;
@@ -1768,6 +2063,11 @@ function extraFrame() {
     P.needsUpdate = C.needsUpdate = true; radarPts.geometry.setDrawRange(0, n);
   }
   depthPts.visible = sh && xOn("xDepth");
+  const uOn = sh && xOn("xUwb") && xVal.uwb && xVal.uwb.length; uwbLines.visible = !!uOn;
+  if (uOn) { const P = uwbLines.geometry.attributes.position, C = uwbLines.geometry.attributes.color, tag = mountWorld("uwb_tag_link").p;
+    xVal.uwb.slice(0, 16).forEach((u, i) => { P.array.set([tag.x, tag.y, tag.z, u.ap.x, u.ap.y, u.ap.z], i * 6); const c = u.nlos ? [1, 0.25, 0.2] : [0.2, 0.85, 0.4]; C.array.set([...c, ...c], i * 6); });
+    P.needsUpdate = C.needsUpdate = true; uwbLines.geometry.setDrawRange(0, Math.min(16, xVal.uwb.length) * 2); }
+  for (const [id, k] of [["therm", "xThermal"], ["seg", "xSeg"]]) { const on = xOn(k) && !!cfg?.camera; $(id + "Preview").hidden = $(id + "Label").hidden = !on; }
   const dOn = xOn("xDepth") && !!cfg?.camera; $("depthPreview").hidden = $("depthLabel").hidden = !dOn;
   const show = model && xOn("xSonar") && xOn("xShow");
   for (const [k, m] of Object.entries(sonarCones)) {

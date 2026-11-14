@@ -53,6 +53,7 @@ body{background:var(--bg);color:var(--fg);font:15px/1.45 var(--f-body);display:f
 .cam{position:absolute;right:12px;top:12px;width:240px;max-width:40%;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--surface)}
 .cam canvas{display:block;width:100%;height:auto;position:static}
 .cam span{display:block;font:11px var(--f-mono);color:var(--muted);padding:3px 7px}
+.cam .camx{display:flex;flex-wrap:wrap} .cam figure{margin:0;width:50%} .cam figure:has(canvas[hidden]){display:none} .cam figure span{padding:1px 6px;font-size:10px}
 .pad{position:absolute;right:12px;bottom:52px;touch-action:none;display:grid;grid-template-columns:repeat(3,40px);grid-template-rows:repeat(3,40px);grid-auto-rows:26px;gap:4px}
 .pad button{border:1px solid var(--line);border-radius:6px;background:color-mix(in srgb,var(--surface) 90%,transparent);color:var(--fg);
   font:600 15px var(--f-mono);cursor:pointer;touch-action:none;user-select:none}
