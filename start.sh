@@ -88,6 +88,10 @@ if [ -z "$before" ]; then
     # eerste keer: image ophalen (~5 GB), met de voortgang van docker
     step "Image ophalen (eerste keer, ~5 GB)"; echo
     docker compose pull
+elif $PULL && [ -t 1 ]; then
+    # in een terminal: met de voortgang van docker (per laag, MB en tijd), zodat een update van enkele minuten niet hangt
+    step "Image controleren (docker pull, bij een update enkele minuten)"; echo
+    docker compose pull || row warn "Image" "docker pull lukt niet (internet?), verder met de huidige"
 elif $PULL; then
     step "Image controleren (docker pull, bij een update enkele minuten)"
     if out=$(docker compose pull -q 2>&1); then step_ok; else

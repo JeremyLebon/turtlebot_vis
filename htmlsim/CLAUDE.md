@@ -86,6 +86,10 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
   terugval tijdens het opstarten). Taak `proj` (tasks.js): geen vaste test, logt elke 0,5 s sim-tijd
   pose + `sensVals`, P1-P3 ≤ 35 cm (Nav2-tolerantie 25 cm + AMCL-fout), hulpweergaven; rapport krijgt `meetronde` via `def.extra`. Test:
   `node tests/e2e_project.cjs` (nep-rosbridge op 9091, hook `window.__tb3test` enkel met `?test`).
+- **Controle meetronde (`tools/controleer_meetronde.py`):** rapport (taak proj) tegen `metingen_<rnr>.csv` en
+  `route_<rnr>.csv` (kolommen uit de GitBook sessie 4). Vergelijkt op plaats, niet op tijd (`t` van de student =
+  wandtijd sinds de start van zijn script, `t_s` = sim-tijd). Gebruikt `check()` uit controleer_rapporten.py.
+  Kolomnamen in de GitBook veranderen = dit script mee aanpassen.
 - **Kaartankers (knop Beginpositie zetten):** bij "Kaart opslaan" (`/web/nav_cmd` zones_adopt, of een nieuwe naam in
   `/launch_status.maps` tijdens SLAM) bewaart `saveAnchor` `worldMap()` in `localStorage tb3sim.mapAnchors`
   ("<wereld>|<kaart>"). Draait Navigatie (`/launch_status.navigation`, `map_running`) met een kaart met anker, dan gebruikt

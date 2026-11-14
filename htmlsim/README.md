@@ -48,6 +48,16 @@ python3 tools/controleer_rapporten.py ingeleverd/ --csv overzicht.csv
 ```
 Controleert per rapport de controlecode, de studentcode en de SHA-256 van de opname.
 
+Sessie 4 (meetronde): rapport tegen de CSV's van de student.
+
+```bash
+python3 tools/controleer_meetronde.py ingeleverd/ --csv meetronde.csv   # -v: meer uitleg per student
+```
+Per student (bestanden los of in een submap per student; ze horen bij elkaar via het studentnummer):
+rapport echt, P1-P3 gehaald en dezelfde P1-P3 in `metingen_<rnr>.csv`, posities in `route_<rnr>.csv` op de
+echte route uit het rapport, sensorwaarden passend bij de echte waarden op die plaats (de bronnen liggen per
+studentnummer elders), meettijden binnen de meetronde, en of er hulpweergaven aan stonden.
+
 ## Ontwikkelen
 
 ```bash
