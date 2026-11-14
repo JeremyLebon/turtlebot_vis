@@ -12,6 +12,16 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## 1.0.18 - 2026-11-14
+- **Simulator 1.5.4: geen pijl meer bij de meetpunten.** Enkel de ring met het
+  kruisje (het punt) en de naam; de richting staat bij *Jouw meetpunten*.
+
+## 1.0.17 - 2026-11-14
+- **Simulator 1.5.3: meetpunten met een kruisje.** Het punt is het kruisje in
+  het midden van de ring; de pijl staat met een steeltje aan de ring vast en
+  geeft enkel de richting; de naam staat achter de ring. De punt van de pijl
+  leek het meetpunt zelf.
+
 ## 1.0.16 - 2026-11-14
 - **Simulator 1.5.2: knop *Beginpositie zetten* (tabblad Simulatie).** Bij
   *Kaart opslaan* op de Fenix-pagina onthoudt de simulator waar die kaart in
