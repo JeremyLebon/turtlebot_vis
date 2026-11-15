@@ -294,31 +294,70 @@
    "color": "#f4f4f0"
   },
   {
-   "type": "box",
+   "type": "model",
+   "name": "auto_sedan",
    "x": 6.8,
    "y": -8.4,
-   "sx": 1.8,
-   "sy": 4.4,
-   "sz": 1.5,
-   "color": "#7b8a99"
+   "yaw": 90
   },
   {
-   "type": "box",
+   "type": "model",
+   "name": "auto_suv",
    "x": 9.4,
    "y": -8.4,
-   "sx": 1.8,
-   "sy": 4.4,
-   "sz": 1.5,
-   "color": "#b8332e"
+   "yaw": 90
   },
   {
-   "type": "box",
+   "type": "model",
+   "name": "pickup",
    "x": 12.0,
    "y": -8.4,
-   "sx": 1.8,
-   "sy": 4.4,
-   "sz": 1.5,
-   "color": "#e8e6df"
+   "yaw": 90
+  },
+  {
+   "type": "model",
+   "name": "persoon_a",
+   "x": -0.6,
+   "y": 2.2,
+   "yaw": -80
+  },
+  {
+   "type": "model",
+   "name": "arbeider",
+   "x": 3.6,
+   "y": 1.9,
+   "yaw": 200
+  },
+  {
+   "type": "model",
+   "name": "persoon_f",
+   "x": -9.5,
+   "y": -2.2,
+   "yaw": 30
+  },
+  {
+   "type": "model",
+   "name": "kegel",
+   "x": 5.2,
+   "y": 1.6
+  },
+  {
+   "type": "model",
+   "name": "kegel",
+   "x": 6.1000000000000005,
+   "y": 1.6
+  },
+  {
+   "type": "model",
+   "name": "kegel",
+   "x": 7.0,
+   "y": 1.6
+  },
+  {
+   "type": "model",
+   "name": "kegel",
+   "x": 7.9,
+   "y": 1.6
   },
   {
    "type": "cyl",

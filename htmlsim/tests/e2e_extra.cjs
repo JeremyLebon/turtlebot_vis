@@ -155,6 +155,6 @@ const check = (good, txt) => { ok &&= !!good; console.log(`${good ? '✓' : '✗
     await page.select('#padMode', 'buttons');
     await page.screenshot({ path: process.env.SHOT || '/dev/null' }).catch(() => {});
     check(!errs.length, errs.join('\n') || 'geen paginafouten');
-  } finally { await browser.close(); wss.close(); }
+  } finally { wss.close(); await Promise.race([browser.close().catch(() => {}), wait(5000)]); }   // close kan headless blijven hangen (GLB-texturen)
   process.exit(ok ? 0 : 1);
 })().catch(e => { console.log('FOUT', e.stack); process.exit(1); });

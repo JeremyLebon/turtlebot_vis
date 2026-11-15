@@ -1,0 +1,281 @@
+{
+ "name": "Kantoor",
+ "floor": [
+  10,
+  8
+ ],
+ "spawn": [
+  -4.2,
+  -3.3,
+  0.6
+ ],
+ "ground": "#c7c2b8",
+ "geo": {
+  "lat": 51.194,
+  "lon": 3.217,
+  "alt": 10
+ },
+ "items": [
+  {
+   "type": "wall",
+   "x0": -5.0,
+   "y0": -4.0,
+   "x1": 5.0,
+   "y1": -4.0,
+   "t": 0.12,
+   "h": 2.4,
+   "color": "#e3e1da"
+  },
+  {
+   "type": "wall",
+   "x0": 5.0,
+   "y0": -4.0,
+   "x1": 5.0,
+   "y1": 4.0,
+   "t": 0.12,
+   "h": 2.4,
+   "color": "#e3e1da"
+  },
+  {
+   "type": "wall",
+   "x0": 5.0,
+   "y0": 4.0,
+   "x1": -5.0,
+   "y1": 4.0,
+   "t": 0.12,
+   "h": 2.4,
+   "color": "#e3e1da"
+  },
+  {
+   "type": "wall",
+   "x0": -5.0,
+   "y0": 4.0,
+   "x1": -5.0,
+   "y1": -4.0,
+   "t": 0.12,
+   "h": 2.4,
+   "color": "#e3e1da"
+  },
+  {
+   "type": "wall",
+   "x0": -1.2,
+   "y0": 4.0,
+   "x1": -1.2,
+   "y1": 1.2,
+   "t": 0.1,
+   "h": 2.4,
+   "color": "#e3e1da"
+  },
+  {
+   "type": "model",
+   "name": "bureau",
+   "x": 2.4,
+   "y": -2.6,
+   "yaw": 180
+  },
+  {
+   "type": "model",
+   "name": "bureaustoel",
+   "x": 1.55,
+   "y": -2.6,
+   "yaw": 0
+  },
+  {
+   "type": "model",
+   "name": "laptop",
+   "x": 2.45,
+   "y": -2.35,
+   "z": 0.75,
+   "yaw": 180
+  },
+  {
+   "type": "model",
+   "name": "bureau",
+   "x": 2.4,
+   "y": -0.9,
+   "yaw": 180
+  },
+  {
+   "type": "model",
+   "name": "bureaustoel",
+   "x": 1.55,
+   "y": -0.9,
+   "yaw": 0
+  },
+  {
+   "type": "model",
+   "name": "scherm",
+   "x": 2.45,
+   "y": -0.65,
+   "z": 0.75,
+   "yaw": 180
+  },
+  {
+   "type": "model",
+   "name": "bureau",
+   "x": 2.4,
+   "y": 0.8,
+   "yaw": 180
+  },
+  {
+   "type": "model",
+   "name": "bureaustoel",
+   "x": 1.55,
+   "y": 0.8,
+   "yaw": 0
+  },
+  {
+   "type": "model",
+   "name": "laptop",
+   "x": 2.45,
+   "y": 1.05,
+   "z": 0.75,
+   "yaw": 180
+  },
+  {
+   "type": "model",
+   "name": "scherm",
+   "x": 2.65,
+   "y": -2.9,
+   "z": 0.75,
+   "yaw": 180
+  },
+  {
+   "type": "model",
+   "name": "scherm",
+   "x": 2.65,
+   "y": 0.5,
+   "z": 0.75,
+   "yaw": 180
+  },
+  {
+   "type": "model",
+   "name": "zetel",
+   "x": -4.5,
+   "y": 2.3,
+   "yaw": 0
+  },
+  {
+   "type": "model",
+   "name": "tv",
+   "x": -1.35,
+   "y": 2.6,
+   "z": 1.0,
+   "yaw": 180
+  },
+  {
+   "type": "box",
+   "x": -1.4,
+   "y": 2.6,
+   "sx": 0.35,
+   "sy": 1.2,
+   "sz": 0.9,
+   "color": "#8d6e4c"
+  },
+  {
+   "type": "model",
+   "name": "plant",
+   "x": 4.6,
+   "y": 3.6
+  },
+  {
+   "type": "model",
+   "name": "plant",
+   "x": -4.6,
+   "y": -3.6
+  },
+  {
+   "type": "model",
+   "name": "plant",
+   "x": 4.6,
+   "y": -3.6
+  },
+  {
+   "type": "model",
+   "name": "boekenkast",
+   "x": -4.7,
+   "y": -1.0,
+   "yaw": 0
+  },
+  {
+   "type": "model",
+   "name": "boekenkast",
+   "x": -4.7,
+   "y": -2.0,
+   "yaw": 0
+  },
+  {
+   "type": "model",
+   "name": "stoel",
+   "x": -3.0,
+   "y": 1.9,
+   "yaw": 90
+  },
+  {
+   "type": "model",
+   "name": "persoon_a",
+   "x": 0.2,
+   "y": -1.6,
+   "yaw": 20
+  },
+  {
+   "type": "model",
+   "name": "persoon_b",
+   "x": -2.4,
+   "y": 0.4,
+   "yaw": -40
+  },
+  {
+   "type": "model",
+   "name": "persoon_c",
+   "x": 3.5,
+   "y": 2.8,
+   "yaw": 200
+  },
+  {
+   "type": "model",
+   "name": "persoon_d",
+   "x": -3.6,
+   "y": 3.0,
+   "yaw": -60
+  },
+  {
+   "type": "mark",
+   "x": -4.2,
+   "y": -3.3,
+   "sx": 0.9,
+   "sy": 0.6,
+   "color": "#3fae5a"
+  }
+ ],
+ "fields": [
+  {
+   "kind": "heat",
+   "x": 2.4,
+   "y": -0.9,
+   "strength": 4,
+   "sigma": 1.0
+  },
+  {
+   "kind": "gas",
+   "x": -3.0,
+   "y": 2.5,
+   "strength": 700,
+   "sigma": 1.5
+  },
+  {
+   "kind": "light",
+   "x": 0,
+   "y": 0,
+   "strength": 450,
+   "sigma": 3
+  },
+  {
+   "kind": "sound",
+   "x": -1.4,
+   "y": 2.6,
+   "strength": 25,
+   "sigma": 1.5
+  }
+ ]
+}

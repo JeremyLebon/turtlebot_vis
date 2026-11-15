@@ -81,12 +81,17 @@
           <option value="factory">Fabriekshal (16 × 12 m)</option>
           <option value="classroom">Klaslokaal (9 × 7 m)</option>
           <option value="lab">Proefhal: lijn, ArUco, UWB, platform (9 × 7 m)</option>
+          <option value="office">Kantoor: mensen, bureaus, laptops (10 × 8 m)</option>
+          <option value="hospital">Ziekenhuis: gang, kamers, verpleegpost (16 × 10 m)</option>
           <option value="yard">Bedrijfsterrein, buiten (29 × 23 m)</option>
           <option value="orchard">Boomgaard (29 × 25 m)</option>
           <option value="field">Akker, licht hellend (36 × 28 m)</option>
           <option value="hills">Heuvelland, hoogteverschillen (29 × 29 m)</option>
           <option value="empty">Lege kamer (5 × 5 m)</option>
           <option value="custom" hidden>Eigen wereld</option></select></div>
+        <div class="grid2"><label for="modelDetail">Objecten</label><select id="modelDetail" title="Mensen, auto's en meubels: echte 3D-modellen, of blokken en cilinders met dezelfde maten (lichter voor een trage laptop; de AI herkent ze dan niet)">
+          <option value="3d">3D-modellen</option>
+          <option value="simple">Eenvoudig: blokken en cilinders (lichter)</option></select></div>
         <div class="row">
           <button class="ghost" id="pause">Pauzeren</button>
           <button class="ghost" id="resetOdom">Odometrie op nul</button>
@@ -357,7 +362,10 @@
           Buiten: <code>tree</code> x y [h crown r], <code>orchard</code> x y [rows n row gap yaw h crown jitter missing],
           <code>fence</code> x0 y0 x1 y1 [h gap opacity], <code>sphere</code> x y [z] r,
           <code>crops</code> x y [plant rows l row w h gap yaw] (plant: mais, kool, aardappel),
-          <code>aruco</code> x y [z] yaw id [size], <code>uwb</code> x y [z id], <code>line</code> pts [[x, y], …] [w closed];
+          <code>aruco</code> x y [z] yaw id [size], <code>uwb</code> x y [z id], <code>line</code> pts [[x, y], …] [w closed],
+          <code>model</code> name x y [z yaw scale] (3D-model: persoon_a…f, arbeider, boer, vrouw_jurk, auto_sedan, auto_suv, bestelwagen, pickup, kegel, stoel, bureaustoel,
+          bureau, laptop, scherm, tv, zetel, boekenkast, plant, bed, toilet, ziekenhuisbed, nachtkastje, rolstoel, wastafel, wachtstoel,
+          vuilnisbak, kapstok, defibrillator);
           elk element optioneel <code>temp</code> (°C, voor de thermische camera).
           Hoogteverschillen: <code>terrain</code> {res, base, tilt [ax, ay], hills [{x, y, h, s}], wave {amp, len}}; alles staat dan op de grond.
           Verder <code>floor</code> [sx, sy], <code>spawn</code> [x, y, θ], <code>ground</code> en <code>sky</code> (kleur) en
@@ -454,6 +462,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { STLLoader } from "three/addons/loaders/STLLoader.js";
 import { ColladaLoader } from "three/addons/loaders/ColladaLoader.js";
 import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import RAPIER from "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.14.0/rapier.es.js";
 
 const $ = id => document.getElementById(id);
@@ -744,13 +753,17 @@ function buildCrops(list) {
   }
 }
 function buildWorldMeshes() {
-  worldGroup.clear(); movableMeshes.length = 0;
+  worldGroup.clear(); movableMeshes.length = 0; modelGroups.clear();
   const crops = [];
   const [fx, fy] = sim.worldInfo.floor;
   for (const s of sim.statics) {
     let mesh;
     if (s.kind === "floor") { mesh = new THREE.Mesh(drape(new THREE.PlaneGeometry(fx, fy, ...terrSeg(fx, fy)), 0, 0, 0, 0), M.floor); mesh.receiveShadow = true; mesh.userData.lab = "floor"; worldGroup.add(mesh); continue; }
     if (s.kind === "crop") { crops.push(s); continue; }
+    if (s.kind === "model") {                                 // onderkant van het model = onderkant van de collider
+      const t = s.body.translation(), g = new THREE.Group(); g.position.set(t.x, t.y, t.z - s.size.z / 2); g.rotation.z = (s.def.yaw || 0) * Math.PI / 180;
+      worldGroup.add(g); addModelMesh(s, g); continue;
+    }
     if (s.kind === "box" || s.kind === "aruco") mesh = new THREE.Mesh(new THREE.BoxGeometry(s.size.x, s.size.y, s.size.z), matFor(s.color));
     if (s.kind === "cyl") { mesh = new THREE.Mesh(new THREE.CylinderGeometry(s.size.r, s.size.r, s.size.h, 32), matFor(s.color)); mesh.geometry.rotateX(Math.PI / 2); }
     if (s.kind === "ball") mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(s.size.r, 2), matFor(s.color));
@@ -785,6 +798,53 @@ function addProbeMesh(pr) {
 function removeProbeMesh(pr) { const m = probeMeshes.get(pr); if (m) { scene.remove(m); m.geometry.dispose(); probeMeshes.delete(pr); } }
 function removeMovable(i) {
   const [m, mesh] = movableMeshes[i]; sim.removeBox(m); worldGroup.remove(mesh); mesh.geometry.dispose(); movableMeshes.splice(i, 1);
+}
+// 3D-modellen (models/, CC0): GLB's ingesloten door build.py, één keer ingelezen en per plaatsing gekloond.
+// GLB is y-omhoog met de voorkant naar +x → +90° om x voor de simulator (z omhoog).
+/*__MODELS__*/
+const modelCache = new Map();
+function modelScene(name) {
+  if (!modelCache.has(name)) {
+    const b = atob(MODEL_GLB[name] || ""), u8 = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u8[i] = b.charCodeAt(i);
+    modelCache.set(name, new GLTFLoader().parseAsync(u8.buffer, "").then(g => g.scene));
+  }
+  return modelCache.get(name);
+}
+// Eenvoudige weergave: zelfde maten, label en temperatuur, maar blokken en cilinders (geen GLB inlezen, weinig driehoeken).
+const SIMPLE_COL = { persoon: "#4a6a96", voertuig: "#a8372c", stoel: "#6d5a45", tafel: "#9c7a54", laptop: "#3a3a3a", scherm: "#262626", zetel: "#5b6e8c",
+  kast: "#8a6a48", plant: "#3f8a3a", bed: "#d8d8d8", toilet: "#efefef", kegel: "#ff7a1a", rolstoel: "#555b60", wastafel: "#e8e8e8", vuilnisbak: "#777777",
+  kapstok: "#6b4f35", defibrillator: "#2e9c4a" };
+function simpleModel(I, k) {
+  const [sx, sy, sz] = I.size.map(v => v * k), g = new THREE.Group(), col = matFor(SIMPLE_COL[I.label] || "#999999");
+  const add = (geo, mat, z) => { const m = new THREE.Mesh(geo, mat); m.position.z = z; g.add(m); };
+  const cyl = (r0, r1, h, mat, z) => { const geo = new THREE.CylinderGeometry(r0, r1, h, 16); geo.rotateX(Math.PI / 2); add(geo, mat, z); };
+  if (I.label === "persoon") {                                     // romp + benen als cilinder, hoofd als bol (hoofd ≈ 1/8 van de lengte)
+    const hr = sz * 0.065, body = sz - 2 * hr, r = Math.min(sx, sy) * 0.42;
+    cyl(r, r * 0.8, body, col, body / 2); const head = new THREE.Mesh(new THREE.SphereGeometry(hr, 16, 12), matFor("#d9a77f")); head.position.z = body + hr; g.add(head);
+  } else if (I.label === "kegel") cyl(0.02, Math.min(sx, sy) / 2, sz, col, sz / 2);
+  else if (I.label === "voertuig") {                               // onderbak + cabine
+    add(new THREE.BoxGeometry(sx, sy, sz * 0.55), col, sz * 0.3); add(new THREE.BoxGeometry(sx * 0.55, sy * 0.9, sz * 0.45), matFor("#3a4650"), sz * 0.775);
+  } else if (I.collider === "cyl") cyl(Math.max(sx, sy) / 2, Math.max(sx, sy) / 2, sz, col, sz / 2);
+  else add(new THREE.BoxGeometry(sx, sy, sz), col, sz / 2);
+  return g;
+}
+const modelGroups = new Set();                                     // groepen van de geplaatste modellen, om te wisselen tussen 3D en eenvoudig
+function addModelMesh(s, grp) {
+  const d = s.def, I = MODEL_INFO[d.name], temp = d.temp ?? I.temp;
+  grp.userData.model = s; modelGroups.add(grp);
+  const tag = c => { c.traverse(o => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; o.userData.lab = I.label; if (temp != null) o.userData.temp = temp; } }); grp.add(c); };
+  if ($("modelDetail").value === "simple") return tag(simpleModel(I, d.scale ?? 1));
+  modelScene(d.name).then(sc => {
+    if ($("modelDetail").value === "simple" || !grp.parent) return;
+    const c = sc.clone(true); c.rotation.x = Math.PI / 2; c.scale.setScalar(d.scale ?? 1); tag(c);
+  }).catch(e => console.warn("model", d.name, e));
+}
+function rebuildModels() {
+  for (const g of modelGroups) {
+    if (!g.parent) { modelGroups.delete(g); continue; }
+    for (const c of [...g.children]) { g.remove(c); if ($("modelDetail").value === "3d") c.traverse(o => o.geometry?.dispose()); }
+    addModelMesh(g.userData.model, g);
+  }
 }
 // ArUco DICT_4X4_50 (uit OpenCV): 16 bits per id, rij per rij vanaf linksboven, 1 = wit; zwarte rand van 1 cel
 const ARUCO_4X4 = [46386, 3994, 13101, 39238, 21662, 31181, 40494, 50418, 65242, 53078, 63889, 4519, 3767, 10767, 9393, 9790, 18021, 26112, 27742, 30383, 34443, 45099, 52437, 56706, 65095, 38001, 44260, 42324, 8483, 13423, 17429, 22450, 40655, 61643, 2222, 2345, 6261, 1279, 3574, 7258, 5912, 10792, 12940, 14514, 9448, 12011, 11583, 19300, 20526, 20499];
@@ -1348,9 +1408,13 @@ function simStep() {
 
 const T_MIN = -10, T_MAX = 70;                              // thermisch bereik in het grijs (°C)
 const SEG_LABELS = ["geen", "vloer", "muur", "doos", "cilinder", "stelling", "transportband", "pallet", "tafel", "stoel", "boom", "hek",
-  "gewas", "aruco", "uwb", "bol", "markering", "verplaatsbare doos", "robot", "overig"];
+  "gewas", "aruco", "uwb", "bol", "markering", "verplaatsbare doos", "robot", "overig",
+  "persoon", "voertuig", "laptop", "scherm", "zetel", "kast", "plant", "bed", "toilet", "kegel",   // 20-29: 3D-modellen
+  "rolstoel", "wastafel", "vuilnisbak", "kapstok", "defibrillator"];                                  // 30-34
 const SEG_OF = { floor: 1, wall: 2, box: 3, cyl: 4, rack: 5, conveyor: 6, pallet: 7, table: 8, chair: 9, tree: 10, orchard: 10, fence: 11,
-  crops: 12, aruco: 13, uwb: 14, sphere: 15, mark: 16, line: 16, movable: 17, robot: 18 };
+  crops: 12, aruco: 13, uwb: 14, sphere: 15, mark: 16, line: 16, movable: 17, robot: 18,
+  stoel: 9, tafel: 8, persoon: 20, voertuig: 21, laptop: 22, scherm: 23, zetel: 24, kast: 25, plant: 26, bed: 27, toilet: 28, kegel: 29,
+  rolstoel: 30, wastafel: 31, vuilnisbak: 32, kapstok: 33, defibrillator: 34 };
 const SEG_RGB = SEG_LABELS.map((_, i) => i ? new THREE.Color().setHSL((i * 0.618034) % 1, 0.65, 0.5).toArray().map(x => Math.round(x * 255)) : [0, 0, 0]);
 const specMats = new Map();
 const specMat = key => { if (!specMats.has(key)) { const [kind, v] = key.split(":"), m = new THREE.MeshBasicMaterial({ toneMapped: false });
@@ -2350,6 +2414,8 @@ function switchWorld(def, label) {
 }
 // gekozen wereld onthouden (enkel een keuze in de lijst, niet de lege kamer van de tests): na herladen van de
 // pagina staat de robot weer in dezelfde wereld, anders past de kaart van de student niet meer (sessie 4: Klaslokaal)
+try { const v = localStorage.getItem("tb3sim.modelDetail"); if (v && $("modelDetail").querySelector(`option[value="${v}"]`)) { $("modelDetail").value = v; rebuildModels(); } } catch {}
+$("modelDetail").onchange = () => { $("modelDetail").blur(); rebuildModels(); try { localStorage.setItem("tb3sim.modelDetail", $("modelDetail").value); } catch {} };
 $("worldSel").onchange = () => { const k = $("worldSel").value; $("worldSel").blur(); if (WORLDS[k]) { switchWorld(WORLDS[k], WORLDS[k].name); try { localStorage.setItem("tb3sim.world", k); } catch {} } };
 $("worldFile").onchange = async e => {
   const f = e.target.files[0]; if (!f) return;

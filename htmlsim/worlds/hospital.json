@@ -1,0 +1,691 @@
+{
+ "name": "Ziekenhuis",
+ "floor": [
+  16,
+  10
+ ],
+ "spawn": [
+  -7.4,
+  -0.5,
+  0
+ ],
+ "ground": "#d9dcd6",
+ "geo": {
+  "lat": 51.204,
+  "lon": 3.2236,
+  "alt": 8
+ },
+ "items": [
+  {
+   "type": "wall",
+   "x0": -8.0,
+   "y0": -5.0,
+   "x1": 8.0,
+   "y1": -5.0,
+   "t": 0.12,
+   "h": 2.6,
+   "color": "#eef0ee"
+  },
+  {
+   "type": "wall",
+   "x0": 8.0,
+   "y0": -5.0,
+   "x1": 8.0,
+   "y1": 5.0,
+   "t": 0.12,
+   "h": 2.6,
+   "color": "#eef0ee"
+  },
+  {
+   "type": "wall",
+   "x0": 8.0,
+   "y0": 5.0,
+   "x1": -8.0,
+   "y1": 5.0,
+   "t": 0.12,
+   "h": 2.6,
+   "color": "#eef0ee"
+  },
+  {
+   "type": "wall",
+   "x0": -8.0,
+   "y0": 5.0,
+   "x1": -8.0,
+   "y1": -5.0,
+   "t": 0.12,
+   "h": 2.6,
+   "color": "#eef0ee"
+  },
+  {
+   "type": "wall",
+   "x0": -8.0,
+   "y0": 1.0,
+   "x1": -7.05,
+   "y1": 1.0,
+   "t": 0.12,
+   "h": 2.6,
+   "color": "#eef0ee"
+  },
+  {
+   "type": "wall",
+   "x0": -5.95,
+   "y0": 1.0,
+   "x1": -3.05,
+   "y1": 1.0,
+   "t": 0.12,
+   "h": 2.6,
+   "color": "#eef0ee"
+  },
+  {
+   "type": "wall",
+   "x0": -1.95,
+   "y0": 1.0,
+   "x1": 0.95,
+   "y1": 1.0,
+   "t": 0.12,
+   "h": 2.6,
+   "color": "#eef0ee"
+  },
+  {
+   "type": "wall",
+   "x0": 2.05,
+   "y0": 1.0,
+   "x1": 4.95,
+   "y1": 1.0,
+   "t": 0.12,
+   "h": 2.6,
+   "color": "#eef0ee"
+  },
+  {
+   "type": "wall",
+   "x0": 6.05,
+   "y0": 1.0,
+   "x1": 8.0,
+   "y1": 1.0,
+   "t": 0.12,
+   "h": 2.6,
+   "color": "#eef0ee"
+  },
+  {
+   "type": "wall",
+   "x0": -4,
+   "y0": 1.0,
+   "x1": -4,
+   "y1": 5.0,
+   "t": 0.12,
+   "h": 2.6,
+   "color": "#eef0ee"
+  },
+  {
+   "type": "wall",
+   "x0": 0,
+   "y0": 1.0,
+   "x1": 0,
+   "y1": 5.0,
+   "t": 0.12,
+   "h": 2.6,
+   "color": "#eef0ee"
+  },
+  {
+   "type": "wall",
+   "x0": 4,
+   "y0": 1.0,
+   "x1": 4,
+   "y1": 5.0,
+   "t": 0.12,
+   "h": 2.6,
+   "color": "#eef0ee"
+  },
+  {
+   "type": "wall",
+   "x0": -8.0,
+   "y0": -1.0,
+   "x1": -6.55,
+   "y1": -1.0,
+   "t": 0.12,
+   "h": 2.6,
+   "color": "#eef0ee"
+  },
+  {
+   "type": "wall",
+   "x0": -5.45,
+   "y0": -1.0,
+   "x1": -0.050000000000000044,
+   "y1": -1.0,
+   "t": 0.12,
+   "h": 2.6,
+   "color": "#eef0ee"
+  },
+  {
+   "type": "wall",
+   "x0": 1.05,
+   "y0": -1.0,
+   "x1": 4.95,
+   "y1": -1.0,
+   "t": 0.12,
+   "h": 2.6,
+   "color": "#eef0ee"
+  },
+  {
+   "type": "wall",
+   "x0": 6.05,
+   "y0": -1.0,
+   "x1": 8.0,
+   "y1": -1.0,
+   "t": 0.12,
+   "h": 2.6,
+   "color": "#eef0ee"
+  },
+  {
+   "type": "wall",
+   "x0": -2,
+   "y0": -1.0,
+   "x1": -2,
+   "y1": -5.0,
+   "t": 0.12,
+   "h": 2.6,
+   "color": "#eef0ee"
+  },
+  {
+   "type": "wall",
+   "x0": 3,
+   "y0": -1.0,
+   "x1": 3,
+   "y1": -5.0,
+   "t": 0.12,
+   "h": 2.6,
+   "color": "#eef0ee"
+  },
+  {
+   "type": "model",
+   "name": "ziekenhuisbed",
+   "x": -6,
+   "y": 3.85,
+   "yaw": -90
+  },
+  {
+   "type": "model",
+   "name": "nachtkastje",
+   "x": -5.15,
+   "y": 4.6,
+   "yaw": -90
+  },
+  {
+   "type": "model",
+   "name": "wachtstoel",
+   "x": -7.1,
+   "y": 3.2,
+   "yaw": 0
+  },
+  {
+   "type": "model",
+   "name": "wastafel",
+   "x": -4.3,
+   "y": 1.45,
+   "yaw": 90
+  },
+  {
+   "type": "aruco",
+   "id": 20,
+   "x": -6.3,
+   "y": 0.9299999999999999,
+   "z": 0.45,
+   "yaw": -90,
+   "size": 0.15,
+   "wall": true
+  },
+  {
+   "type": "model",
+   "name": "ziekenhuisbed",
+   "x": -2,
+   "y": 3.85,
+   "yaw": -90
+  },
+  {
+   "type": "model",
+   "name": "nachtkastje",
+   "x": -1.15,
+   "y": 4.6,
+   "yaw": -90
+  },
+  {
+   "type": "model",
+   "name": "wachtstoel",
+   "x": -3.1,
+   "y": 3.2,
+   "yaw": 0
+  },
+  {
+   "type": "model",
+   "name": "wastafel",
+   "x": -0.30000000000000004,
+   "y": 1.45,
+   "yaw": 90
+  },
+  {
+   "type": "aruco",
+   "id": 21,
+   "x": -2.3,
+   "y": 0.9299999999999999,
+   "z": 0.45,
+   "yaw": -90,
+   "size": 0.15,
+   "wall": true
+  },
+  {
+   "type": "model",
+   "name": "ziekenhuisbed",
+   "x": 2,
+   "y": 3.85,
+   "yaw": -90
+  },
+  {
+   "type": "model",
+   "name": "nachtkastje",
+   "x": 2.85,
+   "y": 4.6,
+   "yaw": -90
+  },
+  {
+   "type": "model",
+   "name": "wachtstoel",
+   "x": 0.8999999999999999,
+   "y": 3.2,
+   "yaw": 0
+  },
+  {
+   "type": "model",
+   "name": "wastafel",
+   "x": 3.7,
+   "y": 1.45,
+   "yaw": 90
+  },
+  {
+   "type": "aruco",
+   "id": 22,
+   "x": 1.7,
+   "y": 0.9299999999999999,
+   "z": 0.45,
+   "yaw": -90,
+   "size": 0.15,
+   "wall": true
+  },
+  {
+   "type": "model",
+   "name": "ziekenhuisbed",
+   "x": 6,
+   "y": 3.85,
+   "yaw": -90
+  },
+  {
+   "type": "model",
+   "name": "nachtkastje",
+   "x": 6.85,
+   "y": 4.6,
+   "yaw": -90
+  },
+  {
+   "type": "model",
+   "name": "wachtstoel",
+   "x": 4.9,
+   "y": 3.2,
+   "yaw": 0
+  },
+  {
+   "type": "model",
+   "name": "wastafel",
+   "x": 7.7,
+   "y": 1.45,
+   "yaw": 90
+  },
+  {
+   "type": "aruco",
+   "id": 23,
+   "x": 5.7,
+   "y": 0.9299999999999999,
+   "z": 0.45,
+   "yaw": -90,
+   "size": 0.15,
+   "wall": true
+  },
+  {
+   "type": "model",
+   "name": "persoon_e",
+   "x": -2.6,
+   "y": 2.4,
+   "yaw": -30
+  },
+  {
+   "type": "model",
+   "name": "persoon_c",
+   "x": 5.2,
+   "y": 2.8,
+   "yaw": 200
+  },
+  {
+   "type": "model",
+   "name": "wachtstoel",
+   "x": -7.2,
+   "y": -3.2,
+   "yaw": 90
+  },
+  {
+   "type": "model",
+   "name": "wachtstoel",
+   "x": -7.2,
+   "y": -4.4,
+   "yaw": 90
+  },
+  {
+   "type": "model",
+   "name": "wachtstoel",
+   "x": -6.5,
+   "y": -3.2,
+   "yaw": 90
+  },
+  {
+   "type": "model",
+   "name": "wachtstoel",
+   "x": -6.5,
+   "y": -4.4,
+   "yaw": 90
+  },
+  {
+   "type": "model",
+   "name": "wachtstoel",
+   "x": -5.800000000000001,
+   "y": -3.2,
+   "yaw": 90
+  },
+  {
+   "type": "model",
+   "name": "wachtstoel",
+   "x": -5.800000000000001,
+   "y": -4.4,
+   "yaw": 90
+  },
+  {
+   "type": "model",
+   "name": "plant",
+   "x": -7.5,
+   "y": -4.5,
+   "yaw": 0
+  },
+  {
+   "type": "model",
+   "name": "tv",
+   "x": -2.2,
+   "y": -3.0,
+   "yaw": 180,
+   "z": 1.1
+  },
+  {
+   "type": "model",
+   "name": "persoon_f",
+   "x": -5.0,
+   "y": -3.6,
+   "yaw": 120
+  },
+  {
+   "type": "model",
+   "name": "vuilnisbak",
+   "x": -2.4,
+   "y": -4.6,
+   "yaw": 0
+  },
+  {
+   "type": "aruco",
+   "id": 30,
+   "x": -6.6,
+   "y": -0.9299999999999999,
+   "z": 0.45,
+   "yaw": 90,
+   "size": 0.15,
+   "wall": true
+  },
+  {
+   "type": "model",
+   "name": "bureau",
+   "x": 0.5,
+   "y": -2.6,
+   "yaw": 90
+  },
+  {
+   "type": "model",
+   "name": "bureau",
+   "x": 1.9,
+   "y": -2.6,
+   "yaw": 90
+  },
+  {
+   "type": "model",
+   "name": "bureaustoel",
+   "x": 0.5,
+   "y": -3.4,
+   "yaw": 90
+  },
+  {
+   "type": "model",
+   "name": "bureaustoel",
+   "x": 1.9,
+   "y": -3.4,
+   "yaw": 90
+  },
+  {
+   "type": "model",
+   "name": "scherm",
+   "x": 0.5,
+   "y": -2.45,
+   "yaw": -90,
+   "z": 0.75
+  },
+  {
+   "type": "model",
+   "name": "laptop",
+   "x": 1.9,
+   "y": -2.5,
+   "yaw": -90,
+   "z": 0.75
+  },
+  {
+   "type": "model",
+   "name": "persoon_b",
+   "x": 1.2,
+   "y": -4.2,
+   "yaw": 70
+  },
+  {
+   "type": "model",
+   "name": "kapstok",
+   "x": 2.6,
+   "y": -4.6,
+   "yaw": 0
+  },
+  {
+   "type": "aruco",
+   "id": 31,
+   "x": -0.1,
+   "y": -0.9299999999999999,
+   "z": 0.45,
+   "yaw": 90,
+   "size": 0.15,
+   "wall": true
+  },
+  {
+   "type": "model",
+   "name": "toilet",
+   "x": 4.0,
+   "y": -4.4,
+   "yaw": 90
+  },
+  {
+   "type": "model",
+   "name": "toilet",
+   "x": 6.0,
+   "y": -4.4,
+   "yaw": 90
+  },
+  {
+   "type": "model",
+   "name": "wastafel",
+   "x": 7.6,
+   "y": -2.0,
+   "yaw": 180
+  },
+  {
+   "type": "model",
+   "name": "vuilnisbak",
+   "x": 7.6,
+   "y": -3.0,
+   "yaw": 0
+  },
+  {
+   "type": "wall",
+   "x0": 5.0,
+   "y0": -5.0,
+   "x1": 5.0,
+   "y1": -3.6,
+   "t": 0.08,
+   "h": 2.0,
+   "color": "#d6dbe0"
+  },
+  {
+   "type": "aruco",
+   "id": 32,
+   "x": 4.9,
+   "y": -0.9299999999999999,
+   "z": 0.45,
+   "yaw": 90,
+   "size": 0.15,
+   "wall": true
+  },
+  {
+   "type": "model",
+   "name": "rolstoel",
+   "x": -3.6,
+   "y": -0.6,
+   "yaw": 0
+  },
+  {
+   "type": "model",
+   "name": "persoon_a",
+   "x": 0.0,
+   "y": 0.3,
+   "yaw": 180
+  },
+  {
+   "type": "model",
+   "name": "persoon_d",
+   "x": 3.8,
+   "y": -0.4,
+   "yaw": 10
+  },
+  {
+   "type": "model",
+   "name": "defibrillator",
+   "x": 7.86,
+   "y": 0.4,
+   "yaw": 180,
+   "z": 1.2
+  },
+  {
+   "type": "model",
+   "name": "vuilnisbak",
+   "x": -7.7,
+   "y": 0.8,
+   "yaw": 0
+  },
+  {
+   "type": "line",
+   "pts": [
+    [
+     -7.4,
+     0
+    ],
+    [
+     7.4,
+     0
+    ]
+   ],
+   "w": 0.03,
+   "color": "#e8b50f"
+  },
+  {
+   "type": "mark",
+   "x": -7.4,
+   "y": -0.5,
+   "sx": 0.7,
+   "sy": 0.5,
+   "color": "#3fae5a"
+  },
+  {
+   "type": "uwb",
+   "id": 0,
+   "x": -7.8,
+   "y": 0.9,
+   "z": 2.3,
+   "wall": true
+  },
+  {
+   "type": "uwb",
+   "id": 1,
+   "x": 7.8,
+   "y": 0.9,
+   "z": 2.3,
+   "wall": true
+  },
+  {
+   "type": "uwb",
+   "id": 2,
+   "x": 7.8,
+   "y": -0.9,
+   "z": 2.3,
+   "wall": true
+  },
+  {
+   "type": "uwb",
+   "id": 3,
+   "x": -7.8,
+   "y": -0.9,
+   "z": 2.3,
+   "wall": true
+  }
+ ],
+ "fields": [
+  {
+   "kind": "gas",
+   "x": -5.0,
+   "y": -3.6,
+   "strength": 900,
+   "sigma": 1.4
+  },
+  {
+   "kind": "humidity",
+   "x": 5.5,
+   "y": -3.8,
+   "strength": 0.3,
+   "sigma": 1.2
+  },
+  {
+   "kind": "heat",
+   "x": 2.0,
+   "y": 3.6,
+   "strength": 5,
+   "sigma": 1.0
+  },
+  {
+   "kind": "sound",
+   "x": -2.2,
+   "y": -3.0,
+   "strength": 28,
+   "sigma": 1.5
+  },
+  {
+   "kind": "light",
+   "x": 0,
+   "y": 0,
+   "strength": 450,
+   "sigma": 4
+  }
+ ]
+}

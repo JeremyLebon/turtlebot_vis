@@ -1,0 +1,414 @@
+{
+ "auto_sedan": {
+  "file": "auto_sedan.glb",
+  "size": [
+   3.04,
+   1.788,
+   1.55
+  ],
+  "label": "voertuig",
+  "coco": "car",
+  "collider": "box",
+  "temp": 25,
+  "source": "Kenney Car Kit"
+ },
+ "auto_suv": {
+  "file": "auto_suv.glb",
+  "size": [
+   3.635,
+   2.019,
+   1.75
+  ],
+  "label": "voertuig",
+  "coco": "car",
+  "collider": "box",
+  "temp": 25,
+  "source": "Kenney Car Kit"
+ },
+ "bed": {
+  "file": "bed.glb",
+  "size": [
+   1.8,
+   1.53,
+   0.6
+  ],
+  "label": "bed",
+  "coco": "bed",
+  "collider": "box",
+  "source": "Kenney Furniture Kit"
+ },
+ "bestelwagen": {
+  "file": "bestelwagen.glb",
+  "size": [
+   4.074,
+   2.222,
+   2
+  ],
+  "label": "voertuig",
+  "coco": "car",
+  "collider": "box",
+  "temp": 25,
+  "source": "Kenney Car Kit"
+ },
+ "boekenkast": {
+  "file": "boekenkast.glb",
+  "size": [
+   0.511,
+   0.818,
+   1.8
+  ],
+  "label": "kast",
+  "coco": "",
+  "collider": "box",
+  "source": "Kenney Furniture Kit"
+ },
+ "bureau": {
+  "file": "bureau.glb",
+  "size": [
+   0.765,
+   1.433,
+   0.75
+  ],
+  "label": "tafel",
+  "coco": "dining table",
+  "collider": "box",
+  "source": "Kenney Furniture Kit"
+ },
+ "bureaustoel": {
+  "file": "bureaustoel.glb",
+  "size": [
+   0.517,
+   0.551,
+   1
+  ],
+  "label": "stoel",
+  "coco": "chair",
+  "collider": "box",
+  "source": "Kenney Furniture Kit"
+ },
+ "defibrillator": {
+  "file": "defibrillator.glb",
+  "size": [
+   0.169,
+   0.272,
+   0.35
+  ],
+  "label": "defibrillator",
+  "coco": "",
+  "collider": "box",
+  "source": "Kenney Mini Characters"
+ },
+ "kapstok": {
+  "file": "kapstok.glb",
+  "size": [
+   0.62,
+   0.62,
+   1.75
+  ],
+  "label": "kapstok",
+  "coco": "",
+  "collider": "cyl",
+  "source": "Kenney Furniture Kit"
+ },
+ "kegel": {
+  "file": "kegel.glb",
+  "size": [
+   0.4,
+   0.4,
+   0.5
+  ],
+  "label": "kegel",
+  "coco": "",
+  "collider": "cyl",
+  "source": "Kenney Car Kit"
+ },
+ "laptop": {
+  "file": "laptop.glb",
+  "size": [
+   0.371,
+   0.408,
+   0.25
+  ],
+  "label": "laptop",
+  "coco": "laptop",
+  "collider": "box",
+  "temp": 33,
+  "source": "Kenney Furniture Kit"
+ },
+ "nachtkastje": {
+  "file": "nachtkastje.glb",
+  "size": [
+   0.454,
+   0.556,
+   0.55
+  ],
+  "label": "kast",
+  "coco": "",
+  "collider": "box",
+  "source": "Kenney Furniture Kit"
+ },
+ "persoon_a": {
+  "file": "persoon_a.glb",
+  "size": [
+   0.635,
+   0.595,
+   1.8
+  ],
+  "label": "persoon",
+  "coco": "person",
+  "collider": "cyl",
+  "temp": 34,
+  "source": "Quaternius via Poly Pizza (CC0): zakenman (Business Man), idle-pose gebakken"
+ },
+ "persoon_b": {
+  "file": "persoon_b.glb",
+  "size": [
+   0.297,
+   0.51,
+   1.68
+  ],
+  "label": "persoon",
+  "coco": "person",
+  "collider": "cyl",
+  "temp": 34,
+  "source": "Quaternius via Poly Pizza (CC0): vrouw casual (Woman Casual), idle-pose gebakken"
+ },
+ "persoon_c": {
+  "file": "persoon_c.glb",
+  "size": [
+   0.618,
+   0.58,
+   1.75
+  ],
+  "label": "persoon",
+  "coco": "person",
+  "collider": "cyl",
+  "temp": 34,
+  "source": "Quaternius via Poly Pizza (CC0): man casual (Casual Character), idle-pose gebakken"
+ },
+ "persoon_d": {
+  "file": "persoon_d.glb",
+  "size": [
+   0.3,
+   0.518,
+   1.7
+  ],
+  "label": "persoon",
+  "coco": "person",
+  "collider": "cyl",
+  "temp": 34,
+  "source": "Quaternius via Poly Pizza (CC0): vrouw (Woman), idle-pose gebakken"
+ },
+ "persoon_e": {
+  "file": "persoon_e.glb",
+  "size": [
+   0.638,
+   0.608,
+   1.82
+  ],
+  "label": "persoon",
+  "coco": "person",
+  "collider": "cyl",
+  "temp": 34,
+  "source": "Quaternius via Poly Pizza (CC0): man hoodie (Hoodie Character), idle-pose gebakken"
+ },
+ "persoon_f": {
+  "file": "persoon_f.glb",
+  "size": [
+   0.287,
+   0.494,
+   1.64
+  ],
+  "label": "persoon",
+  "coco": "person",
+  "collider": "cyl",
+  "temp": 34,
+  "source": "Quaternius via Poly Pizza (CC0): vrouw (Woman in Tank Top), idle-pose gebakken"
+ },
+ "arbeider": {
+  "file": "arbeider.glb",
+  "size": [
+   0.62,
+   0.587,
+   1.78
+  ],
+  "label": "persoon",
+  "coco": "person",
+  "collider": "cyl",
+  "temp": 34,
+  "source": "Quaternius via Poly Pizza (CC0): arbeider met helm (Worker), idle-pose gebakken"
+ },
+ "boer": {
+  "file": "boer.glb",
+  "size": [
+   0.616,
+   0.58,
+   1.76
+  ],
+  "label": "persoon",
+  "coco": "person",
+  "collider": "cyl",
+  "temp": 34,
+  "source": "Quaternius via Poly Pizza (CC0): boer (Farmer), idle-pose gebakken"
+ },
+ "vrouw_jurk": {
+  "file": "vrouw_jurk.glb",
+  "size": [
+   0.431,
+   0.5,
+   1.66
+  ],
+  "label": "persoon",
+  "coco": "person",
+  "collider": "cyl",
+  "temp": 34,
+  "source": "Quaternius via Poly Pizza (CC0): vrouw in jurk (Woman in Dress), idle-pose gebakken"
+ },
+ "pickup": {
+  "file": "pickup.glb",
+  "size": [
+   4.312,
+   2.192,
+   1.9
+  ],
+  "label": "voertuig",
+  "coco": "truck",
+  "collider": "box",
+  "temp": 25,
+  "source": "Kenney Car Kit"
+ },
+ "plant": {
+  "file": "plant.glb",
+  "size": [
+   0.292,
+   0.332,
+   0.9
+  ],
+  "label": "plant",
+  "coco": "potted plant",
+  "collider": "cyl",
+  "source": "Kenney Furniture Kit"
+ },
+ "rolstoel": {
+  "file": "rolstoel.glb",
+  "size": [
+   1.059,
+   0.909,
+   0.9
+  ],
+  "label": "rolstoel",
+  "coco": "chair",
+  "collider": "box",
+  "source": "Kenney Mini Characters"
+ },
+ "scherm": {
+  "file": "scherm.glb",
+  "size": [
+   0.159,
+   0.6,
+   0.45
+  ],
+  "label": "scherm",
+  "coco": "tv",
+  "collider": "box",
+  "temp": 32,
+  "source": "Kenney Furniture Kit"
+ },
+ "stoel": {
+  "file": "stoel.glb",
+  "size": [
+   0.383,
+   0.383,
+   0.9
+  ],
+  "label": "stoel",
+  "coco": "chair",
+  "collider": "box",
+  "source": "Kenney Furniture Kit"
+ },
+ "toilet": {
+  "file": "toilet.glb",
+  "size": [
+   0.846,
+   0.554,
+   0.8
+  ],
+  "label": "toilet",
+  "coco": "toilet",
+  "collider": "box",
+  "source": "Kenney Furniture Kit"
+ },
+ "tv": {
+  "file": "tv.glb",
+  "size": [
+   0.169,
+   0.904,
+   0.6
+  ],
+  "label": "scherm",
+  "coco": "tv",
+  "collider": "box",
+  "temp": 35,
+  "source": "Kenney Furniture Kit"
+ },
+ "vuilnisbak": {
+  "file": "vuilnisbak.glb",
+  "size": [
+   0.291,
+   0.328,
+   0.6
+  ],
+  "label": "vuilnisbak",
+  "coco": "",
+  "collider": "cyl",
+  "source": "Kenney Furniture Kit"
+ },
+ "wachtstoel": {
+  "file": "wachtstoel.glb",
+  "size": [
+   0.37,
+   0.739,
+   0.85
+  ],
+  "label": "stoel",
+  "coco": "chair",
+  "collider": "box",
+  "source": "Kenney Furniture Kit"
+ },
+ "wastafel": {
+  "file": "wastafel.glb",
+  "size": [
+   0.466,
+   0.546,
+   0.9
+  ],
+  "label": "wastafel",
+  "coco": "sink",
+  "collider": "box",
+  "source": "Kenney Furniture Kit"
+ },
+ "zetel": {
+  "file": "zetel.glb",
+  "size": [
+   0.713,
+   1.704,
+   0.8
+  ],
+  "label": "zetel",
+  "coco": "couch",
+  "collider": "box",
+  "source": "Kenney Furniture Kit"
+ },
+ "ziekenhuisbed": {
+  "file": "ziekenhuisbed.glb",
+  "size": [
+   1.95,
+   0.99,
+   0.65
+  ],
+  "label": "bed",
+  "coco": "bed",
+  "collider": "box",
+  "source": "Kenney Furniture Kit"
+ }
+}

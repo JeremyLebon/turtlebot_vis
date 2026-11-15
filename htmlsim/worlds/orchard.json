@@ -256,6 +256,13 @@
    "sx": 1.0,
    "sy": 1.0,
    "color": "#3fae5a"
+  },
+  {
+   "type": "model",
+   "name": "boer",
+   "x": -9.6,
+   "y": 8.4,
+   "yaw": -120
   }
  ],
  "fields": [

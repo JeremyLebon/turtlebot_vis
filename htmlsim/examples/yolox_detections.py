@@ -89,7 +89,8 @@ class Yolox:
             m = np.where(cls == c)[0]
             for i in np.array(cv2.dnn.NMSBoxes(boxes[m].tolist(), best[m].tolist(), self.score, self.nms)).flatten():
                 x, y, bw, bh = boxes[m[i]]
-                out.append((max(0.0, x), max(0.0, y), min(w, x + bw), min(h, y + bh), COCO[int(c)], float(best[m[i]])))
+                # gewone Python-floats: ROS weigert numpy-getallen (assert PyFloat_Check, crash van de node)
+                out.append((float(max(0.0, x)), float(max(0.0, y)), float(min(w, x + bw)), float(min(h, y + bh)), COCO[int(c)], float(best[m[i]])))
         return out
 
 

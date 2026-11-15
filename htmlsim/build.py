@@ -10,6 +10,11 @@ from pathlib import Path
 here = Path(__file__).parent
 src = lambda n: (here / "src" / n).read_text(encoding="utf-8")
 html = src("template.html").replace("/*__CSS__*/", src("style.css")).replace("/*__CORE__*/", src("core.js")).replace("/*__TASKS__*/", src("tasks.js"))
+# 3D-modellen (models/*.glb, CC0, zie models/CREDITS.md) als base64 in de pagina: werkt ook als artifact en zonder internet
+import base64
+_man = json.loads((here / "models" / "models.json").read_text(encoding="utf-8"))
+_glb = {k: base64.b64encode((here / "models" / v["file"]).read_bytes()).decode() for k, v in _man.items()}
+html = html.replace("/*__MODELS__*/", "const MODEL_GLB = " + json.dumps(_glb) + ";")
 
 
 def last_update():

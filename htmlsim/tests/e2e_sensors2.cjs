@@ -112,9 +112,26 @@ let ok = true; const check = (g, t) => { ok &&= !!g; console.log(`${g ? '✓' : 
     // MID-360: rozet-preset publiceert
     await page.evaluate(() => { const p = document.getElementById('l3Preset'); p.value = 'mid360'; p.dispatchEvent(new Event('change')); }); await wait(3000);
     check(last['/points'].width > 1000, `MID-360: ${last['/points'].width} punten per scan`);
+    // 3D-modellen: Kantoor, robot kijkt naar persoon_a (0,2, -1,6): label "persoon" (20) in de segmentatie, warm in het thermisch beeld
+    await page.evaluate(() => { const s = document.getElementById('worldSel'); s.value = 'office'; s.dispatchEvent(new Event('change')); window.__tb3test.rebuild(-1.4, -1.4, -0.1); });
+    await wait(5000);
+    const segO = new Set(Buffer.from(last['/segmentation/labels_map'].data, 'base64')), labO = JSON.parse(last['/segmentation/labels'].data);
+    const thO = new Uint16Array(Buffer.from(last['/thermal/image_raw'].data, 'base64').buffer.slice(0)), tmaxO = Math.max(...thO) / 100 - 273.15;
+    check(segO.has(20) && tmaxO > 30, `Kantoor (3D-modellen): ${[...segO].map(i => labO[i]).join(', ')}; warmste pixel ${tmaxO.toFixed(1)} °C (persoon 34 °C)`);
+    // eenvoudige weergave: zelfde labels en temperatuur, blokken/cilinders i.p.v. GLB
+    const setDetail = v => page.evaluate(v => { const s = document.getElementById('modelDetail'); s.value = v; s.dispatchEvent(new Event('change')); }, v);
+    await setDetail('simple'); await wait(2500);
+    const segS = new Set(Buffer.from(last['/segmentation/labels_map'].data, 'base64'));
+    const thS = new Uint16Array(Buffer.from(last['/thermal/image_raw'].data, 'base64').buffer.slice(0)), tmaxS = Math.max(...thS) / 100 - 273.15;
+    check(segS.has(20) && tmaxS > 30, `Kantoor eenvoudig: persoon in segmentatie, warmste pixel ${tmaxS.toFixed(1)} °C`);
+    if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT.replace('.png', '_eenvoudig.png') });
+    await setDetail('3d'); await wait(2500);
+    if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT.replace('.png', '_3d.png') });
+    await page.evaluate(() => { const s = document.getElementById('worldSel'); s.value = 'hospital'; s.dispatchEvent(new Event('change')); }); await wait(2500);
+    check(await page.$eval('#worldMsg', e => /Ziekenhuis/.test(e.textContent)), 'Ziekenhuis geladen');
     console.log('HUD:', (await page.$eval('#hud', e => e.textContent)).split('\n').filter(l => /lijn|cliff|uwb|thermisch|segment/.test(l)).join(' | '));
     if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
     check(!errs.length, errs.join('\n') || 'geen paginafouten');
-  } finally { await browser.close(); wss.close(); }
+  } finally { wss.close(); await Promise.race([browser.close().catch(() => {}), wait(5000)]); }   // close kan headless blijven hangen (GLB-texturen)
   process.exit(ok ? 0 : 1);
 })().catch(e => { console.log('FOUT', e.stack); process.exit(1); });

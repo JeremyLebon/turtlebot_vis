@@ -347,6 +347,45 @@
    "yaw": 0,
    "size": 0.2,
    "wall": true
+  },
+  {
+   "type": "model",
+   "name": "arbeider",
+   "x": 0.8,
+   "y": -3.6,
+   "yaw": -90
+  },
+  {
+   "type": "model",
+   "name": "arbeider",
+   "x": -2.6,
+   "y": -3.4,
+   "yaw": -60
+  },
+  {
+   "type": "model",
+   "name": "persoon_b",
+   "x": 4.0,
+   "y": 2.2,
+   "yaw": 160
+  },
+  {
+   "type": "model",
+   "name": "kegel",
+   "x": 2.4,
+   "y": -1.6
+  },
+  {
+   "type": "model",
+   "name": "kegel",
+   "x": 3.0,
+   "y": -1.6
+  },
+  {
+   "type": "model",
+   "name": "kegel",
+   "x": 3.5999999999999996,
+   "y": -1.6
   }
  ],
  "fields": [

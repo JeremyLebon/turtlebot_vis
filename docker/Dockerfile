@@ -98,7 +98,8 @@ RUN cd /tmp/htmlsim && python3 build.py --local \
     && python3 -c "import json; print(json.load(open('package.json'))['version'])" > $D/VERSION \
     && curl -fsSL https://registry.npmjs.org/three/-/three-${THREE_VERSION}.tgz | tar xz -C /tmp/npm \
     && for f in build/three.module.js examples/jsm/controls/OrbitControls.js examples/jsm/loaders/STLLoader.js \
-                examples/jsm/loaders/ColladaLoader.js examples/jsm/loaders/OBJLoader.js examples/jsm/loaders/TGALoader.js; do \
+                examples/jsm/loaders/ColladaLoader.js examples/jsm/loaders/OBJLoader.js examples/jsm/loaders/TGALoader.js \
+                examples/jsm/loaders/GLTFLoader.js examples/jsm/utils/BufferGeometryUtils.js; do \
          install -D -m 644 /tmp/npm/package/$f $D/vendor/three/$f; done \
     && rm -rf /tmp/npm/package \
     && curl -fsSL https://registry.npmjs.org/@dimforge/rapier3d-compat/-/rapier3d-compat-${RAPIER_VERSION}.tgz | tar xz -C /tmp/npm \

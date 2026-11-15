@@ -90,6 +90,20 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
   OpenCV 4.6 ondanks "≥ 4.8" in de zoo; ~0,1 s per beeld; `--test foto.jpg` zonder ROS). Model in de image op
   `/opt/models/yolox` (Dockerfile, vastgepinde commit + sha256), anders ~/ros2_ws/models of eenmalig downloaden. Herkent
   op de primitieve werelden niets (getest: 0 detecties in het Klaslokaal), op foto's en het beeld van de echte robot wel.
+- **3D-modellen (`models/`, CC0 van Kenney, `models/CREDITS.md`):** 30 GLB's, genormaliseerd (ware grootte, voorkant +x, onderkant 0,
+  y-omhoog zoals glTF). `models/models.json` = maten (x lengte, y breedte, z hoogte), collider (box/cyl), segmentatielabel, COCO-naam,
+  temperatuur. `tools/models_to_core.py` zet het als `MODEL_INFO` in core.js (wereldelement `model`: name x y [z yaw scale]);
+  `build.py` sluit de GLB's als base64 in (`/*__MODELS__*/` → `MODEL_GLB`), de pagina parset ze één keer (GLTFLoader) en kloont
+  per plaatsing (+90° om x). GLTFLoader + utils/BufferGeometryUtils in de vendor-lijst van de Dockerfile. Werelden Kantoor en
+  Ziekenhuis (kamernummers als ArUco 20-23, 30-32, gele lijn in de gang); auto's/personen op het Bedrijfsterrein en in de
+  Fabriekshal. Personen = Quaternius (CC0, via poly.pizza, idle-pose gebakken met echte verhoudingen; Kenney-personages
+  hadden een hoofd van 1/4 van de lengte → vervangen). YOLOX herkent ze (person 0,89-0,95), auto's (car/truck), stoelen en
+  laptops. Labels 20-34 in `SEG_LABELS` (persoon, voertuig, … defibrillator). Keuzelijst **Objecten** (`modelDetail`,
+  localStorage `tb3sim.modelDetail`): `3d` of `simple` = `simpleModel()` (blokken/cilinders, zelfde maten, label en
+  temperatuur, GLB wordt dan niet geparst); `rebuildModels()` wisselt live via `modelGroups`.
+- **Zelf trainen:** `examples/dataset_opnemen.py` (beeld + `/segmentation/labels_map` met dezelfde stamp, 160 × 120),
+  `examples/seg_train.py` (PyTorch, klein U-Net 16-32-64, export ONNX opset 11), `examples/seg_infer.py` (cv2.dnn →
+  `/student/segmentation`, htmlsim toont masker + IoU).
 - **Terrein (`terrain` in de wereld):** analytische hoogte (`terrainFn`: tilt, gauss-heuvels, golving) → Rapier-heightfield (ligt
   in xz: +90° om x, rij i naar −y, kolom j naar +x). `groundZ(x, y)` zet statics, dozen, palen en de robot op de grond; vloer en
   markeringen worden gedrapeerd (`drape`), geen raster. Kaartlagen, veldkaart en spoor blijven vlak op z = 0.
