@@ -40,7 +40,7 @@ Een gepubliceerde versie (artifact, `dist/artifact.html`) werkt ook, maar dan bl
 | Labo-robot | `/cmd_vel`-type automatisch herkend (Twist/TwistStamped) met melding bij een verkeerd type; batterij op `/battery_state` zoals de labo-robot; controle "Klaar voor de echte robot?" |
 | Opdrachten | automatische tests voor taak 1 (obstakelalarm + 4 sectoren), taak 2 (batterij), taak 3 (90° + vierkant); proefrapport met controlecode, opname met testpaneel |
 | Beeldverwerking | eigen script publiceert `/detections` (Detection2DArray) en/of `/student/segmentation` (mono8): kaders en masker op het camerabeeld, IoU tegen de echte segmentatie; voorbeelden `examples/aruco_detections.py` (OpenCV ArUco), `examples/yolox_detections.py` (AI-model YOLOX, 80 COCO-klassen, CPU), zelf trainen met `dataset_opnemen.py` → `seg_train.py` (PyTorch, U-Net → ONNX) → `seg_infer.py` |
-| 3D-modellen | 33 CC0-modellen: personen van Quaternius, auto's en meubels van Kenney, zie `models/CREDITS.md`; wereldelement `model`; keuzelijst Objecten: 3D-modellen of eenvoudig (blokken en cilinders, lichter) |
+| 3D-modellen | 33 CC0-modellen: personen en auto's van Quaternius, meubels als 3D-scans van Poly Haven en van Poly Pizza, zie `models/CREDITS.md`; wereldelement `model`; keuzelijst Objecten: 3D-modellen of eenvoudig (blokken en cilinders, lichter) |
 | Identificatie | student + code (SHA-256 over naam/nr/wereld/datum), watermerk op vloer en camerabeeld |
 
 ## Docent: rapporten controleren

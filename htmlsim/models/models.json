@@ -2,40 +2,40 @@
  "auto_sedan": {
   "file": "auto_sedan.glb",
   "size": [
-   3.04,
-   1.788,
-   1.55
+   4.7,
+   1.8,
+   1.45
   ],
   "label": "voertuig",
   "coco": "car",
   "collider": "box",
   "temp": 25,
-  "source": "Kenney Car Kit"
+  "source": "Poly Pizza (CC0): Car Cz6yDaUcM9, per as geschaald naar echte maten"
  },
  "auto_suv": {
   "file": "auto_suv.glb",
   "size": [
-   3.635,
-   2.019,
-   1.75
+   4.6,
+   1.85,
+   1.7
   ],
   "label": "voertuig",
   "coco": "car",
   "collider": "box",
   "temp": 25,
-  "source": "Kenney Car Kit"
+  "source": "Poly Pizza (CC0): SUV xsMtZhBkxL, per as geschaald naar echte maten"
  },
  "bed": {
   "file": "bed.glb",
   "size": [
-   1.8,
-   1.53,
+   1.745,
+   0.877,
    0.6
   ],
   "label": "bed",
   "coco": "bed",
   "collider": "box",
-  "source": "Kenney Furniture Kit"
+  "source": "Poly Pizza (CC0): Bed Single ianC28eMOF"
  },
  "bestelwagen": {
   "file": "bestelwagen.glb",
@@ -53,38 +53,38 @@
  "boekenkast": {
   "file": "boekenkast.glb",
   "size": [
-   0.511,
-   0.818,
+   0.4,
+   0.9,
    1.8
   ],
   "label": "kast",
   "coco": "",
   "collider": "box",
-  "source": "Kenney Furniture Kit"
+  "source": "Poly Haven (CC0): wooden_bookshelf_worn, per as geschaald naar gangbare maten"
  },
  "bureau": {
   "file": "bureau.glb",
   "size": [
-   0.765,
-   1.433,
+   0.75,
+   1.4,
    0.75
   ],
   "label": "tafel",
   "coco": "dining table",
   "collider": "box",
-  "source": "Kenney Furniture Kit"
+  "source": "Poly Haven (CC0): metal_office_desk, per as geschaald naar gangbare maten"
  },
  "bureaustoel": {
   "file": "bureaustoel.glb",
   "size": [
-   0.517,
-   0.551,
+   0.716,
+   0.64,
    1
   ],
   "label": "stoel",
   "coco": "chair",
   "collider": "box",
-  "source": "Kenney Furniture Kit"
+  "source": "Poly Pizza (CC0): Office Chair UfKvrZBK6C"
  },
  "defibrillator": {
   "file": "defibrillator.glb",
@@ -101,51 +101,51 @@
  "kapstok": {
   "file": "kapstok.glb",
   "size": [
-   0.62,
-   0.62,
+   0.422,
+   0.422,
    1.75
   ],
   "label": "kapstok",
   "coco": "",
   "collider": "cyl",
-  "source": "Kenney Furniture Kit"
+  "source": "Poly Pizza (CC0): Coat Rack (CreativeTrio) uTZAW98YBS"
  },
  "kegel": {
   "file": "kegel.glb",
   "size": [
-   0.4,
-   0.4,
+   0.387,
+   0.387,
    0.5
   ],
   "label": "kegel",
   "coco": "",
   "collider": "cyl",
-  "source": "Kenney Car Kit"
+  "source": "Poly Pizza (CC0): Traffic Cone aDIrUbMbW3"
  },
  "laptop": {
   "file": "laptop.glb",
   "size": [
-   0.371,
-   0.408,
+   0.224,
+   0.3,
    0.25
   ],
   "label": "laptop",
   "coco": "laptop",
   "collider": "box",
   "temp": 33,
-  "source": "Kenney Furniture Kit"
+  "source": "Poly Haven (CC0): classic_laptop"
  },
  "nachtkastje": {
   "file": "nachtkastje.glb",
   "size": [
-   0.454,
-   0.556,
+   0.333,
+   0.446,
    0.55
   ],
   "label": "kast",
   "coco": "",
   "collider": "box",
-  "source": "Kenney Furniture Kit"
+  "source": "Poly Haven (CC0): ClassicNightstand_01"
  },
  "persoon_a": {
   "file": "persoon_a.glb",
@@ -267,148 +267,148 @@
  "pickup": {
   "file": "pickup.glb",
   "size": [
-   4.312,
-   2.192,
-   1.9
+   5.3,
+   1.9,
+   1.85
   ],
   "label": "voertuig",
   "coco": "truck",
   "collider": "box",
   "temp": 25,
-  "source": "Kenney Car Kit"
+  "source": "Poly Pizza (CC0): Pickup Truck qn4grQgHm8, per as geschaald naar echte maten"
  },
  "plant": {
   "file": "plant.glb",
   "size": [
-   0.292,
-   0.332,
+   0.622,
+   0.565,
    0.9
   ],
   "label": "plant",
   "coco": "potted plant",
   "collider": "cyl",
-  "source": "Kenney Furniture Kit"
+  "source": "Poly Haven (CC0): potted_plant_04"
  },
  "rolstoel": {
   "file": "rolstoel.glb",
   "size": [
-   1.059,
-   0.909,
+   0.887,
+   0.672,
    0.9
   ],
   "label": "rolstoel",
   "coco": "chair",
   "collider": "box",
-  "source": "Kenney Mini Characters"
+  "source": "Poly Haven (CC0): wheelchair_01, vereenvoudigd (40k → ±10k driehoeken)"
  },
  "scherm": {
   "file": "scherm.glb",
   "size": [
-   0.159,
-   0.6,
+   0.148,
+   0.729,
    0.45
   ],
   "label": "scherm",
   "coco": "tv",
   "collider": "box",
   "temp": 32,
-  "source": "Kenney Furniture Kit"
+  "source": "Poly Pizza (CC0): Monitor (CreativeTrio) PvSjEbz11k"
  },
  "stoel": {
   "file": "stoel.glb",
   "size": [
-   0.383,
-   0.383,
+   0.604,
+   0.506,
    0.9
   ],
   "label": "stoel",
   "coco": "chair",
   "collider": "box",
-  "source": "Kenney Furniture Kit"
+  "source": "Poly Haven (CC0): SchoolChair_01"
  },
  "toilet": {
   "file": "toilet.glb",
   "size": [
-   0.846,
-   0.554,
+   0.712,
+   0.504,
    0.8
   ],
   "label": "toilet",
   "coco": "toilet",
   "collider": "box",
-  "source": "Kenney Furniture Kit"
+  "source": "Poly Pizza (CC0): Toilet WAu50yGFVt"
  },
  "tv": {
   "file": "tv.glb",
   "size": [
-   0.169,
-   0.904,
+   0.198,
+   0.972,
    0.6
   ],
   "label": "scherm",
   "coco": "tv",
   "collider": "box",
   "temp": 35,
-  "source": "Kenney Furniture Kit"
+  "source": "Poly Pizza (CC0): Monitor (CreativeTrio) PvSjEbz11k"
  },
  "vuilnisbak": {
   "file": "vuilnisbak.glb",
   "size": [
-   0.291,
-   0.328,
+   0.36,
+   0.3,
    0.6
   ],
   "label": "vuilnisbak",
   "coco": "",
   "collider": "cyl",
-  "source": "Kenney Furniture Kit"
+  "source": "Poly Pizza (CC0): Trashcan XSwahu252t, per as geschaald naar gangbare maten"
  },
  "wachtstoel": {
   "file": "wachtstoel.glb",
   "size": [
-   0.37,
-   0.739,
+   0.68,
+   0.62,
    0.85
   ],
   "label": "stoel",
   "coco": "chair",
   "collider": "box",
-  "source": "Kenney Furniture Kit"
+  "source": "Poly Haven (CC0): modern_arm_chair_01, per as geschaald naar gangbare maten"
  },
  "wastafel": {
   "file": "wastafel.glb",
   "size": [
-   0.466,
-   0.546,
+   0.45,
+   0.55,
    0.9
   ],
   "label": "wastafel",
   "coco": "sink",
   "collider": "box",
-  "source": "Kenney Furniture Kit"
+  "source": "Poly Pizza (CC0): Bathroom Sink OMCJDgMUui, per as geschaald naar gangbare maten"
  },
  "zetel": {
   "file": "zetel.glb",
   "size": [
-   0.713,
-   1.704,
+   0.922,
+   2.038,
    0.8
   ],
   "label": "zetel",
   "coco": "couch",
   "collider": "box",
-  "source": "Kenney Furniture Kit"
+  "source": "Poly Haven (CC0): sofa_02"
  },
  "ziekenhuisbed": {
   "file": "ziekenhuisbed.glb",
   "size": [
-   1.95,
-   0.99,
+   1.891,
+   0.95,
    0.65
   ],
   "label": "bed",
   "coco": "bed",
   "collider": "box",
-  "source": "Kenney Furniture Kit"
+  "source": "Poly Pizza (CC0): Bed Single ianC28eMOF"
  }
 }
