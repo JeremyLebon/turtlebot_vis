@@ -89,7 +89,7 @@
           <option value="hills">Heuvelland, hoogteverschillen (29 × 29 m)</option>
           <option value="empty">Lege kamer (5 × 5 m)</option>
           <option value="custom" hidden>Eigen wereld</option></select></div>
-        <div class="grid2"><label for="modelDetail">Objecten</label><select id="modelDetail" title="Mensen, auto's en meubels: echte 3D-modellen, of blokken en cilinders met dezelfde maten (lichter voor een trage laptop; de AI herkent ze dan niet)">
+        <div class="grid2"><label for="modelDetail">Objecten</label><select id="modelDetail" title="Mensen, auto's, meubels, bomen en maïs: echte 3D-modellen, of blokken en cilinders met dezelfde maten (lichter voor een trage laptop; de AI herkent ze dan niet)">
           <option value="3d">3D-modellen</option>
           <option value="simple">Eenvoudig: blokken en cilinders (lichter)</option></select></div>
         <div class="row">
@@ -359,11 +359,11 @@
           <code>wall</code> x0 y0 x1 y1 [t h], <code>box</code> x y [z] sx sy sz [yaw pitch], <code>cyl</code> x y r h,
           <code>rack</code> x y [bays depth h yaw], <code>conveyor</code> x y l [w h yaw], <code>pallet</code> x y [load], <code>table</code> x y [l w h yaw], <code>chair</code> x y [yaw],
           <code>movable</code> x y [sx sy sz mass], <code>mark</code> x y sx sy [yaw]; elk met optioneel <code>color</code>.
-          Buiten: <code>tree</code> x y [h crown r], <code>orchard</code> x y [rows n row gap yaw h crown jitter missing],
+          Buiten: <code>tree</code> x y [h crown r kind = loof/berk/den], <code>orchard</code> x y [rows n row gap yaw h crown jitter missing kind],
           <code>fence</code> x0 y0 x1 y1 [h gap opacity], <code>sphere</code> x y [z] r,
           <code>crops</code> x y [plant rows l row w h gap yaw] (plant: mais, kool, aardappel),
           <code>aruco</code> x y [z] yaw id [size], <code>uwb</code> x y [z id], <code>line</code> pts [[x, y], …] [w closed],
-          <code>model</code> name x y [z yaw scale] (3D-model: persoon_a…f, arbeider, boer, vrouw_jurk, auto_sedan, auto_suv, bestelwagen, pickup, kegel, stoel, bureaustoel,
+          <code>model</code> name x y [z yaw scale] (3D-model: persoon_a…f, arbeider, boer, vrouw_jurk, boom_loof, boom_berk, boom_den, plant_groot, auto_sedan, auto_suv, bestelwagen, pickup, kegel, stoel, bureaustoel,
           bureau, laptop, scherm, tv, zetel, boekenkast, plant, bed, toilet, ziekenhuisbed, nachtkastje, rolstoel, wastafel, wachtstoel,
           vuilnisbak, kapstok, defibrillator);
           elk element optioneel <code>temp</code> (°C, voor de thermische camera).
@@ -728,7 +728,7 @@ const PLANT = {
   kool: () => [new THREE.SphereGeometry(0.5, 10, 7), 0x8fbf6a, 1.0],
   aardappel: () => [new THREE.IcosahedronGeometry(0.5, 1), 0x4f8a3a, 0.8],
 };
-function buildCrops(list) {
+function buildCrops(list, real) {
   const byPlant = {};
   for (const s of list) (byPlant[s.def.plant] ||= []).push(s);
   for (const [plant, segs] of Object.entries(byPlant)) {
@@ -744,6 +744,12 @@ function buildCrops(list) {
         items.push([x, y, sim.groundZ(x, y) + h / 2, w, h, rnd() * 6.28, 0.85 + 0.3 * rnd()]);
       }
     }
+    if (real && plant === "mais") {                          // 3D-model (gewas_mais, 2 m hoog), geschaald naar de planthoogte
+      const k = MODEL_INFO.gewas_mais.size[2];
+      instancedModel("gewas_mais", items.map(([x, y, z, w, h, rot]) => new THREE.Matrix4().compose(new THREE.Vector3(x, y, z - h / 2),
+        new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), rot), new THREE.Vector3(h / k, h / k, h / k))), "crops");
+      continue;
+    }
     const mesh = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ roughness: 0.8 }), items.length), m4 = new THREE.Matrix4(), base = new THREE.Color(col);
     items.forEach(([x, y, z, w, h, rot, br], i) => {
       m4.compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), rot), new THREE.Vector3(w, w, h));
@@ -753,13 +759,16 @@ function buildCrops(list) {
   }
 }
 function buildWorldMeshes() {
-  worldGroup.clear(); movableMeshes.length = 0; modelGroups.clear();
+  worldGroup.clear(); movableMeshes.length = 0; worldGen++;
+  const real = $("modelDetail").value === "3d", trees = [];
   const crops = [];
   const [fx, fy] = sim.worldInfo.floor;
   for (const s of sim.statics) {
     let mesh;
     if (s.kind === "floor") { mesh = new THREE.Mesh(drape(new THREE.PlaneGeometry(fx, fy, ...terrSeg(fx, fy)), 0, 0, 0, 0), M.floor); mesh.receiveShadow = true; mesh.userData.lab = "floor"; worldGroup.add(mesh); continue; }
     if (s.kind === "crop") { crops.push(s); continue; }
+    if (real && s.def?.tree) { trees.push(s); continue; }                 // boom als 3D-model (stam = collider, kruin niet tekenen)
+    if (real && s.def?.crown) continue;
     if (s.kind === "model") {                                 // onderkant van het model = onderkant van de collider
       const t = s.body.translation(), g = new THREE.Group(); g.position.set(t.x, t.y, t.z - s.size.z / 2); g.rotation.z = (s.def.yaw || 0) * Math.PI / 180;
       worldGroup.add(g); addModelMesh(s, g); continue;
@@ -774,15 +783,19 @@ function buildWorldMeshes() {
     if (s.kind === "aruco") mesh.add(arucoPlane(s.def.id ?? 0, s.size.y));
     mesh.castShadow = mesh.receiveShadow = true; worldGroup.add(mesh);
   }
-  // vloermarkeringen: alleen beeld (ook zichtbaar voor de robotcamera), geen collider
+  // vloermarkeringen: alleen beeld (ook zichtbaar voor de robotcamera), geen collider. Elke mark een laagje hoger dan de
+  // vorige (later in de lijst = bovenop), lijnen bovenaan: overlappende vlakken op dezelfde hoogte flikkeren (z-fighting)
+  const nMark = sim.markings.filter(mk => mk.type === "mark").length; let iMark = 0;
   for (const mk of sim.markings) {
-    const mat = matFor(mk.color || "#f2c230").clone(); mat.polygonOffset = true; mat.polygonOffsetFactor = -2; mat.polygonOffsetUnits = -2;
-    const yaw = (mk.yaw || 0) * Math.PI / 180, mesh = new THREE.Mesh(drape(new THREE.PlaneGeometry(mk.sx, mk.sy, ...terrSeg(mk.sx, mk.sy)), mk.x, mk.y, yaw, 0.02), mat);
-    if (!sim.worldInfo.terrain) mesh.position.z = 0.003 - 0.02;
+    const layer = mk.type === "mark" ? iMark++ : nMark, dz = 0.02 + 0.002 * layer;
+    const mat = matFor(mk.color || "#f2c230").clone(); mat.polygonOffset = true; mat.polygonOffsetFactor = -2; mat.polygonOffsetUnits = -2 - 2 * layer;
+    const yaw = (mk.yaw || 0) * Math.PI / 180, mesh = new THREE.Mesh(drape(new THREE.PlaneGeometry(mk.sx, mk.sy, ...terrSeg(mk.sx, mk.sy)), mk.x, mk.y, yaw, dz), mat);
+    if (!sim.worldInfo.terrain) mesh.position.z = 0.003 + 0.0005 * layer - dz;
+    mesh.renderOrder = layer;
     mesh.userData.lab = "mark";
     mesh.position.x = mk.x; mesh.position.y = mk.y; mesh.rotation.z = yaw; mesh.receiveShadow = true; worldGroup.add(mesh);
   }
-  buildCrops(crops);
+  buildCrops(crops, real); buildTrees(trees);
   for (const m of sim.movables) addMovableMesh(m);
   drawFloorTexture(); scene.background = skyColor();
   const half = Math.max(fx, fy) / 2 + 1;
@@ -828,10 +841,8 @@ function simpleModel(I, k) {
   else add(new THREE.BoxGeometry(sx, sy, sz), col, sz / 2);
   return g;
 }
-const modelGroups = new Set();                                     // groepen van de geplaatste modellen, om te wisselen tussen 3D en eenvoudig
 function addModelMesh(s, grp) {
   const d = s.def, I = MODEL_INFO[d.name], temp = d.temp ?? I.temp;
-  grp.userData.model = s; modelGroups.add(grp);
   const tag = c => { c.traverse(o => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; o.userData.lab = I.label; if (temp != null) o.userData.temp = temp; } }); grp.add(c); };
   if ($("modelDetail").value === "simple") return tag(simpleModel(I, d.scale ?? 1));
   modelScene(d.name).then(sc => {
@@ -839,12 +850,32 @@ function addModelMesh(s, grp) {
     const c = sc.clone(true); c.rotation.x = Math.PI / 2; c.scale.setScalar(d.scale ?? 1); tag(c);
   }).catch(e => console.warn("model", d.name, e));
 }
-function rebuildModels() {
-  for (const g of modelGroups) {
-    if (!g.parent) { modelGroups.delete(g); continue; }
-    for (const c of [...g.children]) { g.remove(c); if ($("modelDetail").value === "3d") c.traverse(o => o.geometry?.dispose()); }
-    addModelMesh(g.userData.model, g);
+// veel exemplaren van één model (bomen, maïs): per deelmesh een InstancedMesh; mats = matrices in de wereld (z omhoog).
+// Asynchroon (GLB inlezen): bij een andere wereld intussen (worldGen) niets toevoegen.
+let worldGen = 0;
+function instancedModel(name, mats, lab) {
+  if (!mats.length) return;
+  const gen = worldGen, toZ = new THREE.Matrix4().makeRotationX(Math.PI / 2);
+  modelScene(name).then(sc => {
+    if (gen !== worldGen) return;
+    sc.updateMatrixWorld(true);
+    sc.traverse(o => {
+      if (!o.isMesh) return;
+      const local = toZ.clone().multiply(o.matrixWorld), im = new THREE.InstancedMesh(o.geometry, o.material, mats.length), m = new THREE.Matrix4();
+      mats.forEach((M, i) => im.setMatrixAt(i, m.multiplyMatrices(M, local)));
+      im.castShadow = im.receiveShadow = true; im.userData.lab = lab; worldGroup.add(im);
+    });
+  }).catch(e => console.warn("model", name, e));
+}
+function buildTrees(list) {
+  const byKind = {};
+  for (const s of list) {
+    const T = s.def.tree, name = MODEL_INFO["boom_" + T.kind] ? "boom_" + T.kind : "boom_loof", I = MODEL_INFO[name], t = s.body.translation();
+    const kxy = T.w / ((I.size[0] + I.size[1]) / 2), kz = T.H / I.size[2], yaw = ((t.x * 12.9898 + t.y * 78.233) % 6.283);   // vaste draaiing per boom
+    (byKind[name] ||= []).push(new THREE.Matrix4().compose(new THREE.Vector3(t.x, t.y, t.z - s.size.h / 2),
+      new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), yaw), new THREE.Vector3(kxy, kxy, kz)));
   }
+  for (const [name, mats] of Object.entries(byKind)) instancedModel(name, mats, "tree");
 }
 // ArUco DICT_4X4_50 (uit OpenCV): 16 bits per id, rij per rij vanaf linksboven, 1 = wit; zwarte rand van 1 cel
 const ARUCO_4X4 = [46386, 3994, 13101, 39238, 21662, 31181, 40494, 50418, 65242, 53078, 63889, 4519, 3767, 10767, 9393, 9790, 18021, 26112, 27742, 30383, 34443, 45099, 52437, 56706, 65095, 38001, 44260, 42324, 8483, 13423, 17429, 22450, 40655, 61643, 2222, 2345, 6261, 1279, 3574, 7258, 5912, 10792, 12940, 14514, 9448, 12011, 11583, 19300, 20526, 20499];
@@ -2414,8 +2445,8 @@ function switchWorld(def, label) {
 }
 // gekozen wereld onthouden (enkel een keuze in de lijst, niet de lege kamer van de tests): na herladen van de
 // pagina staat de robot weer in dezelfde wereld, anders past de kaart van de student niet meer (sessie 4: Klaslokaal)
-try { const v = localStorage.getItem("tb3sim.modelDetail"); if (v && $("modelDetail").querySelector(`option[value="${v}"]`)) { $("modelDetail").value = v; rebuildModels(); } } catch {}
-$("modelDetail").onchange = () => { $("modelDetail").blur(); rebuildModels(); try { localStorage.setItem("tb3sim.modelDetail", $("modelDetail").value); } catch {} };
+try { const v = localStorage.getItem("tb3sim.modelDetail"); if (v && $("modelDetail").querySelector(`option[value="${v}"]`)) { $("modelDetail").value = v; buildWorldMeshes(); } } catch {}
+$("modelDetail").onchange = () => { $("modelDetail").blur(); buildWorldMeshes(); try { localStorage.setItem("tb3sim.modelDetail", $("modelDetail").value); } catch {} };
 $("worldSel").onchange = () => { const k = $("worldSel").value; $("worldSel").blur(); if (WORLDS[k]) { switchWorld(WORLDS[k], WORLDS[k].name); try { localStorage.setItem("tb3sim.world", k); } catch {} } };
 $("worldFile").onchange = async e => {
   const f = e.target.files[0]; if (!f) return;

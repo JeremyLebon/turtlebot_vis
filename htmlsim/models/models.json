@@ -410,5 +410,61 @@
   "coco": "bed",
   "collider": "box",
   "source": "Poly Pizza (CC0): Bed Single ianC28eMOF"
+ },
+ "boom_loof": {
+  "file": "boom_loof.glb",
+  "size": [
+   3.514,
+   3.815,
+   6.0
+  ],
+  "label": "tree",
+  "collider": "cyl",
+  "source": "Poly Pizza (CC0): Quaternius Tree qZtx0AHhcy, vereenvoudigd (6k → 1,6k driehoeken)"
+ },
+ "boom_berk": {
+  "file": "boom_berk.glb",
+  "size": [
+   3.808,
+   5.552,
+   8.0
+  ],
+  "label": "tree",
+  "collider": "cyl",
+  "source": "Poly Pizza (CC0): Quaternius Birch Tree k6cozoNfLH"
+ },
+ "boom_den": {
+  "file": "boom_den.glb",
+  "size": [
+   5.103,
+   4.725,
+   9.0
+  ],
+  "label": "tree",
+  "collider": "cyl",
+  "source": "Poly Pizza (CC0): Quaternius Pine 79gmlLnweB"
+ },
+ "gewas_mais": {
+  "file": "gewas_mais.glb",
+  "size": [
+   0.882,
+   1.172,
+   2.0
+  ],
+  "label": "crops",
+  "collider": "box",
+  "source": "Poly Pizza (CC0): Quaternius Corn IhhB7kGaAQ, vereenvoudigd"
+ },
+ "plant_groot": {
+  "file": "plant_groot.glb",
+  "size": [
+   0.858,
+   0.909,
+   1.1
+  ],
+  "label": "plant",
+  "collider": "cyl",
+  "source": "Poly Haven (CC0): potted_plant_02, vereenvoudigd",
+  "coco": "potted plant"
  }
 }

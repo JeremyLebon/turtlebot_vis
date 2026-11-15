@@ -97,7 +97,7 @@ const check = (good, txt) => { ok &&= !!good; console.log(`${good ? '✓' : '✗
     }
     // robots per aandrijftype: laden en met de toetsen rijden (Bedrijfsterrein, vrije plek: bij (-6, 0) staat een doos)
     await page.evaluate(() => { const sel = document.getElementById('worldSel'); sel.value = 'yard'; sel.dispatchEvent(new Event('change')); });
-    for (const k of ['skid', 'tracked', 'mecanum', 'ackermann']) {
+    for (const k of ['skid', 'tracked', 'mecanum', 'ackermann', 'rover', 'rockerbogie']) {
       await page.evaluate(k => { const s = document.getElementById('presetSel'); s.value = k; s.dispatchEvent(new Event('change')); window.__tb3test.rebuild(-10, -1.5, 0); }, k);
       await wait(1500);
       const p0 = await page.evaluate(() => window.__tb3test.sim.truthPose());

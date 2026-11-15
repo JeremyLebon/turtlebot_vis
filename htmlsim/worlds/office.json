@@ -174,9 +174,9 @@
   },
   {
    "type": "model",
-   "name": "plant",
-   "x": 4.6,
-   "y": 3.6
+   "name": "plant_groot",
+   "x": 4.45,
+   "y": 3.45
   },
   {
    "type": "model",

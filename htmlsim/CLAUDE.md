@@ -36,7 +36,12 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
   `mecanum` (wielen met "mecanum" in de jointnaam: wielen zonder wrijving, het lichaam krijgt de gevraagde vx/vy/ω met
   versnellingsbegrenzing via setLinvel; `/cmd_vel` linear.y, toetsen Shift + ← →), `ackermann` (revolute om z met een wiel
   eronder = stuurjoint, role `steer`, ForceBased-motor; δ = atan(L·w/v), binnenwiel stuurt meer, achterwielen met
-  bochtdifferentieel; draait niet ter plaatse). Ingebouwde robots: `ROBOT_PRESETS` + `presetURDF(k)` in core.js (eigen
+  bochtdifferentieel; draait niet ter plaatse). **Vering:** prismatic met "suspension"/"shock"/"spring" in de naam = role
+  `spring` (ForceBased positiemotor naar 0: k uit `<dynamics spring_stiffness>`, c uit `damping`, anders 3 cm inzakken en
+  60 % kritische demping); de tussenlink moet zwaar genoeg zijn (±3 kg), anders haalt de wielmotor zijn snelheid niet
+  (solver met een lichte schakel tussen romp en wiel). Preset `rover`. **Rocker-bogie:** revolute met "rocker" = role
+  `rocker` (ForceBased; `rockerDiff()` elke stap: elke rocker naar eigen hoek − gemiddelde → som 0 = differentieel),
+  revolute met "bogie" = `passive` (vrij, enkel limieten). Preset `rockerbogie` (6 wielen, skid). Ingebouwde robots: `ROBOT_PRESETS` + `presetURDF(k)` in core.js (eigen
   ontwerp, primitieven), keuzelijst `#presetSel`. `cfg.leftWheel`/`rightWheel` blijven het eerste wiel (encoders, odometrie).
 - **Rijknoppen in beeld = joystick:** indrukken en slepen op `#pad`; richting en grootte t.o.v. de STOP-knop (dode zone 25 %),
   ook schuin (vooruit + draaien, nodig voor Ackermann). Mecanum: knop `#padStrafe` of Shift → links/rechts = zijwaarts.
@@ -98,7 +103,10 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
   Ziekenhuis (kamernummers als ArUco 20-23, 30-32, gele lijn in de gang); auto's/personen op het Bedrijfsterrein en in de
   Fabriekshal. Personen = Quaternius (CC0, via poly.pizza, idle-pose gebakken met echte verhoudingen; Kenney-personages
   hadden een hoofd van 1/4 van de lengte → vervangen). Meubels/auto's: Poly Haven-scans en Poly Pizza (CC0), basiskleur
-  max. 512 px JPEG, per as geschaald; enkel `bestelwagen` en `defibrillator` zijn nog Kenney. YOLOX herkent ze (person 0,89-0,95), auto's (car/truck), stoelen en
+  max. 512 px JPEG, per as geschaald; enkel `bestelwagen` en `defibrillator` zijn nog Kenney.
+  Bomen (`tree`/`orchard`, `kind` loof|berk|den) en maïs: collider blijft stam + bol, in 3D getekend met `boom_<kind>` /
+  `gewas_mais` als InstancedMesh per deelmesh (`instancedModel`, async; `worldGen` tegen een oude wereld). Wisselen 3D ↔
+  eenvoudig = `buildWorldMeshes()` opnieuw. Kool en aardappel blijven procedureel (model te zwaar of viel uit elkaar). YOLOX herkent ze (person 0,89-0,95), auto's (car/truck), stoelen en
   laptops. Labels 20-34 in `SEG_LABELS` (persoon, voertuig, … defibrillator). Keuzelijst **Objecten** (`modelDetail`,
   localStorage `tb3sim.modelDetail`): `3d` of `simple` = `simpleModel()` (blokken/cilinders, zelfde maten, label en
   temperatuur, GLB wordt dan niet geparst); `rebuildModels()` wisselt live via `modelGroups`.

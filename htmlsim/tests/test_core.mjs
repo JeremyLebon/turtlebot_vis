@@ -55,6 +55,28 @@ for (const [k, drive] of [["skid", "skid"], ["tracked", "skid"], ["mecanum", "me
   const cx = (Math.max(...xs) + Math.min(...xs)) / 2, cy = (Math.max(...ys) + Math.min(...ys)) / 2, r = xs.reduce((a, x, i) => a + Math.hypot(x - cx, ys[i] - cy), 0) / xs.length;
   ok("ackermann: cirkel met straal v/w = 1 m", Math.abs(r - 1.0) < 0.2, `straal ${r.toFixed(2)} m (wielbasis ${L} m)`);
   const s2 = preset("ackermann"); run(s2, { v: 0, w: 1 }, 2); const p2 = s2.truthPose(); ok("ackermann: draait niet ter plaatse", Math.abs(p2.th) < 0.05 && Math.hypot(p2.x, p2.y) < 0.02, `θ ${(p2.th * 57.3).toFixed(1)}°`); }
+// rover met vering: veren zakken in rust ~3 cm in, rijdt rechtdoor en draait; over een drempel veert één wiel in
+{ let s = preset("rover"); const sp = s.robot.joints.filter(o => o.role === "spring"); run(s, { v: 0, w: 0 }, 1);
+  ok("rover: 4 veren, zakken in rust 1,5-4,5 cm in", sp.length === 4 && sp.every(o => o.pos > 0.015 && o.pos < 0.045), sp.map(o => (o.pos * 100).toFixed(1) + " cm").join(", "));
+  run(s, { v: 0.4, w: 0 }, 3); let p = s.truthPose();
+  ok("rover: rijdt rechtdoor 3 s aan 0,4 m/s", p.x > 0.95 && p.x < 1.25 && Math.abs(p.y) < 0.06, `x ${p.x.toFixed(3)} y ${p.y.toFixed(3)}`);
+  s = preset("rover"); run(s, { v: 0, w: 1.0 }, 2); p = s.truthPose(); ok("rover: draait ter plaatse (skid: veel slip)", Math.abs(p.th) > 0.7 && Math.hypot(p.x, p.y) < 0.12, `θ ${(p.th * 57.3).toFixed(0)}° (115° gevraagd)`);
+  s = M.createSim(R); s.loadWorld({ name: "drempel", floor: [20, 20], items: [{ type: "box", x: 1.2, y: 0.31, sx: 0.4, sy: 0.25, sz: 0.06 }] });
+  const m = M.parseURDF(M.presetURDF("rover"), DOMParser), cfg = M.analyzeModel(m).cfg; Object.assign(cfg, { vmax: 1.2, wmax: 2 }); s.buildRobot(m, cfg, 0, 0, 0);
+  const fl = s.robot.byName.front_left_suspension_joint, fr = s.robot.byName.front_right_suspension_joint; let dmax = 0, rollMax = 0;
+  for (let i = 0; i < 4 * 200; i++) { s.step({ v: 0.4, w: 0 }); dmax = Math.max(dmax, fl.pos - fr.pos); const q = s.truthPose().q; rollMax = Math.max(rollMax, Math.abs(Math.atan2(2 * (q.w * q.x + q.y * q.z), 1 - 2 * (q.x * q.x + q.y * q.y)))); }
+  ok("rover: drempel van 6 cm links → linkervoorwiel veert in", dmax > 0.025, `verschil links-rechts max ${(dmax * 100).toFixed(1)} cm, rol max ${(rollMax * 57.3).toFixed(1)}°`); }
+// rocker-bogie: 6 wielen, differentieel; trede van 10 cm onder de linkerwielen → rockers tegengesteld, romp helt maar half
+{ let s = preset("rockerbogie"); run(s, { v: 0.3, w: 0 }, 3); let p = s.truthPose();
+  ok("rocker-bogie: 6 wielen (skid), 2 rockers, rijdt rechtdoor", s.robot.cfg.leftWheels.length === 3 && s.robot.rockers.length === 2 && p.x > 0.75 && p.x < 0.95 && Math.abs(p.y) < 0.05, `x ${p.x.toFixed(2)} y ${p.y.toFixed(2)}`);
+  s = M.createSim(R); s.loadWorld({ name: "trede", floor: [20, 20], items: [{ type: "box", x: 1.6, y: 0.29, sx: 1.6, sy: 0.3, sz: 0.1 }] });
+  const m = M.parseURDF(M.presetURDF("rockerbogie"), DOMParser), cfg = M.analyzeModel(m).cfg; Object.assign(cfg, { vmax: 0.4, wmax: 1 }); s.buildRobot(m, cfg, 0, 0, 0);
+  let rmax = 0, dmax = 0, smax = 0;
+  for (let i = 0; i < 8 * 200; i++) { s.step({ v: 0.3, w: 0 }); const q = s.truthPose().q, [a, b] = s.robot.rockers;
+    rmax = Math.max(rmax, Math.abs(Math.atan2(2 * (q.w * q.x + q.y * q.z), 1 - 2 * (q.x * q.x + q.y * q.y)))); dmax = Math.max(dmax, Math.abs(a.pos - b.pos)); smax = Math.max(smax, Math.abs(a.pos + b.pos)); }
+  p = s.truthPose();
+  ok("rocker-bogie: trede 10 cm links genomen, differentieel houdt de romp", p.x > 1.5 && dmax > 0.07 && rmax < 0.12 && smax < 0.03,
+    `x ${p.x.toFixed(2)} m, rockers tegengesteld max ${(dmax * 57.3).toFixed(1)}°, som max ${(smax * 57.3).toFixed(1)}°, rol romp max ${(rmax * 57.3).toFixed(1)}°`); }
 // 3D-lidar-presets: verdeeld over de omwenteling, tijd per punt, ringen; rozet verandert per scan
 for (const k of ["vlp16", "mid360"]) {
   const s = burger(), P = s.L3_PRESETS[k], st = {}; s.addBox(1.5, 0, 0, 1.0, 1.0); let scan = null, steps = 0;
