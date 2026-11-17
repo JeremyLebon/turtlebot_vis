@@ -209,7 +209,8 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
   caster… = zonder wrijving). Controle gebruikt `analyzeModel` en de laagste punten in de scène.
   Koppeling met de simulator: editor → sim via `BroadcastChannel("tb3sim")` {type:"urdf"} met `ack` terug; zonder
   antwoord binnen 0,8 s `localStorage tb3sim.fromEditor` + nieuw tabblad `index#editor-robot`. Sim → editor:
-  `tb3sim.toEditor` + `editor#from-sim` (knop Robot-editor openen). Test: `node tests/e2e_robot_editor.cjs [map]`
+  `tb3sim.toEditor` + `editor#from-sim` (knop Robot-editor in de titelbalk en onder Robot). In een iframe (artifact)
+  navigeren beide pagina's in hetzelfde kader i.p.v. een nieuw tabblad (`window.self !== window.top`). Test: `node tests/e2e_robot_editor.cjs [map]`
   (bouwt een robot, sleept met de muis aan de gizmo, rijdt de export in Rapier, stuurt naar een open sim).
 - **Opname:** samengesteld canvas (WebGL + HUD + camera + testpaneel + balk) via `captureStream`, of `getDisplayMedia`
   voor het hele scherm. `drawComposite()` direct na `renderer.render` (anders leeg WebGL-beeld).

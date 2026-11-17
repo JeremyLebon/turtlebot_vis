@@ -111,6 +111,23 @@ let fails = 0; const ok = (name, c, info = '') => { console.log(`${c ? '✓' : '
     ok('simulator opent de editor met #from-sim', /robot-editor\.html#from-sim$/.test(opened || ''), opened);
     const ed2 = await open('robot-editor.html', '#from-sim'); await wait(2500);
     ok('editor laadt de robot uit de simulator', /Uit de simulator/.test(await ed2.$eval('#msg', e => e.textContent)) && await ed2.evaluate(() => window.__edtest.M.name) === 'testbot');
+    // zoals in een artifact: beide pagina's in een iframe, navigatie in hetzelfde kader
+    const fr = await browser.newPage(); await fr.setRequestInterception(true);
+    fr.on('request', r => { const u = r.url();
+      if (u === 'http://sim.local/frame.html') return r.respond({ contentType: 'text/html', body: '<!doctype html><body style="margin:0"><iframe id="f" src="tb3-lite-sim-3d.html" style="width:1400px;height:860px;border:0"></iframe>' });
+      const loc = u.match(/^http:\/\/sim\.local\/([^?#]*)/); if (loc) { const f = path.join(DIST, loc[1]); return fs.existsSync(f) ? r.respond({ contentType: 'text/html', body: fs.readFileSync(f) }) : r.abort(); }
+      const m = u.match(/cdn\.jsdelivr\.net\/npm\/(@?[^@]+)@[^/]+\/(.*)$/);
+      if (m) { const f = path.join(NM, m[1], m[2]); if (fs.existsSync(f)) return r.respond({ contentType: 'application/javascript', body: fs.readFileSync(f) }); }
+      r.abort(); });
+    fr.on('pageerror', e => errs.push('frame PAGEERROR ' + e.message));
+    await fr.goto('http://sim.local/frame.html'); await wait(3500);
+    const frame = () => fr.frames().find(f => f !== fr.mainFrame());
+    await frame().evaluate(() => document.getElementById('editorLink').click()); await wait(3000);
+    ok('in een iframe: Robot-editor opent in hetzelfde kader', /robot-editor\.html#from-sim$/.test(frame().url()), frame().url());
+    await frame().evaluate(() => { const e = document.getElementById('robotName'); e.value = 'kaderbot'; e.dispatchEvent(new Event('change')); });
+    await frame().evaluate(() => document.getElementById('toSimBtn').click()); await wait(3500);
+    const fm = await frame().evaluate(() => document.getElementById('robotMsg') && document.getElementById('robotMsg').textContent);
+    ok('in een iframe: Testen in de simulator gaat terug met de robot', /tb3-lite-sim-3d\.html#editor-robot$/.test(frame().url()) && /robot-editor: kaderbot/.test(fm || ''), (fm || frame().url()).split('\n')[0]);
     ok('geen fouten in de pagina\'s', errs.length === 0, errs.slice(0, 3).join(' | '));
   } finally { await Promise.race([browser.close(), wait(5000)]); }
   console.log(fails ? `\n${fails} test(s) mislukt` : '\nAlle tests geslaagd'); process.exit(fails ? 1 : 0);
