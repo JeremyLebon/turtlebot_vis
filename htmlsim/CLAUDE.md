@@ -222,6 +222,13 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
   P-actie afgekapt op 0,05 rad ≈ koppelgrens; Rapier 0.14 heeft geen echte); vrije continuous joints: `<dynamics damping>`
   als viskeuze rem, `friction` ≈ extra demping (koppel bij 0,1 rad/s). Aandrijfwielen negeren effort/velocity (zoals de
   diff-drive-plugin van Gazebo). Zonder die tags verandert er niets aan bestaande robots.
+  Een link met eigen `mu` krijgt `CoefficientCombineRule.Min` (zoals Gazebo/ODE): anders middelt Rapier met de vloer (0,8) en
+  had µ = 0,05 op een wiel nauwelijks effect.
+- **Maan/Mars (werelden `moon`, `mars`):** wereld-JSON kent `gravity` (m/s², `GRAV` in core: wereld, IMU, veren) en `friction`
+  (bodem en rotsen). Terrein: `rough {amp, len, seed}` (waardenruis, 3 octaven) en `craters [{x, y, r, d, rim}]` (kom + rand).
+  Elementen `rock {x, y, r, flat, seed}` (convex hull uit 48 richtingen, deels ingegraven) en `rocks {n, area, rmin, rmax, seed,
+  keep}` (machtwet, keep = vrije cirkels: spawn, grote rotsen, ArUco). Beeld en collider delen `rockR()` (core.js). De 2D-lidar
+  ziet hellingen en kraterranden als obstakel, zoals in het echt.
 - **Opname:** samengesteld canvas (WebGL + HUD + camera + testpaneel + balk) via `captureStream`, of `getDisplayMedia`
   voor het hele scherm. `drawComposite()` direct na `renderer.render` (anders leeg WebGL-beeld).
   Enkel MP4/H.264 (`pickMime`, 07-11): Toledo speelt .webm niet af. Chrome/Edge ≥ 126 kunnen dat, Firefox en

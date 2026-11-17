@@ -88,6 +88,8 @@
           <option value="orchard">Boomgaard (29 × 25 m)</option>
           <option value="field">Akker, licht hellend (36 × 28 m)</option>
           <option value="hills">Heuvelland, hoogteverschillen (29 × 29 m)</option>
+          <option value="moon">Maanlandschap: kraters, rotsen, g = 1,62 (29 × 29 m)</option>
+          <option value="mars">Mars, krater Jezero: duinen, rotsen, g = 3,71 (29 × 29 m)</option>
           <option value="empty">Lege kamer (5 × 5 m)</option>
           <option value="custom" hidden>Eigen wereld</option></select></div>
         <div class="grid2"><label for="modelDetail">Objecten</label><select id="modelDetail" title="Mensen, auto's, meubels, bomen en maïs: echte 3D-modellen, of blokken en cilinders met dezelfde maten (lichter voor een trage laptop; de AI herkent ze dan niet)">
@@ -756,7 +758,7 @@ const movableMeshes = [];
 const matCache = new Map();
 const matFor = c => { if (!c) return M.wall; if (!matCache.has(c)) matCache.set(c, new THREE.MeshStandardMaterial({ color: new THREE.Color(c), roughness: 0.75 })); return matCache.get(c); };
 // terrein: vlak in stukken van ~0,5 m en elke hoek op de grondhoogte (lokaal → wereld met positie x, y en yaw)
-const terrSeg = (sx, sy) => sim.worldInfo.terrain ? [Math.max(1, Math.ceil(sx / 0.5)), Math.max(1, Math.ceil(sy / 0.5))] : [1, 1];
+const terrSeg = (sx, sy) => { const T = sim.worldInfo.terrain; if (!T) return [1, 1]; const r = Math.max(0.1, Math.min(0.5, T.res ?? 0.5)); return [Math.max(1, Math.ceil(sx / r)), Math.max(1, Math.ceil(sy / r))]; };
 function drape(g, x, y, yaw, dz) {
   if (!sim.worldInfo.terrain) { if (dz) g.translate(0, 0, dz); return g; }
   const P = g.attributes.position, c = Math.cos(yaw), sn = Math.sin(yaw);
@@ -799,6 +801,7 @@ function buildCrops(list, real) {
     mesh.castShadow = mesh.receiveShadow = true; mesh.userData.lab = "crops"; worldGroup.add(mesh);
   }
 }
+const rockMats = {};
 function buildWorldMeshes() {
   worldGroup.clear(); movableMeshes.length = 0; worldGen++;
   const real = $("modelDetail").value === "3d", trees = [];
@@ -817,6 +820,13 @@ function buildWorldMeshes() {
     if (s.kind === "box" || s.kind === "aruco") mesh = new THREE.Mesh(new THREE.BoxGeometry(s.size.x, s.size.y, s.size.z), matFor(s.color));
     if (s.kind === "cyl") { mesh = new THREE.Mesh(new THREE.CylinderGeometry(s.size.r, s.size.r, s.size.h, 32), matFor(s.color)); mesh.geometry.rotateX(Math.PI / 2); }
     if (s.kind === "ball") mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(s.size.r, 2), matFor(s.color));
+    if (s.kind === "rock") {                                  // zelfde vorm als de collider (rockR in core.js), hoekig belicht
+      const g = new THREE.IcosahedronGeometry(1, 2), P = g.attributes.position;
+      for (let i = 0; i < P.count; i++) { const x = P.getX(i), y = P.getY(i), z = P.getZ(i), k = s.size.r * rockR(x, y, z, s.size.seed); P.setXYZ(i, x * k, y * k, z * k * s.size.flat); }
+      g.computeVertexNormals();
+      const key = "rock:" + (s.color || ""); if (!rockMats[key]) { rockMats[key] = matFor(s.color).clone(); rockMats[key].flatShading = true; rockMats[key].roughness = 0.95; }
+      mesh = new THREE.Mesh(g, rockMats[key]);
+    }
     if (s.def?.opacity != null) { mesh.material = mesh.material.clone(); mesh.material.transparent = true; mesh.material.opacity = s.def.opacity; mesh.material.depthWrite = false; }
     const t = s.body.translation(), q = s.body.rotation();
     mesh.position.set(t.x, t.y, t.z); mesh.quaternion.set(q.x, q.y, q.z, q.w);

@@ -101,6 +101,23 @@ for (const k of Object.keys(M.ROBOT_PRESETS)) {        // robot-editor: elke ing
   ok("limit.velocity begrenst de arm (0,5 rad/s)", half > 0.15 && half < 0.3, `na 0,5 s: ${half.toFixed(3)} rad`);
   ok("limit.effort: sterke motor haalt het doel", Math.abs(strong - 0.5) < 0.03, `${strong.toFixed(3)} rad`);
   ok("limit.effort: te zwakke motor (5 N·m) zakt door", weak < 0.2, `${weak.toFixed(3)} rad`); }
+// ---- maan/Mars: zwaartekracht, terrein, rotsen; wrijving per link met de kleinste µ (zoals Gazebo) ----
+{ const s = M.createSim(R), w = s.loadWorld(M.WORLDS.moon), m = M.parseURDF(M.BURGER_URDF, DOMParser); s.buildRobot(m, M.analyzeModel(m).cfg, ...M.WORLDS.moon.spawn);
+  run(s, { v: 0, w: 0 }, 1); const acc = s.imu ? s.imu.acc.z : s.robot.imuAcc.z, rocks = s.statics.filter(o => o.kind === "rock").length;
+  ok("maan: g = 1,62 (IMU in rust), rotsen geplaatst", Math.abs(acc - 1.62) < 0.1 && rocks > 150, `acc z ${acc.toFixed(2)} m/s², ${rocks} rotsen`);
+  const z0 = s.groundZ(5, 3), rim = s.groundZ(5 + 2.2, 3);
+  ok("maan: krater is een kom met opstaande rand", z0 < -0.3 && rim > z0 + 0.3, `bodem ${z0.toFixed(2)} m, rand ${rim.toFixed(2)} m`);
+  run(s, { v: 0.2, w: 0 }, 3); const p = s.truthPose();
+  ok("Burger rijdt op de maan", Math.hypot(p.x, p.y) > 0.3, `${Math.hypot(p.x, p.y).toFixed(2)} m`); }
+for (const kind of ["rockerbogie"]) { const s = M.createSim(R); s.loadWorld(M.WORLDS.mars); const m = M.parseURDF(M.presetURDF(kind), DOMParser); s.buildRobot(m, M.analyzeModel(m).cfg, 0, 0, 0);
+  run(s, { v: 0.3, w: 0 }, 5); const p = s.truthPose(); ok(`rocker-bogie rijdt op Mars`, Math.hypot(p.x, p.y) > 0.8, `${Math.hypot(p.x, p.y).toFixed(2)} m`); }
+{ const slip = mu => { const s = M.createSim(R); s.loadWorld(M.WORLDS.empty); const m = M.parseURDF(M.BURGER_URDF, DOMParser);
+    if (mu != null) for (const l of ["wheel_left_link", "wheel_right_link"]) m.links[l].mu = mu;
+    s.buildRobot(m, M.analyzeModel(m).cfg, 0, 0, 0); run(s, { v: 0, w: 0 }, 0.3); s.params.wheelAcc = 6;
+    const wl = s.robot.byName.wheel_left_joint, a0 = wl.pos; run(s, { v: 0.22, w: 0 }, 0.5);
+    return (wl.pos - a0) * s.robot.cfg.wheelRadius / Math.max(1e-3, s.truthPose().x); };
+  const dflt = slip(null), ice = slip(0.03);
+  ok("wrijving µ = 0,03 op de wielen: wielen slippen (kleinste µ telt)", dflt < 1.1 && ice > 1.5, `wielweg/echte weg: standaard ${dflt.toFixed(2)}, µ 0,03: ${ice.toFixed(2)}`); }
 for (const k of Object.keys(M.WORLDS)) { const s = M.createSim(R); const wi = s.loadWorld(M.WORLDS[k]); const m = M.parseURDF(M.BURGER_URDF, DOMParser); s.buildRobot(m, M.analyzeModel(m).cfg, ...wi.spawn);
   s.LIDAR.rmax = 8;   // LDS-02-bereik: in de buitenwerelden staat binnen 3,5 m soms niets
   run(s, { v: 0.2, w: 0 }, 1); ok(`Wereld "${M.WORLDS[k].name}" laadt en scant`, s.scan("base_scan").pts.length > 60, `${s.statics.length} vaste objecten`);

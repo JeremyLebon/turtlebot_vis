@@ -35,6 +35,11 @@ Eigen versies, los daarvan:
   en heeft wrijving µ per link (`<gazebo><mu1>`) en per joint max koppel,
   max snelheid, demping en wrijving. De simulator gebruikt ze: µ per link,
   armen volgen `limit.velocity`/`limit.effort`, vrije joints `<dynamics>`.
+  Wrijving per link telt als de kleinste µ (zoals Gazebo), niet als gemiddelde
+  met de vloer: µ = 0,05 op de wielen laat ze nu echt slippen.
+- **Werelden Maanlandschap en Mars (krater Jezero):** ruw terrein, kraters,
+  rotsen (botsen en zichtbaar voor lidar/camera), zwaartekracht 1,62 en
+  3,71 m/s² en bodemwrijving per wereld (`gravity`, `friction` in de wereld-JSON).
   Op htmlsim-next ook: 4 wielen (skid), mecanum, auto-onderstel (Ackermann),
   vering per wiel (veerstijfheid/demping), de ingebouwde robots als
   startpunt, en de controle toont het aandrijftype.
