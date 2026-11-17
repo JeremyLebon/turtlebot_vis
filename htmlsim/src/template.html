@@ -21,6 +21,7 @@
 <header class="bar">
   <div class="brand"><span class="name">TurtleBot Sim</span><span class="ver" title="Versie en datum van de laatste update van de simulator">v__VERSIE__ · __DATUM__</span></div>
   <button class="ghost" id="memLink" type="button" hidden title="Geheugen van WSL en de container, met de knop Cache vrijmaken (opent in een nieuw tabblad, de simulatie loopt door)">Geheugen</button>
+  <button class="ghost" id="editorLink" type="button" title="Robot bouwen of aanpassen in de robot-editor (neemt de huidige robot mee)">Robot-editor</button>
   <button class="ghost" id="fenixLink" type="button" hidden title="Statuspagina van de virtuele robot: SLAM, kaarten, zones en Navigatie, zoals op de echte robot (nieuw tabblad, de simulatie loopt door)">Fenix-pagina</button>
   <button class="ghost" id="dlProject" hidden title="Broncode, build-script, tests en docentscript voor Claude Code">Project downloaden (.zip)</button>
   <button class="ghost" id="panelToggle" type="button" aria-controls="sidePanel" aria-expanded="true" title="Zijbalk verbergen: meer plaats voor de 3D-wereld (nog eens klikken = terug)">Zijbalk ⇥</button>
@@ -2014,9 +2015,11 @@ function openEditor() {
   let urdf = ED.text;
   try { const { edits } = edChanges(); urdf = patchURDF(ED.text, edits, ED.added.map(a => ({ ...a, origin: model.joints.find(j => j.name === a.joint).origin })), DOMParser, XMLSerializer); } catch {}
   try { localStorage.setItem("tb3sim.toEditor", JSON.stringify({ urdf, t: Date.now() })); } catch {}
+  // In een artifact (iframe) werken nieuwe tabbladen niet betrouwbaar: dan in hetzelfde kader naar de editor.
+  if (window.self !== window.top) { location.href = "__EDITOR_URL__#from-sim"; return; }
   const a = document.createElement("a"); a.href = "__EDITOR_URL__#from-sim"; a.target = "_blank"; document.body.appendChild(a); a.click(); a.remove();
 }
-$("openEditor").onclick = $("edOpenFull").onclick = openEditor;
+$("openEditor").onclick = $("edOpenFull").onclick = $("editorLink").onclick = openEditor;
 let edChan = null; try { edChan = new BroadcastChannel("tb3sim"); } catch {}
 if (edChan) edChan.onmessage = e => {
   if (!e.data || e.data.type !== "urdf") return;

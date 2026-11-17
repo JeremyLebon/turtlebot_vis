@@ -522,9 +522,12 @@ $("showUrdf").onclick = () => { const t = $("urdfOut"); t.hidden = !t.hidden; $(
 $("copyBtn").onclick = async () => { try { await navigator.clipboard.writeText(exportText()); msg("URDF gekopieerd."); } catch { $("urdfOut").hidden = false; $("urdfOut").value = exportText(); $("urdfOut").select(); msg("Selecteer en kopieer de tekst."); } };
 let simAck = 0;
 if (bc) bc.onmessage = e => { if (e.data && e.data.type === "ack") simAck = Date.now(); };
+const inFrame = window.self !== window.top;          // artifact: alles in hetzelfde kader, geen nieuwe tabbladen
+$("backSim").onclick = () => { if (inFrame) location.href = SIM_URL; else { const a = document.createElement("a"); a.href = SIM_URL; a.target = "_blank"; document.body.appendChild(a); a.click(); a.remove(); } };
 $("toSimBtn").onclick = () => {
   const urdf = exportText(), t = Date.now();
   store.set(KEY_TO_SIM, JSON.stringify({ urdf, t, name: M.name }));
+  if (inFrame) { location.href = SIM_URL + "#editor-robot"; return; }
   if (bc) bc.postMessage({ type: "urdf", urdf, t });
   let tries = 0;
   const check = () => {
