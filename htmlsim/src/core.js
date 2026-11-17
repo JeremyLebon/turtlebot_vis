@@ -103,6 +103,15 @@ function parseURDF(text, DOMParserImpl) {
       limit: lim ? { lower: +(lim.getAttribute("lower") || 0), upper: +(lim.getAttribute("upper") || 0),
         velocity: +(lim.getAttribute("velocity") || 0), effort: +(lim.getAttribute("effort") || 0) } : null };
   });
+  // <dynamics damping friction> van elke joint; Gazebo-wrijving per link (<gazebo reference><mu1>/<mu2>)
+  kids(robotEl, "joint").forEach((je, i) => {
+    const d = kid(je, "dynamics"), n = k => d && d.getAttribute(k) != null ? +d.getAttribute(k) : undefined;
+    if (d) { joints[i].damping = n("damping"); joints[i].friction = n("friction"); }
+  });
+  for (const g of kids(robotEl, "gazebo")) {
+    const L = links[g.getAttribute("reference")], t = k => { const e = kid(g, k); return e ? +e.textContent : undefined; };
+    if (L && t("mu1") != null) { L.mu = t("mu1"); L.mu2 = t("mu2") ?? L.mu; }
+  }
   const children = new Set(joints.map(j => j.child));
   const roots = Object.keys(links).filter(n => !children.has(n));
   if (roots.length !== 1) throw new Error("De URDF moet precies één rootlink hebben (gevonden: " + roots.join(", ") + ")");
@@ -168,11 +177,29 @@ function inertiaOf(g, m) {
   if (g.type === "sphere") { const a = 0.4 * m * g.radius * g.radius; return { xx: a, yy: a, zz: a }; }
   return { xx: m * 1e-3, yy: m * 1e-3, zz: m * 1e-3 };
 }
+const shapeVolume = g => g.type === "box" ? g.size[0] * g.size[1] * g.size[2] : g.type === "cylinder" ? Math.PI * g.radius * g.radius * g.length
+  : g.type === "sphere" ? 4 / 3 * Math.PI * g.radius ** 3 : 0;
+function combinedInertia(shapes, mass) {         // [{origin, geom}] → { origin (zwaartepunt, geen rotatie), I (volledig, t.o.v. linkassen) }
+  if (!shapes.length || !(mass > 0)) return { origin: T0(), I: { xx: 1e-5, yy: 1e-5, zz: 1e-5, xy: 0, xz: 0, yz: 0 } };
+  const vols = shapes.map(e => shapeVolume(e.geom)), tot = vols.reduce((a, v) => a + v, 0);
+  const ms = vols.map(v => tot > 0 ? mass * v / tot : mass / shapes.length);
+  let c = V(); shapes.forEach((e, i) => { c = vadd(c, vscale(e.origin.p, ms[i])); }); c = vscale(c, 1 / mass);
+  const T = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  shapes.forEach((e, i) => {
+    const Il = inertiaOf(e.geom, ms[i]), R = [qrot(e.origin.q, V(1, 0, 0)), qrot(e.origin.q, V(0, 1, 0)), qrot(e.origin.q, V(0, 0, 1))].map(v => [v.x, v.y, v.z]);
+    const D = [Il.xx, Il.yy, Il.zz], d = vsub(e.origin.p, c), dv = [d.x, d.y, d.z], d2 = vdot(d, d);
+    for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) {
+      let r = 0; for (let k = 0; k < 3; k++) r += R[k][a] * D[k] * R[k][b];     // R·diag·Rᵀ (kolommen = assen van de vorm)
+      T[a][b] += r + ms[i] * ((a === b ? d2 : 0) - dv[a] * dv[b]);
+    }
+  });
+  const z = v => Math.abs(v) < 1e-12 ? 0 : v;
+  return { origin: { p: c, q: Q0() }, I: { xx: T[0][0], yy: T[1][1], zz: T[2][2], xy: z(T[0][1]), xz: z(T[0][2]), yz: z(T[1][2]) } };
+}
 function autoInertial(link) {
   const ie = link.inertial; if (!ie || !ie.auto) return ie;
-  const src = link.collisions[0] || link.visuals[0], I = inertiaOf(src && src.geom, ie.mass);
-  ie.origin = src ? { p: { ...src.origin.p }, q: src.origin.q } : T0();
-  ie.I = { xx: I.xx, yy: I.yy, zz: I.zz, xy: 0, xz: 0, yz: 0 };
+  const r = combinedInertia(link.collisions.length ? link.collisions : link.visuals, ie.mass);
+  ie.origin = r.origin; ie.I = r.I;
   return ie;
 }
 function toURDF(model, extras = []) {
@@ -201,8 +228,11 @@ function toURDF(model, extras = []) {
       if (j.type !== "fixed") out.push(`    <axis xyz="${[j.axis.x, j.axis.y, j.axis.z].map(fmtN).join(" ")}"/>`);
       if (j.type === "revolute" || j.type === "prismatic") { const L = j.limit || { lower: -1.57, upper: 1.57, effort: 10, velocity: 1 };
         out.push(`    <limit lower="${fmtN(L.lower)}" upper="${fmtN(L.upper)}" effort="${fmtN(L.effort || 10)}" velocity="${fmtN(L.velocity || 1)}"/>`); }
-      if (j.springK != null || j.springC != null)   // vering: zoals sdformat/Gazebo het uit een URDF leest
-        out.push(`    <dynamics${j.springC != null ? ` damping="${fmtN(j.springC)}"` : ""}${j.springK != null ? ` spring_stiffness="${fmtN(j.springK)}"` : ""}/>`);
+      if (j.type === "continuous" && j.limit && (j.limit.effort > 0 || j.limit.velocity > 0))
+        out.push(`    <limit effort="${fmtN(j.limit.effort || 0)}" velocity="${fmtN(j.limit.velocity || 0)}"/>`);
+      const dmp = j.springC !== undefined ? j.springC : j.damping;   // vering (next): damping = demper van de veer
+      if (dmp != null || j.friction != null || j.springK != null)    // zoals sdformat/Gazebo het uit een URDF leest
+        out.push(`    <dynamics${dmp != null ? ` damping="${fmtN(dmp)}"` : ""}${j.friction != null ? ` friction="${fmtN(j.friction)}"` : ""}${j.springK != null ? ` spring_stiffness="${fmtN(j.springK)}"` : ""}/>`);
       out.push(`  </joint>`);
     }
     const l = model.links[ln], ie = autoInertial(l), body = [];
@@ -218,6 +248,7 @@ function toURDF(model, extras = []) {
     for (const c of l.collisions) { body.push(`    <collision>`); const o = org(c.origin, "      "); if (o) body.push(o.trimEnd()); body.push(geo(c.geom, "      ").trimEnd(), `    </collision>`); }
     out.push(body.length ? `  <link name="${esc(ln)}">\n${body.join("\n")}\n  </link>` : `  <link name="${esc(ln)}"/>`);
   }
+  for (const ln of order) { const l = model.links[ln]; if (l.mu != null) out.push(`  <gazebo reference="${esc(ln)}"><mu1>${fmtN(l.mu)}</mu1><mu2>${fmtN(l.mu2 ?? l.mu)}</mu2></gazebo>`); }
   for (const x of extras) out.push("  " + x.trim());
   out.push(`</robot>`, "");
   return out.join("\n");
@@ -593,7 +624,7 @@ function createSim(R) {
           const cd = colliderDesc(c.geom, isWheel); if (!cd) continue;
           const Tc = tmul(linkOff[ln], c.origin);
           cd.setTranslation(Tc.p.x, Tc.p.y, Tc.p.z).setRotation(qmul(Tc.q, shapeRot(c.geom, isWheel))).setDensity(0)
-            .setFriction(caster || (isWheel && mecanum) ? 0 : isWheel ? 1.0 : 0.4).setCollisionGroups(G_ROBOT);
+            .setFriction(isWheel && mecanum ? 0 : model.links[ln].mu ?? (caster || (isWheel && mecanum) ? 0 : isWheel ? 1.0 : 0.4)).setCollisionGroups(G_ROBOT);
           if (caster || (isWheel && mecanum)) cd.setFrictionCombineRule(R.CoefficientCombineRule.Min);   // mecanum: het lichaam wordt aangestuurd
           colls.push({ ln, c, isWheel, coll: world.createCollider(cd, rb) });
         }
@@ -622,6 +653,7 @@ function createSim(R) {
       if (role !== "passive") ij.configureMotorModel(role === "steer" || role === "spring" || role === "rocker" ? R.MotorModel.ForceBased : R.MotorModel.AccelerationBased);
       joints.push({ j, ij, b1, b2, a1, a2, axis, role, lim, pos: 0, vel: 0, target: lim ? Math.min(Math.max(0, lim.lower), lim.upper) : 0,
         sign: role === "wheel" ? Math.sign(axis.y) : 1 });
+      jointDyn(joints[joints.length - 1]);
     }
     // veren: zakken 3 cm in onder het eigen gewicht, demping 60 % van kritisch (k en c per veer, in N/m en N·s/m)
     const springs = joints.filter(o => o.role === "spring");
@@ -634,7 +666,7 @@ function createSim(R) {
       byName: Object.fromEntries(joints.map(o => [o.j.name, o])), prevV: V(), imuAcc: V(0, 0, 9.81) };
     // 0,5 s laten uitzakken met stilstaande motoren, zodat odometrie niet start met een sprongetje
     for (let i = 0; i < 100; i++) {
-      for (const o of joints) { if (o.role === "wheel") o.ij.configureMotorVelocity(0, 500); else if (o.role === "position") o.ij.configureMotorPosition(o.target, 20000, 300); else if (o.role === "steer") o.ij.configureMotorPosition(0, STEER_K, STEER_D); }
+      for (const o of joints) { if (o.role === "wheel") o.ij.configureMotorVelocity(0, 500); else if (o.role === "position") posMotor(o, 0); else if (o.role === "steer") o.ij.configureMotorPosition(0, STEER_K, STEER_D); }
       rockerDiff(); world.step();
     }
     for (const o of joints) { measureJoint(o); if (o.j.type === "continuous") o.pos = 0; }
@@ -650,6 +682,32 @@ function createSim(R) {
   function resetOdom() { Object.assign(odom, { x: 0, y: 0, th: 0, v: 0, w: 0 }); if (robot) { robot.odomRef = bodyT(robot.rootBody); for (const o of robot.joints) if (o.j.type === "continuous") o.pos = 0; } }
 
   function bodyT(B) { const t = B.rb.translation(), q = B.rb.rotation(); return { p: V(t.x, t.y, t.z), q: { x: q.x, y: q.y, z: q.z, w: q.w } }; }
+  /* ---- jointdynamica uit de URDF, zoals Gazebo met ros2_control ----
+     Positiegestuurde joints (armen): limit.velocity begrenst hoe snel het doel verschuift, limit.effort maakt van de
+     motor een veer met koppel = effort bij EFF_ERR achterstand (de P-actie wordt daarop afgekapt: een benadering van
+     een koppelgrens, Rapier 0.14 heeft er geen). Vrije joints: <dynamics damping> (N·m·s/rad) als viskeuze rem,
+     friction (N·m) benaderd als extra demping die bij 0,1 rad/s dat koppel geeft. Wielen volgen de rijregeling
+     (vmax, versnelling), zoals de diff-drive-plugin van Gazebo ook effort/velocity van de wieljoints negeert. */
+  const EFF_ERR = 0.05;
+  function jointDyn(o) {
+    const L = o.j.limit, d = o.j.damping || 0, f = o.j.friction || 0;
+    o.vlim = o.role === "position" && L && L.velocity > 0 ? L.velocity : 0;
+    o.effort = o.role === "position" && L && L.effort > 0 ? L.effort : 0;
+    if (o.effort) o.ij.configureMotorModel(R.MotorModel.ForceBased);
+    if (o.role === "passive" && (d > 0 || f > 0)) { o.ij.configureMotorModel(R.MotorModel.ForceBased); o.ij.configureMotorVelocity(0, d + f / 0.1); }
+  }
+  function posMotor(o, dt) {
+    if (o.cur == null) o.cur = o.target;
+    o.cur = o.vlim ? o.cur + Math.max(-o.vlim * dt, Math.min(o.vlim * dt, o.target - o.cur)) : o.target;
+    if (o.effort) {
+      const k = o.effort / EFF_ERR, c = o.effort / Math.max(0.5, o.vlim || 2), e = Math.max(-EFF_ERR, Math.min(EFF_ERR, o.cur - o.pos));
+      o.ij.configureMotorPosition(o.pos + e, k, c); return;
+    }
+    // PD-motor van Rapier + integrerende term tegen doorzakken onder zwaartekracht
+    o.integ = Math.max(-0.5, Math.min(0.5, (o.integ || 0) + (o.cur - o.pos) * dt));
+    o.ij.configureMotorPosition(o.cur + 8 * o.integ, 20000, 300);
+  }
+
   function linkWorld(ln) { return tmul(bodyT(robot.bodies[robot.bodyOf[ln]]), robot.linkOff[ln]); }
 
   /* ---- robot-editor: vaste joint (sensorframe) live verplaatsen, zonder herbouw ----
@@ -729,9 +787,7 @@ function createSim(R) {
         else if (Math.abs(want - o.cmdW) < 1e-9) o.wInt = Math.max(-3, Math.min(3, (o.wInt || 0) + (o.cmdW - o.sign * o.vel) * DT));
         o.ij.configureMotorVelocity(o.sign * (o.cmdW + 4 * (o.wInt || 0)), 500);
       } else if (o.role === "position") {
-        // PD-motor van Rapier + integrerende term tegen doorzakken onder zwaartekracht
-        o.integ = Math.max(-0.5, Math.min(0.5, (o.integ || 0) + (o.target - o.pos) * DT));
-        o.ij.configureMotorPosition(o.target + 8 * o.integ, 20000, 300);
+        posMotor(o, DT);
       }
     }
     rockerDiff();

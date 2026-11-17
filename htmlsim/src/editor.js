@@ -97,10 +97,24 @@ function buildScene() {
     });
     if ($("showColl").checked) L.collisions.forEach(c => { const o = shapeMesh(c, MAT.coll); o.traverse(m => { m.castShadow = false; m.renderOrder = 5; m.raycast = () => {}; }); motion.add(o); n.coll.push(o); });
     if ($("showFrames").checked) { n.axes = new THREE.AxesHelper(ln === sel ? 0.07 : 0.03); n.axes.material.depthTest = false; n.axes.renderOrder = 8; motion.add(n.axes); }
+    if (ln === sel && L.inertial && L.inertial.mass > 0) {   // zwaartepunt van de geselecteerde link
+      const c = L.inertial.auto ? combinedInertia(L.collisions.length ? L.collisions : L.visuals, L.inertial.mass).origin.p : (L.inertial.origin || T0()).p;
+      const b = new THREE.Mesh(new THREE.SphereGeometry(0.006, 16, 10), new THREE.MeshBasicMaterial({ color: 0xd63384, depthTest: false }));
+      b.position.set(c.x, c.y, c.z); b.renderOrder = 12; b.raycast = () => {}; motion.add(b);
+    }
     for (const k of kids[ln] || []) add(k.child, motion, k);
   };
   add(M.root, robotRoot, null);
   groundRobot();
+}
+function robotCOM() {                              // zwaartepunt van de hele robot (wereldcoördinaten van de scène)
+  robotRoot.updateMatrixWorld(true); let m = 0; const c = new THREE.Vector3();
+  for (const [ln, n] of Object.entries(nodes)) {
+    const L = M.links[ln], ie = L.inertial; if (!ie || !(ie.mass > 0)) continue;
+    const o = ie.auto ? combinedInertia(L.collisions.length ? L.collisions : L.visuals, ie.mass).origin.p : (ie.origin || T0()).p;
+    c.add(new THREE.Vector3(o.x, o.y, o.z).applyMatrix4(n.motion.matrixWorld).multiplyScalar(ie.mass)); m += ie.mass;
+  }
+  return m > 0 ? { m, c: c.divideScalar(m) } : null;
 }
 function groundRobot() {                            // laagste punt op de vloer (enkel voor de weergave)
   robotRoot.position.z = 0; robotRoot.updateMatrixWorld(true);
@@ -381,6 +395,13 @@ function showProps(liveOnly) {
       if (j.type === "prismatic" && /suspension|shock|spring/i.test(j.name))
         h.push(`<label for="pK">Veer N/m</label>${num("pK", j.springK ?? "", 50, 'placeholder="auto"')}<label for="pC">Demper</label>${num("pC", j.springC ?? "", 5, 'placeholder="auto"')}`);
       const pr = j.type === "prismatic", lo = j.type === "continuous" ? -Math.PI : (j.limit ? j.limit.lower : -1), hi = j.type === "continuous" ? Math.PI : (j.limit ? j.limit.upper : 1);
+      {
+        const pr = j.type === "prismatic", Lm = j.limit || {}, wheel = j.type === "continuous" && /wheel|wiel/i.test(j.name + j.child);
+        h.push(`<label for="pEff">Max ${pr ? "kracht N" : "koppel N·m"}</label>${num("pEff", Lm.effort || "", "any", 'min="0" placeholder="geen"')}<label for="pVel">Max ${pr ? "m/s" : "rad/s"}</label>${num("pVel", Lm.velocity || "", "any", 'min="0" placeholder="geen"')}`);
+        if (!(j.type === "prismatic" && /suspension|shock|spring/i.test(j.name)))
+          h.push(`<label for="pDmp">Demping</label>${num("pDmp", j.damping ?? "", "any", `min="0" placeholder="0"`)}<label for="pFri">Wrijving</label>${num("pFri", j.friction ?? "", "any", 'min="0" placeholder="0"')}`);
+        h.push(`<span class="hint" style="grid-column:1/-1">${wheel ? "Aandrijfwiel: snelheid en versnelling komen uit de rijregeling (zoals de diff-drive-plugin van Gazebo); deze waarden gaan wel mee in de URDF." : j.type === "continuous" ? "Vrij draaiend: demping (N·m·s/rad) en wrijving (N·m) remmen in de simulator." : "Simulator: max snelheid begrenst de beweging, max koppel maakt de motor zo sterk (een te zwakke motor zakt door)."}</span>`);
+      }
       h.push(`<label for="pPrev">Testen</label><input class="full" type="range" id="pPrev" min="${lo}" max="${hi}" step="${pr ? 0.001 : 0.01}" value="${preview[j.name] || 0}">`);
     }
     const rpy = rpyOf(j.origin.q);
@@ -405,9 +426,20 @@ function showProps(liveOnly) {
       `<label for="vCol">Kleur</label><input type="color" id="vCol" value="${col}"><label class="chk" style="grid-column:3/5"><input type="checkbox" id="vColl" ${L.collisions[selVis] && sameShape(L.collisions[selVis], v) ? "checked" : ""}> botst (collision)</label>`);
   }
   h.push(`<div class="row full" style="grid-column:1/-1"><button class="ghost" id="vAdd">Vorm erbij</button>${v ? `<button class="ghost" id="vDel">Vorm weg</button>` : ""}</div>`);
-  // massa
-  const ie = L.inertial;
-  h.push(`<p class="psub">Massa</p><label for="mKg">kg</label>${num("mKg", ie ? ie.mass : 0, 0.01, 'min="0"')}<span class="hint" style="grid-column:3/5">${ie && !ie.auto ? "inertia uit de URDF" : "inertia automatisch uit de vorm"}</span>`);
+  // massa, inertie, wrijving
+  const ie = L.inertial, f5 = v => +(+v).toPrecision(4);
+  h.push(`<p class="psub">Massa en inertie</p><label for="mKg">kg</label>${num("mKg", ie ? ie.mass : 0, 0.01, 'min="0"')}`);
+  if (ie && ie.mass > 0) {
+    h.push(`<label for="mMode">Inertie</label><select id="mMode"><option value="auto" ${ie.auto ? "selected" : ""}>automatisch</option><option value="man" ${!ie.auto ? "selected" : ""}>handmatig</option></select>`);
+    const cur = ie.auto ? combinedInertia(L.collisions.length ? L.collisions : L.visuals, ie.mass) : ie;
+    if (ie.auto) h.push(`<span class="hint full" style="grid-column:1/-1">Uit ${L.collisions.length ? "de collisions" : "de vormen"} samen (massa volgens volume): zwaartepunt ${["x", "y", "z"].map(k => r1(cur.origin.p[k] * 1000)).join(" / ")} mm · ixx ${f5(cur.I.xx)} · iyy ${f5(cur.I.yy)} · izz ${f5(cur.I.zz)} kg·m²</span>`);
+    else h.push(`<label for="cX">zw. x mm</label>${num("cX", r1(cur.origin.p.x * 1000))}<label for="iXX">ixx</label>${num("iXX", f5(cur.I.xx), "any")}`,
+      `<label for="cY">zw. y mm</label>${num("cY", r1(cur.origin.p.y * 1000))}<label for="iYY">iyy</label>${num("iYY", f5(cur.I.yy), "any")}`,
+      `<label for="cZ">zw. z mm</label>${num("cZ", r1(cur.origin.p.z * 1000))}<label for="iZZ">izz</label>${num("iZZ", f5(cur.I.zz), "any")}`,
+      `<span class="hint" style="grid-column:1/-1">kg·m², t.o.v. het zwaartepunt; ixy/ixz/iyz blijven ${cur.I.xy || cur.I.xz || cur.I.yz ? "zoals ze waren" : "0"} (de simulator gebruikt enkel de diagonaal)</span>`);
+  }
+  const muDef = /caster/i.test(L.name) ? 0 : (j && j.type === "continuous" ? 1.0 : 0.4);
+  h.push(`<label for="mMu">Wrijving µ</label>${num("mMu", L.mu ?? "", 0.05, `min="0" placeholder="auto"`)}<span class="hint" style="grid-column:3/5">${L.mu != null ? "→ &lt;gazebo&gt;&lt;mu1&gt;" : "leeg: wiel 1,0 · zwenkwiel 0 · rest 0,4"}</span>`);
   h.push(`</div>`);
   h.push(`<div class="row">${j ? `<button class="ghost" id="aDup">Kopiëren</button><button class="ghost" id="aMir">Spiegelen L↔R</button><button class="ghost" id="aDel">Verwijderen</button>` : `<span class="hint">Rootlink: ligt vast in de oorsprong.</span>`}</div>`);
   $("props").innerHTML = h.join("");
@@ -425,6 +457,13 @@ function showProps(liveOnly) {
     if ($("pAxis")) $("pAxis").onchange = () => { const [x, y, z] = $("pAxis").value.split(" ").map(Number); j.axis = V(x, y, z); commit(); };
     if ($("pLo")) $("pLo").onchange = $("pHi").onchange = () => { const f = j.type === "prismatic" ? 1000 : R2D; j.limit = { ...(j.limit || { effort: 10, velocity: 1 }), lower: val("pLo") / f, upper: val("pHi") / f }; commit(); };
     if ($("pK")) $("pK").onchange = $("pC").onchange = () => { const k = $("pK").value, c = $("pC").value; j.springK = k === "" ? undefined : +k; j.springC = c === "" ? undefined : +c; commit(); };
+    if ($("pEff")) $("pEff").onchange = $("pVel").onchange = () => {
+      const e = $("pEff").value === "" ? 0 : Math.max(0, +$("pEff").value), v = $("pVel").value === "" ? 0 : Math.max(0, +$("pVel").value);
+      j.limit = { lower: 0, upper: 0, ...(j.limit || {}), effort: e, velocity: v }; commit();
+    };
+    if ($("pDmp")) $("pDmp").onchange = $("pFri").onchange = () => {
+      const d = $("pDmp").value, f = $("pFri").value; j.damping = d === "" ? undefined : Math.max(0, +d); j.friction = f === "" ? undefined : Math.max(0, +f); commit();
+    };
     if ($("pPrev")) $("pPrev").oninput = () => { preview[j.name] = +$("pPrev").value; buildScene(); attachGizmo(); updateSelBox(); };
     ["pX", "pY", "pZ", "pR", "pP", "pW"].forEach(id => { $(id).onchange = () => { j.origin = { p: V(val("pX") / 1000, val("pY") / 1000, val("pZ") / 1000), q: qrpy(val("pR") * D2R, val("pP") * D2R, val("pW") * D2R) }; commit(); }; });
     $("aDup").onclick = () => copySubtree(L.name, false); $("aMir").onclick = () => copySubtree(L.name, true); $("aDel").onclick = () => removeLink(L.name);
@@ -450,7 +489,23 @@ function showProps(liveOnly) {
     $("vDel").onclick = () => { L.visuals.splice(selVis, 1); if (c() && L.collisions.length > L.visuals.length) L.collisions.splice(selVis, 1); selVis = 0; commit(); };
   }
   $("vAdd").onclick = () => { const s = shape({ type: "box", size: [0.04, 0.04, 0.04] }, T(0, 0, 0.02), GREY); L.visuals.push(s); L.collisions.push({ origin: clone(s.origin), geom: clone(s.geom) }); selVis = L.visuals.length - 1; $("shapeOnly").checked = true; commit(); };
-  $("mKg").onchange = () => { const m = val("mKg"); L.inertial = m > 0 ? { ...(L.inertial || {}), mass: m, auto: L.inertial ? L.inertial.auto !== false : true } : null; commit(); };
+  $("mKg").onchange = () => {
+    const m = val("mKg"), old = L.inertial;
+    if (!(m > 0)) L.inertial = null;
+    else if (old && !old.auto && old.I && old.mass > 0) {   // handmatig/uit de URDF: inertie mee schalen met de massa
+      const f = m / old.mass; L.inertial = { ...old, mass: m, I: Object.fromEntries(Object.entries(old.I).map(([k, v]) => [k, v * f])) };
+    } else L.inertial = { ...(old || {}), mass: m, auto: old ? old.auto !== false : true };
+    commit();
+  };
+  if ($("mMode")) $("mMode").onchange = () => {
+    if ($("mMode").value === "auto") L.inertial = { mass: L.inertial.mass, auto: true };
+    else { const c = combinedInertia(L.collisions.length ? L.collisions : L.visuals, L.inertial.mass); L.inertial = { mass: L.inertial.mass, auto: false, origin: L.inertial.origin && !L.inertial.auto ? L.inertial.origin : c.origin, I: L.inertial.I && !L.inertial.auto ? L.inertial.I : c.I }; }
+    commit();
+  };
+  if ($("cX")) ["cX", "cY", "cZ", "iXX", "iYY", "iZZ"].forEach(id => { $(id).onchange = () => {
+    const ie2 = L.inertial; ie2.origin = { p: V(val("cX") / 1000, val("cY") / 1000, val("cZ") / 1000), q: ie2.origin ? ie2.origin.q : Q0() };
+    ie2.I = { ...(ie2.I || {}), xx: Math.max(0, val("iXX")), yy: Math.max(0, val("iYY")), zz: Math.max(0, val("iZZ")) }; commit(); }; });
+  $("mMu").onchange = () => { const v = $("mMu").value; if (v === "") { delete L.mu; delete L.mu2; } else { L.mu = Math.max(0, +v); L.mu2 = L.mu; } commit(); };
 }
 
 /* ---------- controle ---------- */
@@ -485,6 +540,8 @@ function runChecks() {
     const up = new THREE.Vector3(0, 0, 1).applyQuaternion(nodes[cfg.lidar].motion.getWorldQuaternion(new THREE.Quaternion()));
     if (up.z < 0.999) add("warn", `Scanvlak van de lidar helt ${r1(Math.acos(Math.min(1, Math.abs(up.z))) * R2D)}°.`, cfg.lidar);
   } else add("info", "Geen 2D-lidar: SLAM en Nav2 hebben er een nodig (link met lidar, laser of scan in de naam).");
+  const com = robotCOM();
+  if (com) add("info", `Totale massa ${r2(com.m)} kg · zwaartepunt x ${r1(com.c.x * 1000)} · y ${r1(com.c.y * 1000)} · z ${r1(com.c.z * 1000)} mm (boven de vloer).`);
   if (cfg.camera) add("ok", `Camera ${cfg.camera}.`); if (cfg.imu) add("ok", `IMU ${cfg.imu}.`);
   for (const [ln, L] of Object.entries(M.links)) if (L.collisions.length && !(L.inertial && L.inertial.mass > 0) && jointOf(ln) && jointOf(ln).type !== "fixed") add("warn", `${ln} beweegt maar heeft geen massa.`, ln);
   if (!M.links.base_link) add("info", "Geen base_link: Nav2 en de meeste ROS-pakketten verwachten base_link (en base_footprint).");
@@ -510,7 +567,13 @@ async function loadText(text, label) {
   try {
     const m = parseURDF(text, DOMParser);
     const doc = new DOMParser().parseFromString(preXacro(text), "text/xml"), robotEl = doc.getElementsByTagName("robot")[0], ser = new XMLSerializer();
-    const ex = Array.from(robotEl.childNodes).filter(n => n.nodeType === 1 && !["link", "joint", "material"].includes(n.nodeName)).map(n => ser.serializeToString(n));
+    const ex = Array.from(robotEl.childNodes).filter(n => n.nodeType === 1 && !["link", "joint", "material"].includes(n.nodeName)).map(n => {
+      if (n.nodeName === "gazebo" && n.getAttribute("reference")) {   // mu1/mu2 staan in het model (parseURDF), niet dubbel bewaren
+        for (const c of Array.from(n.childNodes)) if (c.nodeType === 1 && /^mu[12]$/.test(c.nodeName)) n.removeChild(c);
+        if (!Array.from(n.childNodes).some(c => c.nodeType === 1)) return null;
+      }
+      return ser.serializeToString(n);
+    }).filter(Boolean);
     const want = new Set(); for (const l of Object.values(m.links)) for (const e of [...l.visuals, ...l.collisions]) if (e.geom.type === "mesh") want.add(e.geom.filename);
     let miss = 0; for (const f of want) if (!(await loadMesh(f))) miss++;
     setModel(m, ex, `${label}: ${Object.keys(m.links).length} links${want.size ? `, ${want.size - miss}/${want.size} meshes` : ""}${ex.length ? `, ${ex.length} extra blok(ken) (gazebo, ros2_control…) blijven behouden` : ""}.`);
