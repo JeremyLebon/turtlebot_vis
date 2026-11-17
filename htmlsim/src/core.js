@@ -17,6 +17,10 @@ function qrot(q, v) { const r = qmul(qmul(q, { x: v.x, y: v.y, z: v.z, w: 0 }), 
 const qaxis = (ax, a) => { const s = Math.sin(a / 2), n = vnorm(ax); return { x: n.x * s, y: n.y * s, z: n.z * s, w: Math.cos(a / 2) }; };
 const qyaw = a => qaxis(V(0, 0, 1), a);
 function qrpy(r, p, y) { return qmul(qyaw(y), qmul(qaxis(V(0, 1, 0), p), qaxis(V(1, 0, 0), r))); }   // URDF: Rz·Ry·Rx
+function rpyOf(q) {                                     // inverse van qrpy: [roll, pitch, yaw] zoals in <origin rpy>
+  const sp = 2 * (q.w * q.y - q.z * q.x), p = Math.abs(sp) >= 1 ? Math.sign(sp) * Math.PI / 2 : Math.asin(sp);
+  return [Math.atan2(2 * (q.w * q.x + q.y * q.z), 1 - 2 * (q.x * q.x + q.y * q.y)), p, Math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z))];
+}
 const yawOf = q => Math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z));
 const T0 = () => ({ p: V(), q: Q0() });
 const tmul = (a, b) => ({ p: vadd(a.p, qrot(a.q, b.p)), q: qmul(a.q, b.q) });
@@ -103,6 +107,55 @@ function parseURDF(text, DOMParserImpl) {
   const roots = Object.keys(links).filter(n => !children.has(n));
   if (roots.length !== 1) throw new Error("De URDF moet precies één rootlink hebben (gevonden: " + roots.join(", ") + ")");
   return { name: robotEl.getAttribute("name") || "robot", links, joints, root: roots[0] };
+}
+
+/* ===== Robot-editor: URDF met aangepaste/toegevoegde sensorframes =====
+   Werkt op de oorspronkelijke tekst (na mini-xacro), zodat gazebo-tags, materialen en meshes blijven staan.
+   edits: { jointnaam: {p, q} }, added: [{ link, joint, parent, origin, geom, optical }] */
+const SENSOR_GEOM = {
+  camera: { type: "box", size: [0.012, 0.025, 0.025] }, lidar: { type: "cylinder", radius: 0.036, length: 0.03 },
+  lidar3d: { type: "cylinder", radius: 0.04, length: 0.035 }, imu: { type: "box", size: [0.02, 0.02, 0.005] },
+};
+const OPTICAL_Q = { x: -0.5, y: 0.5, z: -0.5, w: 0.5 };            // rpy -π/2 0 -π/2: z vooruit, x rechts, y omlaag
+const fmtN = v => { const r = +(+v).toFixed(5); return String(Object.is(r, -0) ? 0 : r); };
+const originAttrs = T => ({ xyz: [T.p.x, T.p.y, T.p.z].map(fmtN).join(" "), rpy: rpyOf(T.q).map(fmtN).join(" ") });
+function patchURDF(text, edits, added, DOMParserImpl, XMLSerializerImpl) {
+  const doc = new DOMParserImpl().parseFromString(preXacro(text), "text/xml");
+  const robotEl = doc.getElementsByTagName("robot")[0];
+  const kids = (el, tag) => Array.from(el.childNodes).filter(n => n.nodeType === 1 && n.nodeName === tag);
+  const setOrigin = (el, T) => {
+    let o = kids(el, "origin")[0];
+    if (!o) { o = doc.createElement("origin"); el.insertBefore(o, el.firstChild); }
+    const a = originAttrs(T); o.setAttribute("xyz", a.xyz); o.setAttribute("rpy", a.rpy);
+  };
+  for (const j of kids(robotEl, "joint")) { const T = edits[j.getAttribute("name")]; if (T) setOrigin(j, T); }
+  const geomEl = g => {
+    const e = doc.createElement("geometry"), c = doc.createElement(g.type);
+    if (g.type === "box") c.setAttribute("size", g.size.map(fmtN).join(" "));
+    else { c.setAttribute("radius", fmtN(g.radius)); if (g.length != null) c.setAttribute("length", fmtN(g.length)); }
+    e.appendChild(c); return e;
+  };
+  const nl = () => doc.createTextNode("\n  ");
+  for (const a of added || []) {
+    robotEl.appendChild(doc.createComment(` sensor toegevoegd in de simulator `)); robotEl.appendChild(nl());
+    const jt = doc.createElement("joint"); jt.setAttribute("name", a.joint); jt.setAttribute("type", "fixed");
+    const pa = doc.createElement("parent"); pa.setAttribute("link", a.parent); const ch = doc.createElement("child"); ch.setAttribute("link", a.link);
+    jt.appendChild(pa); jt.appendChild(ch); setOrigin(jt, edits[a.joint] || a.origin); robotEl.appendChild(jt); robotEl.appendChild(nl());
+    const lk = doc.createElement("link"); lk.setAttribute("name", a.link);
+    if (a.geom) {
+      for (const tag of ["visual", "collision"]) { const v = doc.createElement(tag); v.appendChild(geomEl(a.geom)); lk.appendChild(v); }
+    }
+    robotEl.appendChild(lk); robotEl.appendChild(nl());
+    if (a.optical) {
+      const oj = doc.createElement("joint"); oj.setAttribute("name", a.optical + "_joint"); oj.setAttribute("type", "fixed");
+      const op = doc.createElement("parent"); op.setAttribute("link", a.link); const oc = doc.createElement("child"); oc.setAttribute("link", a.optical);
+      oj.appendChild(op); oj.appendChild(oc); setOrigin(oj, { p: V(), q: OPTICAL_Q }); robotEl.appendChild(oj); robotEl.appendChild(nl());
+      const ol = doc.createElement("link"); ol.setAttribute("name", a.optical); robotEl.appendChild(ol); robotEl.appendChild(doc.createTextNode("\n"));
+    }
+  }
+  let out = new XMLSerializerImpl().serializeToString(doc);
+  if (!/^<\?xml/.test(out)) out = '<?xml version="1.0"?>\n' + out;
+  return out;
 }
 
 /* ===== Nulstand-kinematica en automatische configuratie ===== */
@@ -445,6 +498,7 @@ function createSim(R) {
     const z0 = (isFinite(minZ) ? Math.max(0, -minZ) : 0) + 0.001;
     const S = { p: V(x, y, z0 + groundZ(x, y)), q: qyaw(yaw) };
     // 3. Rapier-lichamen, colliders en massa
+    const colls = [];                                 // per collider de link, voor setFixedJoint
     for (const [bi, B] of bodies.entries()) {
       const wp = vadd(S.p, qrot(S.q, B.p));
       const fixed = bi === 0 && cfg.fixedBase;
@@ -476,7 +530,7 @@ function createSim(R) {
           cd.setTranslation(Tc.p.x, Tc.p.y, Tc.p.z).setRotation(qmul(Tc.q, shapeRot(c.geom, isWheel))).setDensity(0)
             .setFriction(caster || (isWheel && mecanum) ? 0 : isWheel ? 1.0 : 0.4).setCollisionGroups(G_ROBOT);
           if (caster || (isWheel && mecanum)) cd.setFrictionCombineRule(R.CoefficientCombineRule.Min);   // mecanum: het lichaam wordt aangestuurd
-          world.createCollider(cd, rb);
+          colls.push({ ln, c, isWheel, coll: world.createCollider(cd, rb) });
         }
       }
       B.rb = rb; B.mass = m;
@@ -511,7 +565,7 @@ function createSim(R) {
       for (const o of springs) { o.k = o.j.springK ?? k; o.c = o.j.springC ?? c; o.ij.configureMotorPosition(0, o.k, o.c); }
     }
     const rockers = joints.filter(o => o.role === "rocker");
-    robot = { rockers, model, cfg, an, bodies, bodyOf, linkOff, joints, rootBody: bodies[0], leftSet: new Set([cfg.leftWheel, ...(cfg.leftWheels || [])]), steerAngle: 0,
+    robot = { rockers, model, cfg, an, bodies, bodyOf, linkOff, joints, colls, rootBody: bodies[0], leftSet: new Set([cfg.leftWheel, ...(cfg.leftWheels || [])]), steerAngle: 0,
       byName: Object.fromEntries(joints.map(o => [o.j.name, o])), prevV: V(), imuAcc: V(0, 0, 9.81) };
     // 0,5 s laten uitzakken met stilstaande motoren, zodat odometrie niet start met een sprongetje
     for (let i = 0; i < 100; i++) {
@@ -532,6 +586,27 @@ function createSim(R) {
 
   function bodyT(B) { const t = B.rb.translation(), q = B.rb.rotation(); return { p: V(t.x, t.y, t.z), q: { x: q.x, y: q.y, z: q.z, w: q.w } }; }
   function linkWorld(ln) { return tmul(bodyT(robot.bodies[robot.bodyOf[ln]]), robot.linkOff[ln]); }
+
+  /* ---- robot-editor: vaste joint (sensorframe) live verplaatsen, zonder herbouw ----
+     Past joint.origin aan en verschuift de links eronder binnen hun star lichaam (linkOff + colliders).
+     Massa en grondhoogte blijven: sensoren zijn licht. Geeft de verschoven links terug, of null als
+     er een bewegende joint onder hangt (dan herbouwen). */
+  function setFixedJoint(name, origin) {
+    const m = robot.model, j = m.joints.find(o => o.name === name);
+    if (!j || j.type !== "fixed") return null;
+    const sub = [j.child];
+    for (let i = 0; i < sub.length; i++) for (const k of m.joints) if (k.parent === sub[i]) { if (k.type !== "fixed") return null; sub.push(k.child); }
+    j.origin = { p: V(origin.p.x, origin.p.y, origin.p.z), q: origin.q };
+    const an = analyzeModel(m), B = robot.bodies[robot.bodyOf[j.child]];
+    robot.an = an;
+    for (const ln of sub) robot.linkOff[ln] = { p: vsub(an.linkT[ln].p, B.p), q: an.linkT[ln].q };
+    const inSub = new Set(sub);
+    for (const o of robot.colls) if (inSub.has(o.ln)) {
+      const Tc = tmul(robot.linkOff[o.ln], o.c.origin);
+      o.coll.setTranslationWrtParent(Tc.p); o.coll.setRotationWrtParent(qmul(Tc.q, shapeRot(o.c.geom, o.isWheel)));
+    }
+    return sub;
+  }
 
   function measureJoint(o) {
     const T1 = bodyT(o.b1), T2 = bodyT(o.b2), axW = qrot(T1.q, o.axis);
@@ -802,7 +877,7 @@ function createSim(R) {
 
   return { R, DT, LIDAR, L3, world, statics, movables, odom, imu, params,
     get robot() { return robot; }, get simTime() { return simTime; }, get cmdTarget() { return cmdTarget; },
-    worldSample, worldEmpty, loadWorld, groundZ, exportWorld, markings, probes, addProbe, moveProbe, removeProbe, get worldInfo() { return worldInfo; }, addBox, removeBox, buildRobot, removeRobot, resetOdom, step, scan, scan3d, sweep3d, lineOfSight, downRange, L3_PRESETS, radarScan, rangeCone, bumper, linkWorld, bodyT, jointTF, truthPose };
+    worldSample, worldEmpty, loadWorld, groundZ, exportWorld, markings, probes, addProbe, moveProbe, removeProbe, get worldInfo() { return worldInfo; }, addBox, removeBox, buildRobot, removeRobot, resetOdom, step, scan, scan3d, sweep3d, lineOfSight, downRange, L3_PRESETS, radarScan, rangeCone, bumper, linkWorld, setFixedJoint, bodyT, jointTF, truthPose };
 }
 
 /* ===== Ingebouwde TurtleBot3 Burger (afmetingen van turtlebot3_description, primitieve vormen) ===== */

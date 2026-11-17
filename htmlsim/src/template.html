@@ -290,6 +290,43 @@
         <p class="hint">Sensoren zitten op het gekozen frame: de lidar scant in het xy-vlak van dat frame, de camera kijkt langs +x. Automatisch herkend op naam.</p>
       </section>
     </details>
+    <details id="edSec">
+      <summary>Robot-editor (sensoren plaatsen)</summary>
+      <section>
+        <div class="row">
+          <label class="chk"><input type="checkbox" id="edFrames" checked> frames</label>
+          <label class="chk"><input type="checkbox" id="edColl"> collisions</label>
+          <button class="ghost" id="edZoom" title="Camera dicht bij de robot">Inzoomen</button>
+        </div>
+        <div class="grid2">
+          <label for="edJoint">Frame</label><select id="edJoint" aria-label="Vast frame om te verplaatsen"></select>
+        </div>
+        <div class="seg" role="group" aria-label="Gizmo in het 3D-beeld">
+          <button data-g="translate" class="on">Verplaatsen</button><button data-g="rotate">Draaien</button><button data-g="off">Gizmo uit</button>
+        </div>
+        <div class="ed6">
+          <label for="edX">x</label><input type="number" id="edX" step="1"><span>mm</span>
+          <label for="edR">roll</label><input type="number" id="edR" step="1"><span>°</span>
+          <label for="edY">y</label><input type="number" id="edY" step="1"><span>mm</span>
+          <label for="edP">pitch</label><input type="number" id="edP" step="1"><span>°</span>
+          <label for="edZ">z</label><input type="number" id="edZ" step="1"><span>mm</span>
+          <label for="edW">yaw</label><input type="number" id="edW" step="1"><span>°</span>
+        </div>
+        <p class="msg" id="edInfo"></p>
+        <div class="row"><button class="ghost" id="edReset">Terugzetten</button><button class="ghost" id="edResetAll">Alles terugzetten</button><button class="ghost" id="edDel" hidden>Sensor verwijderen</button></div>
+        <h3 class="sub">Sensor toevoegen</h3>
+        <div class="grid2">
+          <label for="edAddKind">Soort</label><select id="edAddKind">
+            <option value="camera">camera</option><option value="lidar">2D-lidar</option><option value="lidar3d">3D-lidar</option><option value="imu">IMU</option></select>
+          <label for="edAddParent">Op link</label><select id="edAddParent"></select>
+        </div>
+        <div class="row"><button class="ghost" id="edAdd">Toevoegen</button></div>
+        <h3 class="sub">Exporteren</h3>
+        <div class="row"><button class="act" id="edDl">URDF downloaden</button><button class="ghost" id="edCopy">Wijzigingen kopiëren</button></div>
+        <textarea id="edOut" readonly rows="5" aria-label="Gewijzigde joints" placeholder="Nog niets gewijzigd."></textarea>
+        <p class="hint">Verplaatsen werkt live, ook tijdens SLAM of Nav2: <code>/tf_static</code> en de sensoren volgen meteen. Een sensor toevoegen herbouwt de robot (odometrie terug op nul). Draai je zelf <code>robot_state_publisher</code>, start die dan opnieuw met de gedownloade URDF.</p>
+      </section>
+    </details>
     <details id="jointSec" hidden open>
       <summary>Joints</summary>
       <section>
@@ -459,6 +496,7 @@ ros2 topic list             # zie je /scan en /odom?</pre>
 <script type="module">
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { STLLoader } from "three/addons/loaders/STLLoader.js";
 import { ColladaLoader } from "three/addons/loaders/ColladaLoader.js";
 import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
@@ -704,7 +742,7 @@ function showPlan() {
 }
 setInterval(() => { if (plan.pts.length) showPlan(); }, 1000);   // map → odom verandert (AMCL, SLAM)
 // enkel voor de headless tests (?test): pose zetten en het plan uitlezen
-if (/[?&]test\b/.test(location.search)) window.__tb3test = { sim, plan, rebuild, toMap, worldToMap, planPtsMap, camera, controls, navState, loadAnchors, setMapOdom: T => { mapOdom = T; } };
+if (/[?&]test\b/.test(location.search)) window.__tb3test = { sim, plan, rebuild, ed: () => ED, edApply: (...a) => edApply(...a), toMap, worldToMap, planPtsMap, camera, controls, navState, loadAnchors, setMapOdom: T => { mapOdom = T; } };
 $("stuSet").onclick = () => setStudent($("stuName").value, $("stuNr").value);
 for (const id of ["stuName", "stuNr"]) $(id).addEventListener("keydown", e => { if (e.key === "Enter") $("stuSet").click(); });
 
@@ -1066,6 +1104,7 @@ function buildRobotVisuals() {
   $("camBox").hidden = !cfg.camera;
   $("l3On").disabled = !cfg.lidar3d; if (!cfg.lidar3d) $("l3On").checked = false;
   syncL3();
+  edDecorate();
 }
 
 /* ---- robotcamera: kijkt langs +x van het cameraframe, +z omhoog ---- */
@@ -1144,7 +1183,7 @@ async function loadModelText(text, label) {
     for (const l of Object.values(m.links)) for (const e of [...l.visuals, ...l.collisions]) if (e.geom.type === "mesh") want.add(e.geom.filename);
     for (const f of want) { if (!(await loadMesh(f))) missing.push(f); }
     for (const l of Object.values(m.links)) for (const c of l.collisions) if (c.geom.type === "mesh" && meshCache.get(c.geom.filename)) c.geom.points = meshPoints(meshCache.get(c.geom.filename), c.geom.scale);
-    model = m; builtin = false; cfg = analyzeModel(model).cfg; showConfig(); readConfig();
+    model = m; builtin = false; edNewModel(text); cfg = analyzeModel(model).cfg; showConfig(); readConfig();
     rebuild();
     const nl = Object.keys(m.links).length, nj = m.joints.filter(j => j.type !== "fixed").length;
     msg.textContent = `${label}: ${m.name}, ${nl} links, ${nj} bewegende joints, ${want.size - missing.length}/${want.size} meshes.` +
@@ -1154,7 +1193,7 @@ async function loadModelText(text, label) {
   } catch (e) { msg.className = "msg err"; msg.textContent = e.message; console.error(e); }
 }
 function loadBuiltin() {
-  model = parseURDF(BURGER_URDF, DOMParser); builtin = true; cfg = analyzeModel(model).cfg; showConfig(); sim.params.ballWheels = true; rebuild();
+  model = parseURDF(BURGER_URDF, DOMParser); builtin = true; edNewModel(BURGER_URDF); cfg = analyzeModel(model).cfg; showConfig(); sim.params.ballWheels = true; rebuild();
   $("robotMsg").className = "msg"; $("robotMsg").textContent = "Ingebouwde Burger geladen (primitieve vormen, met camera en 3D-lidar).";
   $("presetSel").value = "";
 }
@@ -1342,6 +1381,211 @@ function frameToWorld(f) {
   return worldMap();
 }
 const setMatrix = (obj, T) => { obj.matrix.compose(new THREE.Vector3(T.p.x, T.p.y, T.p.z), new THREE.Quaternion(T.q.x, T.q.y, T.q.z, T.q.w), new THREE.Vector3(1, 1, 1)); };
+
+/* ================= robot-editor: sensorframes verplaatsen, frames en collisions tonen =================
+   Vaste joints (sensoren) live verplaatsen met een gizmo of met getallen: sim.setFixedJoint verschuift
+   de link binnen zijn star lichaam, zonder herbouw (odometrie, SLAM en Nav2 lopen door). Een sensor
+   toevoegen verandert het model en herbouwt wel. Export: de oorspronkelijke URDF met enkel de
+   gewijzigde <origin>'s en de toegevoegde links (patchURDF in core.js). */
+const ED = { text: "", orig: {}, added: [], sel: "", gizmo: "translate", deco: [] };
+const SLOT_NAME = { camera: "camera", lidar: "2D-lidar", lidar3d: "3D-lidar", imu: "IMU" };
+const SLOT_LINK = { camera: "camera_link", lidar: "laser_link", lidar3d: "lidar_3d_link", imu: "imu_link" };
+const tc = new TransformControls(camera, renderer.domElement);
+tc.setSpace("local"); tc.setSize(0.75); tc.getRaycaster().layers.enableAll(); tc.enabled = false;
+scene.add(onL1(tc));
+const edPrevCam = new THREE.PerspectiveCamera(CAM.vfov, CAM.w / CAM.h, 0.02, 0.6);   // korte kegel voor de weergave
+edPrevCam.quaternion.copy(robotCam.quaternion);
+let edCamHelper = null;
+const edOpen = () => $("edSec").open;
+const sameT = (a, b) => a && b && vlen(vsub(a.p, b.p)) < 1e-7 && Math.abs(Math.abs(a.q.x * b.q.x + a.q.y * b.q.y + a.q.z * b.q.z + a.q.w * b.q.w) - 1) < 1e-10;
+const slotOf = ln => Object.keys(SLOT_NAME).find(k => cfg[k] === ln) || "";
+
+function edNewModel(text) {                       // nieuw model geladen: startwaarden onthouden
+  ED.text = text; ED.added = []; ED.sel = "";
+  ED.orig = Object.fromEntries(model.joints.map(j => [j.name, j.origin]));
+}
+// vaste joints die live kunnen: geen bewegende joint eronder, geen optisch frame
+function edJoints() {
+  const ok = j => {
+    if (j.type !== "fixed" || /optical/i.test(j.child)) return false;
+    const sub = [j.child];
+    for (let i = 0; i < sub.length; i++) for (const k of model.joints) if (k.parent === sub[i]) { if (k.type !== "fixed") return false; sub.push(k.child); }
+    return true;
+  };
+  return model.joints.filter(ok).sort((a, b) => (slotOf(b.child) ? 1 : 0) - (slotOf(a.child) ? 1 : 0));
+}
+const selJoint = () => model.joints.find(j => j.name === ED.sel);
+
+function edFillLists() {
+  const js = edJoints();
+  if (!js.some(j => j.name === ED.sel)) ED.sel = (js[0] || {}).name || "";
+  $("edJoint").innerHTML = js.map(j => { const sl = slotOf(j.child), ch = !sameT(j.origin, ED.orig[j.name]) || !(j.name in ED.orig);
+    return `<option value="${j.name}">${j.child}${sl ? " · " + SLOT_NAME[sl] : ""}${ch ? " ●" : ""}</option>`; }).join("");
+  $("edJoint").value = ED.sel;
+  const keep = $("edAddParent").value;
+  $("edAddParent").innerHTML = sim.robot.an.order.filter(n => !/optical/i.test(n)).map(n => `<option>${n}</option>`).join("");
+  $("edAddParent").value = keep && sim.robot.an.order.includes(keep) ? keep : (model.links.base_link ? "base_link" : model.root);
+}
+
+/* ---- hulpweergaven op de linkknopen (worden bij elke herbouw met robotG.clear() mee opgeruimd) ---- */
+const edMat = { coll: new THREE.MeshBasicMaterial({ color: 0xff8a00, wireframe: true }),
+  ring: new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false }) };
+function edDecorate() {
+  ED.deco = [];
+  if (edCamHelper) { scene.remove(edCamHelper); edCamHelper.dispose(); edCamHelper = null; }
+  const on = edOpen();
+  if (on && $("edFrames").checked) for (const [ln, node] of Object.entries(linkNodes)) {
+    const a = onL1(new THREE.AxesHelper(ln === (selJoint() || {}).child ? 0.09 : 0.035)); node.add(a); ED.deco.push(a);
+  }
+  if (on && $("edColl").checked) for (const [ln, node] of Object.entries(linkNodes)) for (const c of model.links[ln].collisions) {
+    const o = visualObject({ origin: c.origin, geom: c.geom, color: null }); if (!o) continue;
+    o.traverse(m => { if (m.isMesh) { m.material = edMat.coll; m.castShadow = false; } }); node.add(onL1(o)); ED.deco.push(o);
+  }
+  if (!on) { edAttach(); return; }
+  for (const k of ["lidar", "lidar3d"]) if (cfg[k] && linkNodes[cfg[k]]) {
+    const L = k === "lidar" ? sim.LIDAR : sim.L3, rmax = Math.min(L.rmax, 1.2);
+    edMat.ring.color = colors.lidar;
+    const ring = onL1(new THREE.Mesh(new THREE.RingGeometry(Math.min(L.rmin, rmax * 0.9), rmax, 72), edMat.ring));
+    linkNodes[cfg[k]].add(ring); ED.deco.push(ring);
+  }
+  if (cfg.camera && linkNodes[cfg.camera]) {
+    linkNodes[cfg.camera].add(edPrevCam); edPrevCam.updateMatrixWorld(true);
+    edCamHelper = onL1(new THREE.CameraHelper(edPrevCam)); scene.add(edCamHelper);
+  }
+  edAttach();
+}
+function edAttach() {
+  const j = selJoint(), node = j && linkNodes[j.child];
+  if (edOpen() && node && ED.gizmo !== "off") { tc.attach(node); tc.setMode(ED.gizmo); tc.enabled = true; tc.visible = true; }
+  else { tc.detach(); tc.enabled = false; tc.visible = false; }
+}
+
+/* ---- lezen en zetten ---- */
+const r2dE = a => +(a * 180 / Math.PI).toFixed(2);
+function edShow() {
+  const j = selJoint(), ids = ["edX", "edY", "edZ", "edR", "edP", "edW"];
+  ids.forEach(id => { $(id).disabled = !j; });
+  $("edReset").disabled = !j; $("edDel").hidden = !(j && ED.added.some(a => a.joint === j.name));
+  if (!j) { $("edInfo").textContent = "Geen vast frame dat verplaatst kan worden."; return; }
+  const rpy = rpyOf(j.origin.q), v = [j.origin.p.x * 1000, j.origin.p.y * 1000, j.origin.p.z * 1000, ...rpy.map(r2dE)];
+  ids.forEach((id, i) => { if (document.activeElement !== $(id)) $(id).value = +v[i].toFixed(i < 3 ? 1 : 2); });
+  // wat betekent deze plaats: hoogte boven de vloer, helling van het scanvlak
+  const T = sim.linkWorld(j.child), sl = slotOf(j.child), up = qrot(T.q, V(0, 0, 1)), fwd = qrot(T.q, V(1, 0, 0));
+  const lines = [`${j.child} op ${j.parent}${sl ? " · " + SLOT_NAME[sl] + " van de simulator" : ""}`, `hoogte boven de vloer ${(T.p.z * 1000).toFixed(0)} mm`];
+  if (sl === "lidar") {
+    const tilt = Math.acos(Math.min(1, Math.abs(up.z)));
+    if (T.p.z > 0.34) lines.push("⚠ scanvlak boven 35 cm: de dozen in de werelden worden niet gezien");
+    if (T.p.z < 0.02) lines.push("⚠ scanvlak bijna op de vloer");
+    if (tilt > 0.01) lines.push(`⚠ scanvlak helt ${(tilt * 180 / Math.PI).toFixed(1)}°: raakt de vloer op ${(T.p.z / Math.tan(tilt)).toFixed(2)} m`);
+    if (Math.abs(up.z) < 0.99 || up.z < 0) lines.push(up.z < 0 ? "lidar ondersteboven: de scan is gespiegeld" : "");
+  }
+  if (sl === "camera") lines.push(`kijkt ${fwd.z < -0.02 ? "schuin naar beneden" : fwd.z > 0.02 ? "schuin naar boven" : "horizontaal"} (${(Math.asin(Math.max(-1, Math.min(1, fwd.z))) * 180 / Math.PI).toFixed(0)}°)`);
+  if (sl === "imu" && (Math.abs(up.z) < 0.999)) lines.push("⚠ IMU scheef gemonteerd: de versnelling krijgt een component van g in x/y");
+  if (!$("pubModelTF").checked) lines.push("tf van het model staat uit: robot_state_publisher moet de nieuwe URDF krijgen");
+  $("edInfo").textContent = lines.filter(Boolean).join("\n");
+  $("edInfo").className = /⚠/.test($("edInfo").textContent) ? "msg err" : "msg";
+}
+let edPubT = 0;
+function edApply(name, O, commit) {
+  const sub = sim.setFixedJoint(name, O);
+  if (!sub) { $("edInfo").textContent = "Dit frame kan niet live: er hangt een bewegende joint onder."; return; }
+  for (const ln of sub) { const off = sim.robot.linkOff[ln], n = linkNodes[ln]; if (n) { n.position.set(off.p.x, off.p.y, off.p.z); n.quaternion.set(off.q.x, off.q.y, off.q.z, off.q.w); } }
+  edShow();
+  const now = performance.now();
+  if (live() && (commit || now - edPubT > 250)) { edPubT = now; publishStatic(); }
+  if (commit) { edFillLists(); edOutput(); }
+}
+function edFromNode(commit) {                    // gizmo → origin t.o.v. de ouderlink
+  const j = selJoint(); if (!j) return;
+  const n = linkNodes[j.child], B = sim.robot.bodies[sim.robot.bodyOf[j.child]];
+  const Tc = { p: V(B.p.x + n.position.x, B.p.y + n.position.y, B.p.z + n.position.z), q: { x: n.quaternion.x, y: n.quaternion.y, z: n.quaternion.z, w: n.quaternion.w } };
+  const Tp = sim.robot.an.linkT[j.parent], qi = qconj(Tp.q);
+  edApply(j.name, tmul({ p: qrot(qi, vscale(Tp.p, -1)), q: qi }, Tc), commit);
+}
+function edFromInputs() {
+  const j = selJoint(); if (!j) return;
+  const n = id => (isFinite(+$(id).value) && $(id).value !== "" ? +$(id).value : 0), d = Math.PI / 180;
+  edApply(j.name, { p: V(n("edX") / 1000, n("edY") / 1000, n("edZ") / 1000), q: qrpy(n("edR") * d, n("edP") * d, n("edW") * d) }, true);
+}
+tc.addEventListener("dragging-changed", e => { controls.enabled = !e.value && mode === "orbit"; });
+tc.addEventListener("objectChange", () => { if (tc.dragging) edFromNode(false); });
+tc.addEventListener("mouseUp", () => edFromNode(true));
+["edX", "edY", "edZ", "edR", "edP", "edW"].forEach(id => { $(id).onchange = edFromInputs; });
+
+/* ---- toevoegen, verwijderen, terugzetten ---- */
+function edRebuildHere() { const p = sim.truthPose(); showConfig(); rebuild(p.x, p.y, p.th); }
+$("edAdd").onclick = () => {
+  const kind = $("edAddKind").value, parent = $("edAddParent").value; if (!parent) return;
+  let link = SLOT_LINK[kind], i = 2; while (model.links[link]) link = SLOT_LINK[kind].replace("_link", `${i++}_link`);
+  const joint = link.replace(/_link$/, "") + "_joint", prev = cfg[kind];
+  const origin = { p: V(kind === "camera" ? 0.06 : 0, 0, 0.1), q: Q0() }, geom = SENSOR_GEOM[kind];
+  model.links[link] = { name: link, inertial: null, visuals: [{ origin: T0(), geom, color: [0.16, 0.17, 0.19, 1] }], collisions: [] };
+  model.joints.push({ name: joint, type: "fixed", parent, child: link, origin, axis: V(1, 0, 0), limit: null });
+  const add = { kind, link, joint, parent, origin, geom };
+  if (kind === "camera") {                        // optisch frame zoals in turtlebot3_description
+    add.optical = link.replace(/_link$/, "") + "_optical_frame";
+    model.links[add.optical] = { name: add.optical, inertial: null, visuals: [], collisions: [] };
+    model.joints.push({ name: add.optical + "_joint", type: "fixed", parent: link, child: add.optical, origin: { p: V(), q: OPTICAL_Q }, axis: V(1, 0, 0), limit: null });
+  }
+  ED.added.push(add); cfg[kind] = link; ED.sel = joint;
+  edRebuildHere(); edFillLists(); edShow(); edOutput();
+  $("edInfo").textContent += `\n${SLOT_NAME[kind]} toegevoegd${prev ? ` (vervangt ${prev} als ${SLOT_NAME[kind]} van de simulator; dat frame blijft in de URDF)` : ""}. Robot herbouwd.`;
+};
+$("edDel").onclick = () => {
+  const a = ED.added.find(x => x.joint === ED.sel); if (!a) return;
+  const gone = new Set([a.link, a.optical].filter(Boolean));
+  model.joints = model.joints.filter(j => !gone.has(j.child)); for (const l of gone) delete model.links[l];
+  ED.added = ED.added.filter(x => x !== a);
+  for (const k of Object.keys(SLOT_NAME)) if (gone.has(cfg[k])) cfg[k] = analyzeModel(model).cfg[k];
+  ED.sel = ""; edRebuildHere(); edFillLists(); edShow(); edOutput();
+};
+$("edReset").onclick = () => { const j = selJoint(); if (!j) return; edApply(j.name, ED.orig[j.name] || (ED.added.find(a => a.joint === j.name) || {}).origin, true); };
+$("edResetAll").onclick = () => { for (const j of edJoints()) if (ED.orig[j.name] && !sameT(j.origin, ED.orig[j.name])) edApply(j.name, ED.orig[j.name], true); };
+
+/* ---- export ---- */
+function edChanges() {
+  const edits = {}, list = [];
+  for (const j of model.joints) {
+    const add = ED.added.find(a => a.joint === j.name);
+    if (add || (j.name in ED.orig && !sameT(j.origin, ED.orig[j.name]))) { edits[j.name] = j.origin; list.push({ j, add: !!add }); }
+  }
+  return { edits, list };
+}
+function edOutput() {
+  const { list } = edChanges();
+  $("edOut").value = list.map(({ j, add }) => {
+    const a = originAttrs(j.origin), [r, p, y] = a.rpy.split(" "), [x, yy, z] = a.xyz.split(" ");
+    return `${j.name}${add ? " (nieuw)" : ""}: ${j.parent} → ${j.child}\n  <origin xyz="${a.xyz}" rpy="${a.rpy}"/>\n` +
+      `  ros2 run tf2_ros static_transform_publisher --x ${x} --y ${yy} --z ${z} --roll ${r} --pitch ${p} --yaw ${y} --frame-id ${j.parent} --child-frame-id ${j.child}`;
+  }).join("\n\n");
+}
+$("edDl").onclick = () => {
+  const { edits } = edChanges();
+  try {
+    const txt = patchURDF(ED.text, edits, ED.added.map(a => ({ ...a, origin: model.joints.find(j => j.name === a.joint).origin })), DOMParser, XMLSerializer);
+    saveBlob(new Blob([txt], { type: "application/xml" }), `${model.name || "robot"}_sim.urdf`);
+  } catch (e) { $("edInfo").className = "msg err"; $("edInfo").textContent = "Export lukte niet: " + e.message; }
+};
+$("edCopy").onclick = async () => {
+  edOutput(); const t = $("edOut").value || "Nog niets gewijzigd.";
+  try { await navigator.clipboard.writeText(t); $("edCopy").textContent = "Gekopieerd"; }
+  catch { $("edOut").select(); $("edCopy").textContent = "Selecteer en kopieer"; }
+  setTimeout(() => { $("edCopy").textContent = "Wijzigingen kopiëren"; }, 1500);
+};
+
+/* ---- bediening ---- */
+$("edJoint").onchange = () => { ED.sel = $("edJoint").value; edDecorate(); edShow(); };
+document.querySelectorAll("#edSec .seg button").forEach(b => b.onclick = () => {
+  ED.gizmo = b.dataset.g; document.querySelectorAll("#edSec .seg button").forEach(x => x.classList.toggle("on", x === b)); edAttach();
+});
+$("edFrames").onchange = $("edColl").onchange = () => edDecorate();
+$("edSec").addEventListener("toggle", () => { if (edOpen()) { edFillLists(); edShow(); edOutput(); } edDecorate(); });
+$("edZoom").onclick = () => {
+  const p = sim.truthPose(), c = Math.cos(p.th), s = Math.sin(p.th);
+  $("follow").checked = true;
+  // schuin van voren-links: de robot staat bij de spawn vaak met zijn rug tegen een muur
+  controls.target.set(p.x, p.y, 0.12); camera.position.set(p.x + 0.5 * c - 0.4 * s, p.y + 0.5 * s + 0.4 * c, 0.42); controls.update();
+};
 
 /* ================= hoofdlus ================= */
 // Elk bericht kost rosbridge (Python) CPU: op een drukke Windows-laptop liep rosbridge
@@ -2501,6 +2745,8 @@ try { const s = JSON.parse(localStorage.getItem("tb3sim.student") || "null"); if
 $("loading").remove();
 renderTopics();
 requestAnimationFrame(t => { lastReal = t; tick(t); });
+// #robot-editor in de URL: meteen naar de robot-editor (link vanuit de GitBook of het concept-artifact)
+if (location.hash === "#robot-editor") { $("tabBtn-cfg").click(); $("edSec").open = true; setTimeout(() => $("edZoom").click(), 300); }
 </script>
 </body>
 </html>

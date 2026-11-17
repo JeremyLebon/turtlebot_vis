@@ -184,6 +184,18 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
   `/cmd_vel` gaat dan via twist_mux (prioriteiten, snelheidslimiet); een Twist-script rijdt nog rechtstreeks (gaat niet door twist_mux).
   De opdrachten blijven `/cmd_vel` meten. Knop Fenix-pagina zodra :8090 antwoordt.
 - **turtlebot-vis:** `build.py --local` → `dist/index.html` met three.js en Rapier uit `./vendor` (Dockerfile van turtlebot-vis), geserveerd op `http://localhost:8080/sim/`; daar verbindt de pagina vanzelf (`robot htmlsim` start rosbridge).
+- **Robot-editor (template, vóór de hoofdlus; `ED`):** `sim.setFixedJoint(naam, origin)` (core.js) zet `joint.origin`
+  en verschuift de links eronder binnen hun star lichaam (`linkOff` + `colliders` via `setTranslationWrtParent`), zonder
+  herbouw; massa en grondhoogte blijven (sensoren zijn licht). Geeft `null` als er een bewegende joint onder hangt
+  (die frames staan niet in de lijst). Gizmo = three `TransformControls` op `linkNodes[child]`, laag 1, raycaster
+  `layers.enableAll()`; node-pose → origin t.o.v. de ouder via `an.linkT`. `/tf_static` opnieuw bij loslaten (en
+  hoogstens elke 250 ms tijdens het slepen). Sensor toevoegen = link + fixed joint in `model` (camera met optisch frame
+  `OPTICAL_Q`), `cfg[slot]` en herbouw. Export: `patchURDF(ED.text, edits, added)` werkt op de oorspronkelijke tekst
+  (na `preXacro`) en verandert enkel `<origin>` van gewijzigde joints. `ED.orig` = origins bij het laden
+  (`edNewModel` in `loadModelText`/`loadBuiltin`). Hulpweergaven (assen, collisions, scanring) hangen aan de
+  linkknopen en verdwijnen met `robotG.clear()`; `edDecorate()` aan het einde van `buildRobotVisuals`.
+  Test: `node tests/e2e_editor.cjs [map]` (nep-rosbridge op 9092). In de vendorlijst van de Dockerfile staat
+  `TransformControls.js`: een nieuwe three-addon daar ook toevoegen.
 - **Opname:** samengesteld canvas (WebGL + HUD + camera + testpaneel + balk) via `captureStream`, of `getDisplayMedia`
   voor het hele scherm. `drawComposite()` direct na `renderer.render` (anders leeg WebGL-beeld).
   Enkel MP4/H.264 (`pickMime`, 07-11): Toledo speelt .webm niet af. Chrome/Edge ≥ 126 kunnen dat, Firefox en
