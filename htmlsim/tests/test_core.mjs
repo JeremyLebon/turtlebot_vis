@@ -4,7 +4,7 @@ import fs from "fs"; import { createRequire } from "module"; import { fileURLToP
 const require = createRequire(import.meta.url), here = path.dirname(fileURLToPath(import.meta.url));
 const R = require("@dimforge/rapier3d-compat"), { DOMParser, XMLSerializer } = require("@xmldom/xmldom");
 const core = fs.readFileSync(path.join(here, "../src/core.js"), "utf8");
-const M = new Function("R", core + ";return {createSim,parseURDF,analyzeModel,BURGER_URDF,WORLDS,rpyOf,qrpy,patchURDF,SENSOR_GEOM};")();
+const M = new Function("R", core + ";return {createSim,parseURDF,analyzeModel,BURGER_URDF,WORLDS,rpyOf,qrpy,patchURDF,SENSOR_GEOM,toURDF};")();
 await R.init();
 let fails = 0; const ok = (name, cond, info = "") => { console.log(`${cond ? "✓" : "✗"} ${name}${info ? "  — " + info : ""}`); if (!cond) fails++; };
 const burger = () => { const s = M.createSim(R); s.loadWorld(M.WORLDS.empty); const m = M.parseURDF(M.BURGER_URDF, DOMParser); s.buildRobot(m, M.analyzeModel(m).cfg, 0, 0, 0); return s; };
@@ -52,6 +52,14 @@ const run = (s, c, t) => { for (let i = 0; i < t / s.DT; i++) s.step(c); };
   ok("patchURDF schrijft de nieuwe origin", sj && Math.abs(sj.origin.p.z - 0.25) < 1e-9 && Math.abs(M.rpyOf(sj.origin.q)[1] - 0.1) < 1e-4, /<joint name="scan_joint"[^>]*>[\s\S]*?<origin[^>]*>/.exec(txt)?.[0].replace(/\s+/g, " "));
   ok("patchURDF voegt camera + optisch frame toe, één rootlink", cj && cj.parent === "base_link" && m.links.camera2_optical_frame && m.root === "base_footprint");
   ok("patchURDF laat de rest staan", Object.keys(m.links).length === Object.keys(M.parseURDF(M.BURGER_URDF, DOMParser).links).length + 2 && /material name="sensor"/.test(txt)); }
+{ const a = M.parseURDF(M.BURGER_URDF, DOMParser), txt = M.toURDF(a, ['<gazebo><plugin name="x"/></gazebo>']), b = M.parseURDF(txt, DOMParser);
+  const sameJ = a.joints.every(j => { const k = b.joints.find(x => x.name === j.name); return k && k.type === j.type && k.parent === j.parent && Math.abs(k.origin.p.z - j.origin.p.z) < 1e-6 && Math.abs(k.axis.y - j.axis.y) < 1e-9; });
+  const ca = M.analyzeModel(a).cfg, cb = M.analyzeModel(b).cfg;
+  ok("toURDF → parseURDF geeft dezelfde Burger", sameJ && Object.keys(a.links).length === Object.keys(b.links).length && cb.leftWheel === ca.leftWheel && Math.abs(cb.wheelSep - ca.wheelSep) < 1e-6 && /<gazebo>/.test(txt), `${b.joints.length} joints`);
+  const m2 = M.parseURDF(txt, DOMParser); m2.links.base_link.inertial = { mass: 2, auto: true }; const t2 = M.toURDF(m2), ie = M.parseURDF(t2, DOMParser).links.base_link.inertial;
+  ok("toURDF: automatische inertia uit de collision", ie && ie.mass === 2 && ie.I.zz > 0 && ie.I.xx > 0, `ixx ${ie && ie.I.xx}`);
+  const s = M.createSim(R); s.loadWorld(M.WORLDS.empty); s.buildRobot(b, cb, 0, 0, 0); run(s, { v: 0.2, w: 0 }, 2);
+  ok("geëxporteerde robot rijdt in de sim", s.truthPose().x > 0.3, `x ${s.truthPose().x.toFixed(3)}`); }
 for (const k of Object.keys(M.WORLDS)) { const s = M.createSim(R); const wi = s.loadWorld(M.WORLDS[k]); const m = M.parseURDF(M.BURGER_URDF, DOMParser); s.buildRobot(m, M.analyzeModel(m).cfg, ...wi.spawn);
   run(s, { v: 0.2, w: 0 }, 1); ok(`Wereld "${M.WORLDS[k].name}" laadt en scant`, s.scan("base_scan").pts.length > 60, `${s.statics.length} vaste objecten`); }
 console.log(fails ? `\n${fails} test(s) mislukt` : "\nAlle tests geslaagd"); process.exit(fails ? 1 : 0);

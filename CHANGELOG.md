@@ -23,6 +23,13 @@ Eigen versies, los daarvan:
   de gewijzigde `<origin>`'s en nieuwe links, of per joint `<origin>` +
   `static_transform_publisher`. Dockerfile: `TransformControls.js` mee in
   `vendor`.
+- **Aparte robot-editor** (`/sim/editor.html`, knop *Robot-editor openen*):
+  robot bouwen of aanpassen. Onderdelen aanklikken en verslepen/draaien/
+  schalen (snap 5 mm/5°), bouwblokken (wielen, zwenkwiel, lidar, camera,
+  IMU, armsegment, draaischijf, vormen), eigenschappen (joint, as, limieten,
+  maten, kleur, massa; inertia automatisch), spiegelen L↔R, ongedaan maken,
+  controle voor de simulator. *Testen in de simulator* stuurt de robot naar
+  een open simulator-tabblad. Dockerfile kopieert `editor.html` mee.
 
 ## 1.0.19 - 2026-11-14
 - **Virtuele robot 1.9.11: joystick op de Fenix-pagina.** Knop met de cirkel
