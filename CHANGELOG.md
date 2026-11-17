@@ -40,6 +40,13 @@ Eigen versies, los daarvan:
 - **Werelden Maanlandschap en Mars (krater Jezero):** ruw terrein, kraters,
   rotsen (botsen en zichtbaar voor lidar/camera), zwaartekracht 1,62 en
   3,71 m/s² en bodemwrijving per wereld (`gravity`, `friction` in de wereld-JSON).
+- **Acht nieuwe werelden:** doolhof per student (seed uit het studentnummer),
+  donkere mijngang met lamp op de robot en gasbronnen, ruïne na een ramp
+  (puin, trap, helling, slachtoffers als warmtebron), racecircuit, straat en
+  parking met overstekende voetgangers en een rijdende auto, serre met
+  buisrails en de nieuwe Buisrailwagen, bouwwerf met bouwput en graafmachine,
+  stal met voergang, koeien en verschuifbaar voer. Nieuwe elementen: actor,
+  maze, grid, tunnel, track, stairs, ramp, excavator, pipes; terrein pits.
   Op htmlsim-next ook: 4 wielen (skid), mecanum, auto-onderstel (Ackermann),
   vering per wiel (veerstijfheid/demping), de ingebouwde robots als
   startpunt, en de controle toont het aandrijftype.

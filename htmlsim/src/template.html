@@ -90,6 +90,14 @@
           <option value="hills">Heuvelland, hoogteverschillen (29 × 29 m)</option>
           <option value="moon">Maanlandschap: kraters, rotsen, g = 1,62 (29 × 29 m)</option>
           <option value="mars">Mars, krater Jezero: duinen, rotsen, g = 3,71 (29 × 29 m)</option>
+          <option value="maze">Doolhof per student (seed = studentnummer)</option>
+          <option value="tunnel">Mijngang: donker, smal, gas (25 × 20 m)</option>
+          <option value="rescue">Ruïne na een ramp: puin, trap, helling, slachtoffers (16 × 12 m)</option>
+          <option value="race">Racecircuit (F1TENTH-stijl, 20 × 12 m)</option>
+          <option value="street">Straat en parking: rijstroken, zebrapad, voetgangers (30 × 20 m)</option>
+          <option value="greenhouse">Serre met buisrails en tomaten (20 × 14 m)</option>
+          <option value="construction">Bouwwerf: bouwput, grondhopen, graafmachine (30 × 24 m)</option>
+          <option value="barn">Stal met voergang en koeien (24 × 16 m)</option>
           <option value="empty">Lege kamer (5 × 5 m)</option>
           <option value="custom" hidden>Eigen wereld</option></select></div>
         <div class="grid2"><label for="modelDetail">Objecten</label><select id="modelDetail" title="Mensen, auto's, meubels, bomen en maïs: echte 3D-modellen, of blokken en cilinders met dezelfde maten (lichter voor een trage laptop; de AI herkent ze dan niet)">
@@ -516,7 +524,17 @@ catch (e) { $("loading").textContent = "Fysica-engine kon niet laden. Is er inte
 
 const sim = createSim(RAPIER);
 const START = { x: 0, y: 0, th: 0 };
-function useWorld(def) { const wi = sim.loadWorld(def); [START.x, START.y, START.th] = wi.spawn; return wi; }
+// doolhof met seed "student": seed uit het studentnummer (of de naam), zodat elke student een eigen doolhof krijgt
+const seedOf = txt => { let h = 2166136261; for (const ch of String(txt)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; } return 1 + h % 99991; };
+let lastWorldDef = null;
+function useWorld(def) {
+  lastWorldDef = def;
+  if ((def.items || []).some(it => it.type === "maze" && it.seed === "student")) {
+    let who = "demo"; try { who = student.nr || student.name || "demo"; } catch {}   // bij het opstarten bestaat student nog niet (TDZ)
+    def = { ...def, items: def.items.map(it => it.type === "maze" && it.seed === "student" ? { ...it, seed: seedOf(who), student: who } : it) };
+  }
+  const wi = sim.loadWorld(def); [START.x, START.y, START.th] = wi.spawn; return wi;
+}
 useWorld(WORLDS.turtlebot3);
 let model = null, cfg = null, odomOrigin = { ...START }, opticalFrame = "", addOptical = false, builtin = true;
 
@@ -555,7 +573,7 @@ renderer.domElement.addEventListener("dblclick", () => {
   controls.target.set(p.x, p.y, 0.1); camera.position.set(p.x - 3.6, p.y - 2.4, 2.2); controls.update();
 });
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0x445048, 1.1));
+const hemiLight = new THREE.HemisphereLight(0xffffff, 0x445048, 1.1); scene.add(hemiLight);
 const sun = new THREE.DirectionalLight(0xffffff, 1.6);
 sun.position.set(3, -2, 6); sun.castShadow = true;
 Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4, near: 0.5, far: 15 });
@@ -748,7 +766,10 @@ function showPlan() {
 setInterval(() => { if (plan.pts.length) showPlan(); }, 1000);   // map → odom verandert (AMCL, SLAM)
 // enkel voor de headless tests (?test): pose zetten en het plan uitlezen
 if (/[?&]test\b/.test(location.search)) window.__tb3test = { sim, plan, rebuild, ed: () => ED, edApply: (...a) => edApply(...a), toMap, worldToMap, planPtsMap, camera, controls, navState, loadAnchors, setMapOdom: T => { mapOdom = T; } };
-$("stuSet").onclick = () => setStudent($("stuName").value, $("stuNr").value);
+$("stuSet").onclick = async () => {
+  await setStudent($("stuName").value, $("stuNr").value);
+  if (lastWorldDef && (lastWorldDef.items || []).some(it => it.type === "maze" && it.seed === "student")) switchWorld(lastWorldDef, lastWorldDef.name);   // eigen doolhof
+};
 for (const id of ["stuName", "stuNr"]) $(id).addEventListener("keydown", e => { if (e.key === "Enter") $("stuSet").click(); });
 
 
@@ -818,7 +839,7 @@ function buildWorldMeshes() {
       worldGroup.add(g); addModelMesh(s, g); continue;
     }
     if (s.kind === "box" || s.kind === "aruco") mesh = new THREE.Mesh(new THREE.BoxGeometry(s.size.x, s.size.y, s.size.z), matFor(s.color));
-    if (s.kind === "cyl") { mesh = new THREE.Mesh(new THREE.CylinderGeometry(s.size.r, s.size.r, s.size.h, 32), matFor(s.color)); mesh.geometry.rotateX(Math.PI / 2); }
+    if (s.kind === "cyl") { mesh = new THREE.Mesh(new THREE.CylinderGeometry(s.size.r, s.size.r, s.size.h, 32), matFor(s.color)); if (!s.size.along) mesh.geometry.rotateX(Math.PI / 2); }   // along: liggend (buis), as = lichaamsrotatie
     if (s.kind === "ball") mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(s.size.r, 2), matFor(s.color));
     if (s.kind === "rock") {                                  // zelfde vorm als de collider (rockR in core.js), hoekig belicht
       const g = new THREE.IcosahedronGeometry(1, 2), P = g.attributes.position;
@@ -833,6 +854,7 @@ function buildWorldMeshes() {
     mesh.userData.lab = s.item || s.kind; if (s.def?.temp != null) mesh.userData.temp = s.def.temp;
     if (s.kind === "aruco") mesh.add(arucoPlane(s.def.id ?? 0, s.size.y));
     mesh.castShadow = mesh.receiveShadow = true; worldGroup.add(mesh);
+    if (s.def?.roof) { mesh.layers.set(2); mesh.castShadow = false; }   // dak (tunnel): enkel voor de robotcamera, het 3D-overzicht kijkt erdoor
   }
   // vloermarkeringen: alleen beeld (ook zichtbaar voor de robotcamera), geen collider. Elke mark een laagje hoger dan de
   // vorige (later in de lijst = bovenop), lijnen bovenaan: overlappende vlakken op dezelfde hoogte flikkeren (z-fighting)
@@ -848,6 +870,8 @@ function buildWorldMeshes() {
   }
   buildCrops(crops, real); buildTrees(trees);
   for (const m of sim.movables) addMovableMesh(m);
+  actorMeshes.length = 0; for (const a of sim.actors) addActorMesh(a, real);
+  applyWorldLight();
   drawFloorTexture(); scene.background = skyColor();
   const half = Math.max(fx, fy) / 2 + 1;
   Object.assign(sun.shadow.camera, { left: -half, right: half, top: half, bottom: -half, far: 30 }); sun.shadow.camera.updateProjectionMatrix();
@@ -941,6 +965,30 @@ function arucoPlane(id, board) {                             // vlak op de voork
   const geo = new THREE.PlaneGeometry(board, board);
   geo.applyMatrix4(new THREE.Matrix4().makeBasis(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0)));   // X→y, Y→z, normaal→x
   const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: arucoTex.get(id) })); m.position.x = 0.0055; m.userData.lab = "aruco"; return m;
+}
+// bewegende figuur: groep op het midden van het lichaam (zoals de collider), inhoud met de onderkant op -h/2
+const actorMeshes = [];
+function addActorMesh(a, real) {
+  const g = new THREE.Group(), inner = new THREE.Group(); inner.position.z = -a.size.z / 2; g.add(inner); worldGroup.add(g); actorMeshes.push([a, g]);
+  const tag = o => { o.traverse(m => { if (m.isMesh) { m.castShadow = m.receiveShadow = true; m.userData.lab = a.shape === "cow" ? "koe" : "persoon"; m.userData.temp = a.shape === "cow" ? 38 : 34; } }); return o; };
+  if (a.shape === "person") {
+    const name = a.def.model ?? "persoon_a";
+    if (real && MODEL_INFO[name]) addModelMesh({ def: { name, temp: 34 }, size: { z: a.size.z } }, inner);
+    else { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, a.size.z - 0.25, 16), matFor(a.color || "#3f6fb5")); m.geometry.rotateX(Math.PI / 2); m.position.z = (a.size.z - 0.25) / 2;
+      const hd = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 10), matFor("#e0b48f")); hd.position.z = a.size.z - 0.12; inner.add(tag(m), tag(hd)); }
+  } else if (a.shape === "cow") {                       // koe uit eenvoudige vormen: romp, poten, kop
+    const W = matFor(a.color || "#f1efe8"), B = matFor("#2a2622"), add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); inner.add(tag(m)); };
+    add(new THREE.BoxGeometry(1.5, 0.6, 0.7), W, -0.1, 0, 1.0);
+    add(new THREE.BoxGeometry(0.5, 0.62, 0.45), B, -0.3, 0, 1.12);
+    for (const [x, y] of [[0.5, 0.2], [0.5, -0.2], [-0.65, 0.2], [-0.65, -0.2]]) { const l = new THREE.CylinderGeometry(0.06, 0.06, 0.7, 10); l.rotateX(Math.PI / 2); add(l, W, x, y, 0.35); }
+    add(new THREE.BoxGeometry(0.45, 0.32, 0.36), B, 0.82, 0, 1.15);
+  } else if (real && a.def.model && MODEL_INFO[a.def.model]) addModelMesh({ def: { name: a.def.model }, size: { z: a.size.z } }, inner);
+  else inner.add(tag(new THREE.Mesh(new THREE.BoxGeometry(a.size.x, a.size.y, a.size.z).translate(0, 0, a.size.z / 2), matFor(a.color))));
+}
+// donkere wereld (tunnel): weinig omgevingslicht, lamp op de robot (volgt de camera of de rootlink)
+const headlamp = new THREE.SpotLight(0xfff2dd, 0, 12, 0.6, 0.45, 1.2); headlamp.castShadow = true; scene.add(headlamp, headlamp.target);
+function applyWorldLight() {
+  const dark = !!sim.worldInfo.dark; hemiLight.intensity = dark ? 0.15 : 1.1; sun.intensity = dark ? 0.0 : 1.6; headlamp.intensity = dark ? 40 : 0;
 }
 function addMovableMesh(m) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(m.size.x, m.size.y, m.size.z), m.color ? matFor(m.color) : M.box); mesh.userData.lab = "movable";
@@ -1123,6 +1171,7 @@ function buildRobotVisuals() {
 /* ---- robotcamera: kijkt langs +x van het cameraframe, +z omhoog ---- */
 const CAM = { w: 320, h: 240, vfov: 62, hz: 5 };
 const robotCam = new THREE.PerspectiveCamera(CAM.vfov, CAM.w / CAM.h, 0.03, 20);
+robotCam.layers.enable(2);                               // laag 2 = daken van tunnels: de robot ziet ze, het overzicht niet
 robotCam.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(-1, 0, 0)));
 const camRT = new THREE.WebGLRenderTarget(CAM.w, CAM.h); camRT.texture.colorSpace = THREE.SRGBColorSpace;
 const camPix = new Uint8Array(CAM.w * CAM.h * 4);
@@ -1960,6 +2009,11 @@ function render() {
   const r = sim.robot;
   r.bodies.forEach((B, i) => setObj(bodyGroups[i], B.rb));
   for (const [m, mesh] of movableMeshes) setObj(mesh, m.body);
+  for (const [a, g] of actorMeshes) setObj(g, a.body);
+  if (headlamp.intensity > 0 && r) {                    // lamp op de robot, 1 m vooruit gericht
+    const T = sim.linkWorld(cfg.camera && sim.robot.bodyOf[cfg.camera] != null ? cfg.camera : model.root), f = qrot(T.q, V(1, 0, 0));
+    headlamp.position.set(T.p.x, T.p.y, T.p.z + 0.02); headlamp.target.position.set(T.p.x + f.x, T.p.y + f.y, T.p.z + f.z - 0.15);
+  }
   for (const [pr, mesh] of probeMeshes) setObj(mesh, pr.body);
   const ow = odomWorld(); ghost.visible = mobile(); ghost.position.set(ow.x, ow.y, 0); ghost.rotation.set(0, 0, ow.th);
   for (const [k, g] of Object.entries(grids)) {

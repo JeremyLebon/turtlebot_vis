@@ -229,6 +229,15 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
   Elementen `rock {x, y, r, flat, seed}` (convex hull uit 48 richtingen, deels ingegraven) en `rocks {n, area, rmin, rmax, seed,
   keep}` (machtwet, keep = vrije cirkels: spawn, grote rotsen, ArUco). Beeld en collider delen `rockR()` (core.js). De 2D-lidar
   ziet hellingen en kraterranden als obstakel, zoals in het echt.
+- **Nieuwe wereldelementen (core.js, vóór clearWorld):** `actor` (kinematisch, pad + snelheid, loop/pingpong, wait, phase, z;
+  shape person|cow|box, model = 3D-model; positie = functie van de sim-tijd, `actorPose` vóór `world.step`; beeld: `addActorMesh`,
+  elke frame `setObj`), `maze` (recursieve backtracker met `prng(seed)`; `seed: "student"` → template `useWorld` vult de seed uit
+  `seedOf(student.nr || naam)`, knop Student zetten herlaadt het doolhof; `worldInfo.maze` = wanden voor tests), `grid` (gangen uit
+  een ASCII-kaart, wanden op de grens, dak met `roof: true`), `tunnel` (polylijn, geen T-splitsingen: gebruik `grid`), `track`
+  (gesloten middellijn, boorden met verstek, onderbroken middenlijn), `stairs`, `ramp`, `excavator`, `pipes` (buisrails met
+  `worldInfo.lift`-zones: `liftAt` tilt de spawn zodat een robot op de rails start). Terrein: `pits` (bouwput). Wereld: `dark`
+  (weinig licht, `headlamp` op de camera/rootlink). Daken (`def.roof`) staan op laag 2: robotcamera wel, 3D-overzicht niet.
+  Preset `pipetrolley`: 4 balwielen op de buizen, geleiders met µ 0 (`<gazebo><mu1>0`) aan de binnenkant van elke buis.
 - **Opname:** samengesteld canvas (WebGL + HUD + camera + testpaneel + balk) via `captureStream`, of `getDisplayMedia`
   voor het hele scherm. `drawComposite()` direct na `renderer.render` (anders leeg WebGL-beeld).
   Enkel MP4/H.264 (`pickMime`, 07-11): Toledo speelt .webm niet af. Chrome/Edge ≥ 126 kunnen dat, Firefox en

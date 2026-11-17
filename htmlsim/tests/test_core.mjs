@@ -60,7 +60,7 @@ const run = (s, c, t) => { for (let i = 0; i < t / s.DT; i++) s.step(c); };
   ok("toURDF: automatische inertia uit de collision", ie && ie.mass === 2 && ie.I.zz > 0 && ie.I.xx > 0, `ixx ${ie && ie.I.xx}`);
   const s = M.createSim(R); s.loadWorld(M.WORLDS.empty); s.buildRobot(b, cb, 0, 0, 0); run(s, { v: 0.2, w: 0 }, 2);
   ok("geëxporteerde robot rijdt in de sim", s.truthPose().x > 0.3, `x ${s.truthPose().x.toFixed(3)}`); }
-for (const k of Object.keys(M.ROBOT_PRESETS)) {        // robot-editor: elke ingebouwde robot overleeft toURDF → parseURDF
+for (const k of Object.keys(M.ROBOT_PRESETS).filter(k => k !== "pipetrolley")) {        // robot-editor (buisrailwagen: enkel op rails, zie serre): elke ingebouwde robot overleeft toURDF → parseURDF
   const a = M.parseURDF(M.presetURDF(k), DOMParser), b = M.parseURDF(M.toURDF(a), DOMParser), ca = M.analyzeModel(a).cfg, cb = M.analyzeModel(b).cfg;
   const same = cb.drive === ca.drive && cb.leftWheels.length === ca.leftWheels.length && (!ca.steer || Math.abs(cb.steer.L - ca.steer.L) < 1e-6)
     && a.joints.every(j => { const x = b.joints.find(y => y.name === j.name); return x && x.springK === j.springK && x.springC === j.springC; });
@@ -118,6 +118,20 @@ for (const kind of ["rockerbogie"]) { const s = M.createSim(R); s.loadWorld(M.WO
     return (wl.pos - a0) * s.robot.cfg.wheelRadius / Math.max(1e-3, s.truthPose().x); };
   const dflt = slip(null), ice = slip(0.03);
   ok("wrijving µ = 0,03 op de wielen: wielen slippen (kleinste µ telt)", dflt < 1.1 && ice > 1.5, `wielweg/echte weg: standaard ${dflt.toFixed(2)}, µ 0,03: ${ice.toFixed(2)}`); }
+// ---- nieuwe werelden: figuren, doolhof, serre ----
+{ const s = M.createSim(R); s.loadWorld(M.WORLDS.street); const m = M.parseURDF(M.BURGER_URDF, DOMParser); s.buildRobot(m, M.analyzeModel(m).cfg, ...M.WORLDS.street.spawn);
+  const a = s.actors[0], p0 = a.body.translation(); run(s, { v: 0, w: 0 }, 2); const p1 = a.body.translation();
+  ok("voetganger steekt over (kinematisch, volgt de sim-tijd)", s.actors.length >= 4 && Math.abs(p1.y - p0.y) > 1.5, `Δy ${(p1.y - p0.y).toFixed(2)} m in 2 s`); }
+{ const mz = seed => { const s = M.createSim(R); s.loadWorld({ ...M.WORLDS.maze, items: [{ ...M.WORLDS.maze.items[0], seed }] }); return s.worldInfo.maze; };
+  const a = mz(17), b = mz(17), c = mz(18), key = z => JSON.stringify([z.E, z.N]);
+  const reach = z => { const seen = new Set(["0,0"]), q = [[0, 0]]; while (q.length) { const [i, j] = q.pop();
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const a2 = i + di, b2 = j + dj; if (a2 < 0 || b2 < 0 || a2 >= z.nx || b2 >= z.ny || seen.has(a2 + "," + b2)) continue;
+        const blocked = di === 1 ? z.E[i + 1][j] : di === -1 ? z.E[i][j] : dj === 1 ? z.N[i][j + 1] : z.N[i][j]; if (!blocked) { seen.add(a2 + "," + b2); q.push([a2, b2]); } } }
+    return seen.size; };
+  ok("doolhof: zelfde seed = zelfde doolhof, andere seed = ander, alle cellen bereikbaar", key(a) === key(b) && key(a) !== key(c) && reach(a) === 64, `${reach(a)}/64 cellen`); }
+{ const s = M.createSim(R); s.loadWorld(M.WORLDS.greenhouse); const m = M.parseURDF(M.presetURDF("pipetrolley"), DOMParser), cfg = M.analyzeModel(m).cfg;
+  s.buildRobot(m, cfg, ...M.WORLDS.greenhouse.spawn); run(s, { v: 0, w: 0 }, 0.5); const z0 = s.truthPose().z; run(s, { v: 0.4, w: 0 }, 6); const p = s.truthPose();
+  ok("buisrailwagen rijdt over de buizen zonder eraf te vallen", p.x - M.WORLDS.greenhouse.spawn[0] > 1.1 && Math.abs(p.y - M.WORLDS.greenhouse.spawn[1]) < 0.05 && p.z > z0 - 0.02, `Δx ${(p.x - M.WORLDS.greenhouse.spawn[0]).toFixed(2)} m, Δy ${(p.y - M.WORLDS.greenhouse.spawn[1]).toFixed(3)} m, z ${z0.toFixed(3)} → ${p.z.toFixed(3)}`); }
 for (const k of Object.keys(M.WORLDS)) { const s = M.createSim(R); const wi = s.loadWorld(M.WORLDS[k]); const m = M.parseURDF(M.BURGER_URDF, DOMParser); s.buildRobot(m, M.analyzeModel(m).cfg, ...wi.spawn);
   s.LIDAR.rmax = 8;   // LDS-02-bereik: in de buitenwerelden staat binnen 3,5 m soms niets
   run(s, { v: 0.2, w: 0 }, 1); ok(`Wereld "${M.WORLDS[k].name}" laadt en scant`, s.scan("base_scan").pts.length > 60, `${s.statics.length} vaste objecten`);
