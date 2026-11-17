@@ -502,6 +502,7 @@ function createSim(R) {
           cd.setTranslation(Tc.p.x, Tc.p.y, Tc.p.z).setRotation(qmul(Tc.q, shapeRot(c.geom, isWheel))).setDensity(0)
             .setFriction(model.links[ln].mu ?? (caster ? 0 : isWheel ? 1.0 : 0.4)).setCollisionGroups(G_ROBOT);
           if (caster) cd.setFrictionCombineRule(R.CoefficientCombineRule.Min);
+          if (model.links[ln].mu != null) cd.setFrictionCombineRule(R.CoefficientCombineRule.Min);   // zoals Gazebo/ODE: de kleinste µ telt
           colls.push({ ln, c, isWheel, coll: world.createCollider(cd, rb) });
         }
       }

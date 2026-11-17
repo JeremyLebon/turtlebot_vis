@@ -95,6 +95,13 @@ const run = (s, c, t) => { for (let i = 0; i < t / s.DT; i++) s.step(c); };
   ok("limit.velocity begrenst de arm (0,5 rad/s)", half > 0.15 && half < 0.3, `na 0,5 s: ${half.toFixed(3)} rad`);
   ok("limit.effort: sterke motor haalt het doel", Math.abs(strong - 0.5) < 0.03, `${strong.toFixed(3)} rad`);
   ok("limit.effort: te zwakke motor (5 N·m) zakt door", weak < 0.2, `${weak.toFixed(3)} rad`); }
+{ const slip = mu => { const s = M.createSim(R); s.loadWorld(M.WORLDS.empty); const m = M.parseURDF(M.BURGER_URDF, DOMParser);   // wrijving per link: kleinste µ telt (Gazebo)
+    if (mu != null) for (const l of ["wheel_left_link", "wheel_right_link"]) m.links[l].mu = mu;
+    s.buildRobot(m, M.analyzeModel(m).cfg, 0, 0, 0); run(s, { v: 0, w: 0 }, 0.3); s.params.wheelAcc = 6;
+    const wl = s.robot.byName.wheel_left_joint, a0 = wl.pos; run(s, { v: 0.22, w: 0 }, 0.5);
+    return (wl.pos - a0) * s.robot.cfg.wheelRadius / Math.max(1e-3, s.truthPose().x); };
+  const dflt = slip(null), ice = slip(0.03);
+  ok("wrijving µ = 0,03 op de wielen: wielen slippen (kleinste µ telt)", dflt < 1.1 && ice > 1.5, `wielweg/echte weg: standaard ${dflt.toFixed(2)}, µ 0,03: ${ice.toFixed(2)}`); }
 for (const k of Object.keys(M.WORLDS)) { const s = M.createSim(R); const wi = s.loadWorld(M.WORLDS[k]); const m = M.parseURDF(M.BURGER_URDF, DOMParser); s.buildRobot(m, M.analyzeModel(m).cfg, ...wi.spawn);
   run(s, { v: 0.2, w: 0 }, 1); ok(`Wereld "${M.WORLDS[k].name}" laadt en scant`, s.scan("base_scan").pts.length > 60, `${s.statics.length} vaste objecten`); }
 console.log(fails ? `\n${fails} test(s) mislukt` : "\nAlle tests geslaagd"); process.exit(fails ? 1 : 0);

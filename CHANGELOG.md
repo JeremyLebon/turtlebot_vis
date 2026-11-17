@@ -35,6 +35,8 @@ Eigen versies, los daarvan:
   en heeft wrijving µ per link (`<gazebo><mu1>`) en per joint max koppel,
   max snelheid, demping en wrijving. De simulator gebruikt ze: µ per link,
   armen volgen `limit.velocity`/`limit.effort`, vrije joints `<dynamics>`.
+  Wrijving per link telt als de kleinste µ (zoals Gazebo), niet als gemiddelde
+  met de vloer: µ = 0,05 op de wielen laat ze nu echt slippen.
 
 ## 1.0.19 - 2026-11-14
 - **Virtuele robot 1.9.11: joystick op de Fenix-pagina.** Knop met de cirkel
