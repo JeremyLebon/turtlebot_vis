@@ -225,6 +225,27 @@ const PARTS = {
     M.joints.push({ name: o + "_joint", type: "fixed", parent: c, child: o, origin: { p: V(), q: OPTICAL_Q }, axis: V(1, 0, 0), limit: null });
     return c;
   },
+  // htmlsim-next: aandrijftypes (analyzeModel herkent ze op de vorm en de naam)
+  skid4: p => { for (const [n, x, y] of [["wheel_front_left_link", 0.1, 0.1], ["wheel_rear_left_link", -0.1, 0.1], ["wheel_front_right_link", 0.1, -0.1], ["wheel_rear_right_link", -0.1, -0.1]])
+    addLink(n, p, "continuous", T(x, y, 0.023), [shape({ type: "cylinder", radius: 0.033, length: 0.02 }, T(0, 0, 0, Math.PI / 2), WHEEL)], 0.1, { axis: V(0, 1, 0) }); return "wheel_front_left_link"; },
+  mecanum4: p => { for (const [n, x, y] of [["mecanum_front_left_link", 0.1, 0.1], ["mecanum_rear_left_link", -0.1, 0.1], ["mecanum_front_right_link", 0.1, -0.1], ["mecanum_rear_right_link", -0.1, -0.1]])
+    addLink(n, p, "continuous", T(x, y, 0.023), [shape({ type: "cylinder", radius: 0.033, length: 0.025 }, T(0, 0, 0, Math.PI / 2), [0.75, 0.77, 0.76, 1])], 0.1, { axis: V(0, 1, 0) }); return "mecanum_front_left_link"; },
+  ackermann: p => {                                 // achteras aangedreven, vooraan twee stuurjoints (revolute om z) met elk een wiel
+    for (const [n, y] of [["rear_left_wheel_link", 0.1], ["rear_right_wheel_link", -0.1]])
+      addLink(n, p, "continuous", T(-0.1, y, 0.023), [shape({ type: "cylinder", radius: 0.033, length: 0.02 }, T(0, 0, 0, Math.PI / 2), WHEEL)], 0.1, { axis: V(0, 1, 0) });
+    for (const [side, y] of [["left", 0.1], ["right", -0.1]]) {
+      const st = addLink(`front_${side}_steer_link`, p, "revolute", T(0.1, y, 0.023), [], 0.05, { axis: V(0, 0, 1), limit: { lower: -0.6, upper: 0.6, effort: 5, velocity: 2 }, noColl: true });
+      addLink(`front_${side}_wheel_link`, st, "continuous", T(), [shape({ type: "cylinder", radius: 0.033, length: 0.02 }, T(0, 0, 0, Math.PI / 2), WHEEL)], 0.1, { axis: V(0, 1, 0) });
+    }
+    return "front_left_steer_link";
+  },
+  suspension: p => {                                // vering tussen de geselecteerde link (wiel) en zijn ouder
+    const j = jointOf(p); if (!j || p === M.root) { msg("Kies eerst een wiel: de vering komt tussen het wiel en zijn ouder.", true); return null; }
+    const sus = addLink(p.replace(/_link$/, "") + "_suspension_link", j.parent, "prismatic", j.origin, [shape({ type: "cylinder", radius: 0.006, length: 0.04 }, T(0, 0, 0.02), [0.75, 0.77, 0.76, 1])], 3,
+      { axis: V(0, 0, 1), limit: { lower: -0.03, upper: 0.03, effort: 800, velocity: 2 }, noColl: true });
+    j.parent = sus; j.origin = T();
+    return sus;
+  },
   arm: p => addLink("arm_link", p, "revolute", T(0, 0, 0.05), [shape({ type: "box", size: [0.2, 0.03, 0.03] }, T(0.1), [0.85, 0.55, 0.15, 1])], 0.2,
     { axis: V(0, 1, 0), limit: { lower: -Math.PI / 2, upper: Math.PI / 2, effort: 10, velocity: 1 } }),
   turn: p => addLink("turntable_link", p, "revolute", T(0, 0, 0.05), [shape({ type: "cylinder", radius: 0.05, length: 0.02 }, T(0, 0, 0.01), [0.3, 0.45, 0.7, 1])], 0.2,
@@ -232,7 +253,7 @@ const PARTS = {
 };
 document.querySelectorAll("#palette button").forEach(b => b.onclick = () => {
   const parent = sel && M.links[sel] && !/optical/.test(sel) ? sel : (M.links.base_link ? "base_link" : M.root);
-  const ln = PARTS[b.dataset.add](parent);
+  const ln = PARTS[b.dataset.add](b.dataset.add === "suspension" ? sel : parent); if (!ln) return;
   sel = ln; selVis = 0; $("shapeOnly").checked = false; setGizmo("translate");
   commit(`${b.textContent.trim()} toegevoegd op ${parent}`);
 });
@@ -300,8 +321,14 @@ function select(ln, vi = 0) { sel = ln; selVis = vi || 0; refresh(); }
 const JT = { fixed: "vast", continuous: "draait", revolute: "scharnier", prismatic: "schuift" };
 function roleOf(ln, cfg) {
   const j = jointOf(ln);
-  if (cfg.leftWheel && j && j.name === cfg.leftWheel) return "aandrijfwiel L";
-  if (cfg.rightWheel && j && j.name === cfg.rightWheel) return "aandrijfwiel R";
+  if (j && j.type === "revolute" && cfg.steer && cfg.steer.joints.some(s => s.name === j.name)) return "stuur";
+  if (j && j.type === "prismatic" && /suspension|shock|spring/i.test(j.name)) return "vering";
+  if (j && j.type === "revolute" && /rocker/i.test(j.name)) return "rocker";
+  if (j && j.type === "revolute" && /bogie/i.test(j.name)) return "bogie";
+  if (j && j.type === "continuous" && cfg.leftWheels && (cfg.leftWheels.includes(j.name) || cfg.rightWheels.includes(j.name)) && j.name !== cfg.leftWheel && j.name !== cfg.rightWheel) return /mecanum/i.test(j.name) ? "mecanum" : "wiel";
+  if (j && j.type === "continuous" && cfg.steer && cfg.steer.joints.some(s => s.name === j.parent || jointOf(j.parent)?.name === s.name)) return "stuurwiel";
+  if (cfg.leftWheel && j && j.name === cfg.leftWheel) return /mecanum/i.test(j.name) ? "mecanum L" : "aandrijfwiel L";
+  if (cfg.rightWheel && j && j.name === cfg.rightWheel) return /mecanum/i.test(j.name) ? "mecanum R" : "aandrijfwiel R";
   if (/caster/i.test(ln)) return "zwenkwiel";
   for (const [k, t] of [["lidar", "2D-lidar"], ["lidar3d", "3D-lidar"], ["camera", "camera"], ["imu", "IMU"]]) if (cfg[k] === ln) return t;
   return "";
@@ -351,6 +378,8 @@ function showProps(liveOnly) {
         const pr = j.type === "prismatic", L2 = j.limit || { lower: -1.57, upper: 1.57 }, f = pr ? 1000 : R2D;
         h.push(`<label for="pLo">Min</label>${num("pLo", r1(L2.lower * f))}<label for="pHi">Max ${pr ? "mm" : "°"}</label>${num("pHi", r1(L2.upper * f))}`);
       }
+      if (j.type === "prismatic" && /suspension|shock|spring/i.test(j.name))
+        h.push(`<label for="pK">Veer N/m</label>${num("pK", j.springK ?? "", 50, 'placeholder="auto"')}<label for="pC">Demper</label>${num("pC", j.springC ?? "", 5, 'placeholder="auto"')}`);
       const pr = j.type === "prismatic", lo = j.type === "continuous" ? -Math.PI : (j.limit ? j.limit.lower : -1), hi = j.type === "continuous" ? Math.PI : (j.limit ? j.limit.upper : 1);
       h.push(`<label for="pPrev">Testen</label><input class="full" type="range" id="pPrev" min="${lo}" max="${hi}" step="${pr ? 0.001 : 0.01}" value="${preview[j.name] || 0}">`);
     }
@@ -395,6 +424,7 @@ function showProps(liveOnly) {
     };
     if ($("pAxis")) $("pAxis").onchange = () => { const [x, y, z] = $("pAxis").value.split(" ").map(Number); j.axis = V(x, y, z); commit(); };
     if ($("pLo")) $("pLo").onchange = $("pHi").onchange = () => { const f = j.type === "prismatic" ? 1000 : R2D; j.limit = { ...(j.limit || { effort: 10, velocity: 1 }), lower: val("pLo") / f, upper: val("pHi") / f }; commit(); };
+    if ($("pK")) $("pK").onchange = $("pC").onchange = () => { const k = $("pK").value, c = $("pC").value; j.springK = k === "" ? undefined : +k; j.springC = c === "" ? undefined : +c; commit(); };
     if ($("pPrev")) $("pPrev").oninput = () => { preview[j.name] = +$("pPrev").value; buildScene(); attachGizmo(); updateSelBox(); };
     ["pX", "pY", "pZ", "pR", "pP", "pW"].forEach(id => { $(id).onchange = () => { j.origin = { p: V(val("pX") / 1000, val("pY") / 1000, val("pZ") / 1000), q: qrpy(val("pR") * D2R, val("pP") * D2R, val("pW") * D2R) }; commit(); }; });
     $("aDup").onclick = () => copySubtree(L.name, false); $("aMir").onclick = () => copySubtree(L.name, true); $("aDel").onclick = () => removeLink(L.name);
@@ -429,14 +459,24 @@ function runChecks() {
   robotRoot.updateMatrixWorld(true);
   const lowZ = ln => { const b = new THREE.Box3(); const n = nodes[ln]; if (!n) return Infinity; for (const o of n.vis) b.expandByObject(o); return b.min.z; };
   if (cfg.leftWheel && cfg.rightWheel) {
-    add("ok", `Aandrijving herkend: ${cfg.leftWheel} + ${cfg.rightWheel} · straal ${r1(cfg.wheelRadius * 1000)} mm · spoor ${r1(cfg.wheelSep * 1000)} mm`);
-    for (const w of [cfg.leftWheel, cfg.rightWheel]) { const jj = M.joints.find(j => j.name === w); if (!M.links[jj.child].collisions.length) add("bad", `${jj.child} heeft geen collision: het wiel raakt de vloer niet`, jj.child); }
-    const touch = Object.keys(nodes).filter(ln => lowZ(ln) < 0.004), wheelsL = new Set([cfg.leftWheel, cfg.rightWheel].map(n => M.joints.find(j => j.name === n).child));
-    const others = touch.filter(ln => !wheelsL.has(ln) && M.links[ln].collisions.length);
-    if (!others.length) add("warn", "Enkel de twee wielen raken de vloer: de robot kantelt. Voeg een zwenkwiel toe.");
+    const DRIVE = { diff: "differentieel (2 wielen)", skid: "skid-steer (meer wielen per kant: draait met slip, ~60 % van de gevraagde hoek)",
+      mecanum: "mecanum (ook zijwaarts: /cmd_vel linear.y)", ackermann: "Ackermann-sturing (draait niet ter plaatse)" };
+    const L = cfg.leftWheels || [cfg.leftWheel], R = cfg.rightWheels || [cfg.rightWheel];
+    add("ok", `Aandrijving: ${DRIVE[cfg.drive || "diff"]} · ${L.length + R.length} aangedreven wiel(en) · straal ${r1(cfg.wheelRadius * 1000)} mm · spoor ${r1(cfg.wheelSep * 1000)} mm`);
+    if (cfg.drive === "ackermann" && cfg.steer) add("ok", `Sturing: ${cfg.steer.joints.map(x => x.name).join(" + ")} · wielbasis ${r1(cfg.steer.L * 1000)} mm · max ${r1(cfg.steer.max * R2D)}°`);
+    if (cfg.drive === "mecanum" && L.length + R.length < 4) add("warn", "Mecanum werkt met vier wielen (twee per kant).");
+    const springs = M.joints.filter(j => j.type === "prismatic" && /suspension|shock|spring/i.test(j.name));
+    if (springs.length) add("ok", `Vering op ${springs.length} wiel(en)${springs.some(j => !(M.links[j.child].inertial && M.links[j.child].inertial.mass >= 1)) ? " · let op: een lichte tussenlink (< 1 kg) laat de wielmotor zijn snelheid niet halen, gebruik ±3 kg" : ""}.`);
+    if (M.joints.some(j => /rocker/i.test(j.name) && j.type === "revolute")) add("ok", "Rocker-bogie: de rockers links en rechts werken als differentieel.");
+    const wheelJs = M.joints.filter(j => j.type === "continuous" && !/caster/i.test(j.name));
+    for (const jj of wheelJs) if (!M.links[jj.child].collisions.length) add("bad", `${jj.child} heeft geen collision: het wiel raakt de vloer niet`, jj.child);
+    const touch = Object.keys(nodes).filter(ln => lowZ(ln) < 0.004 && M.links[ln].collisions.length), wheelL = new Set(wheelJs.map(j => j.child));
+    const wheelsDown = touch.filter(ln => wheelL.has(ln)), others = touch.filter(ln => !wheelL.has(ln));
+    if (wheelsDown.length + others.length < 3) add("warn", `Maar ${wheelsDown.length + others.length} steunpunten op de vloer: de robot kantelt. Voeg een zwenkwiel of meer wielen toe.`);
     for (const ln of others.filter(ln => !/caster/i.test(ln))) add("warn", `${ln} raakt de vloer en sleept mee. Is het een zwenkwiel? Noem het dan caster…, dan rolt het zonder wrijving.`, ln);
     if (others.some(ln => /caster/i.test(ln))) add("ok", "Zwenkwiel raakt de vloer.");
-    const wz = Math.abs(lowZ([...wheelsL][0]) - lowZ([...wheelsL][1])); if (wz > 0.003) add("warn", `Wielen staan niet even hoog (${r1(wz * 1000)} mm verschil).`);
+    const lows = wheelsDown.map(lowZ), up = wheelJs.map(j => j.child).filter(ln => !wheelsDown.includes(ln));
+    if (up.length) add("warn", `${up.join(", ")} ${up.length > 1 ? "raken" : "raakt"} de vloer niet.`, up[0]);
   } else add("warn", "Geen aandrijfwielen herkend (twee continuous joints met as langs y, links en rechts). De simulator zet de basis dan vast aan de wereld, zoals een arm op een sokkel.");
   if (cfg.lidar) {
     const z = new THREE.Vector3(); nodes[cfg.lidar] && nodes[cfg.lidar].motion.getWorldPosition(z);
@@ -504,6 +544,11 @@ document.querySelectorAll("#newMenu [data-new]").forEach(b => b.onclick = () => 
   if (b.dataset.new === "burger") loadText(BURGER_URDF, "TurtleBot3 Burger");
   if (b.dataset.new === "sim") { const o = JSON.parse(store.get(KEY_FROM_SIM) || "null"); if (o) loadText(o.urdf, "Uit de simulator"); }
 });
+if (typeof ROBOT_PRESETS === "object") for (const [k, P] of Object.entries(ROBOT_PRESETS)) {
+  const b = document.createElement("button"); b.setAttribute("role", "menuitem"); b.textContent = P.label;
+  b.onclick = () => { $("newMenu").hidden = true; loadText(presetURDF(k), P.label); };
+  $("newMenu").insertBefore(b, $("newFromSim"));
+}
 $("openUrdf").onchange = async e => { const f = e.target.files[0]; $("newMenu").hidden = true; if (f) loadText(await f.text(), f.name); };
 $("openDir").onchange = async e => {
   $("newMenu").hidden = true;

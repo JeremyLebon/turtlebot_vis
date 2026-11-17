@@ -30,6 +30,9 @@ Eigen versies, los daarvan:
   maten, kleur, massa; inertia automatisch), spiegelen L↔R, ongedaan maken,
   controle voor de simulator. *Testen in de simulator* stuurt de robot naar
   een open simulator-tabblad. Dockerfile kopieert `editor.html` mee.
+  Op htmlsim-next ook: 4 wielen (skid), mecanum, auto-onderstel (Ackermann),
+  vering per wiel (veerstijfheid/demping), de ingebouwde robots als
+  startpunt, en de controle toont het aandrijftype.
 
 ## 1.0.18 - 2026-11-14
 - **Simulator 1.5.4: geen pijl meer bij de meetpunten.** Enkel de ring met het

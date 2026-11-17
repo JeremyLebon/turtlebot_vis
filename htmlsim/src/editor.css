@@ -56,3 +56,4 @@ body.ed #robotName{font:600 14px var(--f-mono);padding:6px 9px;border:1px solid 
   .edlayout{grid-template-columns:1fr;grid-template-rows:minmax(380px,55vh) auto auto}
   .edlayout .stage{grid-row:1} .edleft{grid-row:2;border-right:0} .edright{grid-row:3;border-left:0}
 }
+.pophead{padding:8px 10px 2px;font:600 11px var(--f-mono);text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}

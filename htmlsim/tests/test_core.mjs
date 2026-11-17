@@ -60,6 +60,12 @@ const run = (s, c, t) => { for (let i = 0; i < t / s.DT; i++) s.step(c); };
   ok("toURDF: automatische inertia uit de collision", ie && ie.mass === 2 && ie.I.zz > 0 && ie.I.xx > 0, `ixx ${ie && ie.I.xx}`);
   const s = M.createSim(R); s.loadWorld(M.WORLDS.empty); s.buildRobot(b, cb, 0, 0, 0); run(s, { v: 0.2, w: 0 }, 2);
   ok("geëxporteerde robot rijdt in de sim", s.truthPose().x > 0.3, `x ${s.truthPose().x.toFixed(3)}`); }
+for (const k of Object.keys(M.ROBOT_PRESETS)) {        // robot-editor: elke ingebouwde robot overleeft toURDF → parseURDF
+  const a = M.parseURDF(M.presetURDF(k), DOMParser), b = M.parseURDF(M.toURDF(a), DOMParser), ca = M.analyzeModel(a).cfg, cb = M.analyzeModel(b).cfg;
+  const same = cb.drive === ca.drive && cb.leftWheels.length === ca.leftWheels.length && (!ca.steer || Math.abs(cb.steer.L - ca.steer.L) < 1e-6)
+    && a.joints.every(j => { const x = b.joints.find(y => y.name === j.name); return x && x.springK === j.springK && x.springC === j.springC; });
+  const s = M.createSim(R); s.loadWorld(M.WORLDS.empty); s.buildRobot(b, cb, 0, 0, 0); run(s, { v: 0.2, w: 0 }, 2);
+  ok(`toURDF: preset "${k}" blijft ${ca.drive} en rijdt`, same && s.truthPose().x > 0.2, `x ${s.truthPose().x.toFixed(2)}`); }
 for (const k of Object.keys(M.WORLDS)) { const s = M.createSim(R); const wi = s.loadWorld(M.WORLDS[k]); const m = M.parseURDF(M.BURGER_URDF, DOMParser); s.buildRobot(m, M.analyzeModel(m).cfg, ...wi.spawn);
   s.LIDAR.rmax = 8;   // LDS-02-bereik: in de buitenwerelden staat binnen 3,5 m soms niets
   run(s, { v: 0.2, w: 0 }, 1); ok(`Wereld "${M.WORLDS[k].name}" laadt en scant`, s.scan("base_scan").pts.length > 60, `${s.statics.length} vaste objecten`);

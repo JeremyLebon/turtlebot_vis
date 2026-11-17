@@ -201,6 +201,8 @@ function toURDF(model, extras = []) {
       if (j.type !== "fixed") out.push(`    <axis xyz="${[j.axis.x, j.axis.y, j.axis.z].map(fmtN).join(" ")}"/>`);
       if (j.type === "revolute" || j.type === "prismatic") { const L = j.limit || { lower: -1.57, upper: 1.57, effort: 10, velocity: 1 };
         out.push(`    <limit lower="${fmtN(L.lower)}" upper="${fmtN(L.upper)}" effort="${fmtN(L.effort || 10)}" velocity="${fmtN(L.velocity || 1)}"/>`); }
+      if (j.springK != null || j.springC != null)   // vering: zoals sdformat/Gazebo het uit een URDF leest
+        out.push(`    <dynamics${j.springC != null ? ` damping="${fmtN(j.springC)}"` : ""}${j.springK != null ? ` spring_stiffness="${fmtN(j.springK)}"` : ""}/>`);
       out.push(`  </joint>`);
     }
     const l = model.links[ln], ie = autoInertial(l), body = [];

@@ -28,6 +28,7 @@
       <div class="pop" id="newMenu" hidden role="menu">
         <button data-new="empty" role="menuitem">Lege robot (enkel een plaat)</button>
         <button data-new="burger" role="menuitem">TurtleBot3 Burger (eenvoudig)</button>
+        <span class="pophead">Ingebouwde robots van de simulator</span>
         <button data-new="sim" role="menuitem" id="newFromSim">Robot uit de simulator</button>
         <label class="pick" role="menuitem">URDF-bestand openen…<input type="file" id="openUrdf" accept=".urdf,.xml" hidden></label>
         <label class="pick" role="menuitem">Map met URDF en meshes…<input type="file" id="openDir" webkitdirectory multiple hidden></label>
@@ -51,6 +52,10 @@
         <button data-add="wheels"><i class="ic whl"></i>Wielen (paar)</button>
         <button data-add="wheel"><i class="ic whl"></i>Wiel</button>
         <button data-add="caster"><i class="ic cst"></i>Zwenkwiel</button>
+        <button data-add="skid4" title="Vier aangedreven wielen: skid-steer"><i class="ic whl"></i>4 wielen (skid)</button>
+        <button data-add="mecanum4" title="Vier mecanumwielen: ook zijwaarts"><i class="ic whl"></i>Mecanum (4)</button>
+        <button data-add="ackermann" title="Achteras aangedreven, vooras met twee stuurjoints"><i class="ic whl"></i>Auto-onderstel</button>
+        <button data-add="suspension" title="Kies eerst een wiel: vering tussen het wiel en zijn ouder"><i class="ic arm"></i>Vering (wiel)</button>
         <button data-add="lidar"><i class="ic sen"></i>2D-lidar</button>
         <button data-add="lidar3d"><i class="ic sen"></i>3D-lidar</button>
         <button data-add="camera"><i class="ic icam"></i>Camera</button>

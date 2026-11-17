@@ -212,6 +212,9 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
   `tb3sim.toEditor` + `editor#from-sim` (knop Robot-editor in de titelbalk en onder Robot). In een iframe (artifact)
   navigeren beide pagina's in hetzelfde kader i.p.v. een nieuw tabblad (`window.self !== window.top`). Test: `node tests/e2e_robot_editor.cjs [map]`
   (bouwt een robot, sleept met de muis aan de gizmo, rijdt de export in Rapier, stuurt naar een open sim).
+  htmlsim-next: bouwblokken `skid4`, `mecanum4` (jointnamen met mecanum), `ackermann` (achteras + twee stuurjoints om z
+  met elk een wiel), `suspension` (prismatic …_suspension_joint, 3 kg, tussen wiel en ouder; veer/demper → `<dynamics>`),
+  ingebouwde robots (`ROBOT_PRESETS`) in het menu Nieuw / openen; de controle toont `cfg.drive`, sturing, vering, steunpunten.
 - **Opname:** samengesteld canvas (WebGL + HUD + camera + testpaneel + balk) via `captureStream`, of `getDisplayMedia`
   voor het hele scherm. `drawComposite()` direct na `renderer.render` (anders leeg WebGL-beeld).
   Enkel MP4/H.264 (`pickMime`, 07-11): Toledo speelt .webm niet af. Chrome/Edge ≥ 126 kunnen dat, Firefox en

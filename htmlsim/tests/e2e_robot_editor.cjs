@@ -29,14 +29,14 @@ let fails = 0; const ok = (name, c, info = '') => { console.log(`${c ? '✓' : '
     await ed.evaluate(() => { try { localStorage.clear(); } catch {} }); await ed.reload({ waitUntil: 'domcontentloaded' }); await wait(2500);
     const tree0 = await ed.$$eval('#tree li', l => l.map(x => x.dataset.l));
     ok('start met de Burger', tree0.includes('wheel_left_link') && tree0.includes('base_scan'), `${tree0.length} links`);
-    ok('controle: aandrijving herkend', /Aandrijving herkend/.test(await ed.$eval('#checks', e => e.textContent)));
+    ok('controle: aandrijving herkend', /Aandrijving: differentieel/.test(await ed.$eval('#checks', e => e.textContent)));
     // lege robot en opbouwen
     await ed.click('#newBtn'); await ed.click('[data-new="empty"]'); await wait(400);
     ok('lege robot: geen aandrijving', /Geen aandrijfwielen/.test(await ed.$eval('#checks', e => e.textContent)));
     await ed.evaluate(() => window.__edtest.select('base_link'));
     await ed.click('[data-add="wheels"]'); await wait(300);
     let chk = await ed.$eval('#checks', e => e.textContent);
-    ok('wielen (paar): aandrijving herkend, kantelwaarschuwing', /Aandrijving herkend: wheel_left_joint \+ wheel_right_joint/.test(chk) && /kantelt/.test(chk), chk.split('.')[0]);
+    ok('wielen (paar): aandrijving herkend, kantelwaarschuwing', /Aandrijving: differentieel \(2 wielen\) · 2 aangedreven/.test(chk) && /kantelt/.test(chk), chk.split('.')[0]);
     await ed.evaluate(() => window.__edtest.select('base_link')); await ed.click('[data-add="caster"]'); await wait(300);
     await ed.evaluate(() => window.__edtest.select('base_link')); await ed.click('[data-add="lidar"]'); await wait(300);
     await ed.evaluate(() => window.__edtest.select('base_link')); await ed.click('[data-add="camera"]'); await wait(300);
@@ -97,6 +97,26 @@ let fails = 0; const ok = (name, c, info = '') => { console.log(`${c ? '✓' : '
     ok('zelfgebouwde robot rijdt rechtdoor in de simulator', p.x > 0.3 && Math.abs(p.y) < 0.03 && tilt < 0.05, `x ${p.x.toFixed(3)} y ${p.y.toFixed(3)} kanteling ${(tilt * 57.3).toFixed(1)}°`);
     const sc = s.scan(cfg.lidar);
     ok('lidar van de zelfgebouwde robot scant', sc.pts.length > 50, `${sc.pts.length} punten`);
+    // htmlsim-next: ingebouwde robots in het menu, auto-onderstel (Ackermann), vering
+    const presets = await ed.$$eval('#newMenu button', b => b.map(x => x.textContent));
+    ok('menu toont de ingebouwde robots van next', presets.some(t => /Ackermann/.test(t)) && presets.some(t => /Rocker-bogie/.test(t)), presets.length + ' items');
+    await ed.click('#newBtn'); await ed.click('[data-new="empty"]'); await wait(300);
+    await ed.evaluate(() => window.__edtest.select('base_link')); await ed.click('[data-add="ackermann"]'); await wait(300);
+    await ed.evaluate(() => window.__edtest.select('base_link')); await ed.click('[data-add="lidar"]'); await wait(300);
+    chk = await ed.$eval('#checks', e => e.textContent);
+    ok('auto-onderstel: Ackermann herkend, 4 steunpunten', /Ackermann-sturing/.test(chk) && /Sturing: front_left_steer_joint \+ front_right_steer_joint · wielbasis 200 mm/.test(chk) && !/kantelt/.test(chk), chk.replace(/\s+/g, ' ').slice(0, 200));
+    await ed.evaluate(() => window.__edtest.select('rear_left_wheel_link')); await ed.click('[data-add="suspension"]'); await wait(300);
+    const sus = await ed.evaluate(() => { const M = window.__edtest.M, w = M.joints.find(j => j.child === 'rear_left_wheel_link'), sj = M.joints.find(j => j.child === w.parent); return { parent: w.parent, type: sj.type, name: sj.name, mass: M.links[w.parent].inertial.mass }; });
+    ok('vering tussen wiel en romp (prismatic, 3 kg)', sus.type === 'prismatic' && /suspension/.test(sus.name) && sus.mass === 3, JSON.stringify(sus));
+    ok('controle meldt de vering', /Vering op 1 wiel/.test(await ed.$eval('#checks', e => e.textContent)));
+    await ed.evaluate(() => { const k = document.getElementById('pK'); k.value = 2000; k.dispatchEvent(new Event('change')); });
+    const carUrdf = await ed.evaluate(() => window.__edtest.exportText());
+    ok('veerstijfheid in <dynamics>', /<dynamics spring_stiffness="2000"\/>/.test(carUrdf));
+    { const m = C.parseURDF(carUrdf, DOMParser), cfg = C.analyzeModel(m).cfg, s = C.createSim(R); s.loadWorld(C.WORLDS.empty); s.buildRobot(m, cfg, 0, 0, 0);
+      for (let i = 0; i < 1 / s.DT; i++) s.step({ v: 0.2, w: 0 }); for (let i = 0; i < 2 / s.DT; i++) s.step({ v: 0.2, w: 0.6 });
+      const p = s.truthPose(); ok('zelfgebouwde auto rijdt en draait een bocht in de sim', cfg.drive === 'ackermann' && p.x > 0.2 && p.th > 0.2, `x ${p.x.toFixed(2)} θ ${(p.th * 57.3).toFixed(0)}°`); }
+    if (OUT) { await ed.evaluate(() => window.__edtest.select('front_left_steer_link')); await ed.evaluate(() => { const r = document.getElementById('pPrev'); r.value = 0.4; r.dispatchEvent(new Event('input')); }); await wait(300); await ed.screenshot({ path: path.join(OUT, 'robot_editor_next.png') }); }
+    await ed.evaluate(() => { const e = document.getElementById('robotName'); e.value = 'testbot'; e.dispatchEvent(new Event('change')); });
     // naar de simulator (open tabblad, BroadcastChannel)
     const sim = await open('tb3-lite-sim-3d.html'); await wait(3500);
     await ed.bringToFront(); await ed.click('#toSimBtn'); await wait(1500);
@@ -125,7 +145,8 @@ let fails = 0; const ok = (name, c, info = '') => { console.log(`${c ? '✓' : '
     await frame().evaluate(() => document.getElementById('editorLink').click()); await wait(3000);
     ok('in een iframe: Robot-editor opent in hetzelfde kader', /robot-editor\.html#from-sim$/.test(frame().url()), frame().url());
     await frame().evaluate(() => { const e = document.getElementById('robotName'); e.value = 'kaderbot'; e.dispatchEvent(new Event('change')); });
-    await frame().evaluate(() => document.getElementById('toSimBtn').click()); await wait(3500);
+    await frame().evaluate(() => document.getElementById('toSimBtn').click());
+    for (let i = 0; i < 40; i++) { await wait(500); const t = await frame().evaluate(() => document.getElementById('robotMsg') && document.getElementById('robotMsg').textContent).catch(() => ''); if (/kaderbot/.test(t || '')) break; }   // next: 10 MB met 3D-modellen
     const fm = await frame().evaluate(() => document.getElementById('robotMsg') && document.getElementById('robotMsg').textContent);
     ok('in een iframe: Testen in de simulator gaat terug met de robot', /tb3-lite-sim-3d\.html#editor-robot$/.test(frame().url()) && /robot-editor: kaderbot/.test(fm || ''), (fm || frame().url()).split('\n')[0]);
     ok('geen fouten in de pagina\'s', errs.length === 0, errs.slice(0, 3).join(' | '));
