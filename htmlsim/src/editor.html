@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robot-editor · TurtleBot Sim __VERSIE__</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/*__CSS__*/
+/*__EDCSS__*/
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body class="ed">
+<header class="bar">
+  <div class="brand"><button class="ghost" id="backSim" title="Terug naar de simulator (zonder de robot mee te nemen)">← Simulator</button><span class="name">Robot-editor</span><span class="ver">TurtleBot Sim v__VERSIE__</span></div>
+  <div class="tools">
+    <input type="text" id="robotName" aria-label="Naam van de robot" spellcheck="false">
+    <div class="menu">
+      <button class="ghost" id="newBtn" aria-haspopup="true" aria-expanded="false">Nieuw / openen ▾</button>
+      <div class="pop" id="newMenu" hidden role="menu">
+        <button data-new="empty" role="menuitem">Lege robot (enkel een plaat)</button>
+        <button data-new="burger" role="menuitem">TurtleBot3 Burger (eenvoudig)</button>
+        <span class="pophead">Ingebouwde robots van de simulator</span>
+        <button data-new="sim" role="menuitem" id="newFromSim">Robot uit de simulator</button>
+        <label class="pick" role="menuitem">URDF-bestand openen…<input type="file" id="openUrdf" accept=".urdf,.xml" hidden></label>
+        <label class="pick" role="menuitem">Map met URDF en meshes…<input type="file" id="openDir" webkitdirectory multiple hidden></label>
+      </div>
+    </div>
+    <button class="ghost icon" id="undoBtn" title="Ongedaan maken (Ctrl+Z)" aria-label="Ongedaan maken">↶</button>
+    <button class="ghost icon" id="redoBtn" title="Opnieuw (Ctrl+Y)" aria-label="Opnieuw">↷</button>
+    <button class="ghost" id="dlBtn">URDF downloaden</button>
+    <button class="act" id="toSimBtn" title="Stuurt de robot naar een open simulator-tabblad, of opent de simulator">Testen in de simulator</button>
+  </div>
+</header>
+<main class="edlayout">
+  <aside class="edleft">
+    <section>
+      <h2>Toevoegen</h2>
+      <p class="hint" id="addHint">Komt op de geselecteerde link.</p>
+      <div class="palette" id="palette">
+        <button data-add="box"><i class="ic box"></i>Doos / plaat</button>
+        <button data-add="cylinder"><i class="ic cyl"></i>Cilinder</button>
+        <button data-add="sphere"><i class="ic sph"></i>Bol</button>
+        <button data-add="wheels"><i class="ic whl"></i>Wielen (paar)</button>
+        <button data-add="wheel"><i class="ic whl"></i>Wiel</button>
+        <button data-add="caster"><i class="ic cst"></i>Zwenkwiel</button>
+        <button data-add="skid4" title="Vier aangedreven wielen: skid-steer"><i class="ic whl"></i>4 wielen (skid)</button>
+        <button data-add="mecanum4" title="Vier mecanumwielen: ook zijwaarts"><i class="ic whl"></i>Mecanum (4)</button>
+        <button data-add="ackermann" title="Achteras aangedreven, vooras met twee stuurjoints"><i class="ic whl"></i>Auto-onderstel</button>
+        <button data-add="suspension" title="Kies eerst een wiel: vering tussen het wiel en zijn ouder"><i class="ic arm"></i>Vering (wiel)</button>
+        <button data-add="lidar"><i class="ic sen"></i>2D-lidar</button>
+        <button data-add="lidar3d"><i class="ic sen"></i>3D-lidar</button>
+        <button data-add="camera"><i class="ic icam"></i>Camera</button>
+        <button data-add="imu"><i class="ic sen"></i>IMU</button>
+        <button data-add="arm"><i class="ic arm"></i>Armsegment</button>
+        <button data-add="turn"><i class="ic cyl"></i>Draaischijf</button>
+      </div>
+    </section>
+    <section class="treesec">
+      <h2>Opbouw</h2>
+      <ul class="tree" id="tree" role="tree" aria-label="Links en joints"></ul>
+    </section>
+  </aside>
+
+  <div class="stage" id="stage">
+    <div class="loading" id="loading">3D laden…</div>
+    <div class="edtools">
+      <div class="seg" role="group" aria-label="Gizmo">
+        <button data-g="translate" class="on" title="Verplaatsen (G)">Verplaatsen</button><button data-g="rotate" title="Draaien (R)">Draaien</button><button data-g="scale" title="Schalen (S): enkel de vorm">Schalen</button>
+      </div>
+      <label class="chk sm"><input type="checkbox" id="shapeOnly"> enkel de vorm</label>
+      <select id="snap" aria-label="Snapping"><option value="5">snap 5 mm · 5°</option><option value="10">snap 10 mm · 15°</option><option value="1">snap 1 mm · 1°</option><option value="0">vrij</option></select>
+      <label class="chk sm"><input type="checkbox" id="showColl"> collisions</label>
+      <label class="chk sm"><input type="checkbox" id="showFrames" checked> frames</label>
+    </div>
+    <p class="edtip" id="tip">Klik op een onderdeel om het te kiezen, sleep de pijlen om het te verplaatsen. Dubbelklik = inzoomen.</p>
+  </div>
+
+  <aside class="panel edright">
+    <section id="propSec">
+      <h2 id="propTitle">Eigenschappen</h2>
+      <div id="props"></div>
+    </section>
+    <section>
+      <h2>Controle voor de simulator</h2>
+      <ul class="checks2" id="checks"></ul>
+    </section>
+    <section>
+      <h2>URDF</h2>
+      <div class="row"><button class="ghost" id="copyBtn">Kopiëren</button><button class="ghost" id="showUrdf">Tonen</button></div>
+      <textarea id="urdfOut" rows="10" readonly hidden aria-label="URDF"></textarea>
+      <p class="msg" id="msg"></p>
+    </section>
+  </aside>
+</main>
+
+<script type="module">
+/*__EDITOR__*/
+</script>
+</body>
+</html>

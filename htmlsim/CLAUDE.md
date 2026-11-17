@@ -6,8 +6,11 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
 ## Build en tests
 
 - `python3 build.py` voegt `src/template.html` + `src/style.css` + `src/core.js` + `src/tasks.js` samen tot
-  `dist/tb3-lite-sim-3d.html` (placeholders `/*__CSS__*/`, `/*__CORE__*/`, `/*__TASKS__*/`).
-  `--artifact` geeft `dist/artifact.html` zonder doctype/head/body.
+  `dist/tb3-lite-sim-3d.html` (placeholders `/*__CSS__*/`, `/*__CORE__*/`, `/*__TASKS__*/`), en
+  `src/editor.html` + `editor.css` + `editor.js` (met core.js) tot `dist/robot-editor.html`.
+  `--artifact` geeft `dist/artifact.html` zonder doctype/head/body. `--local` → `index.html` + `editor.html` (vendor),
+  `--site` → `dist/site/index.html` + `editor.html` (CDN, artifact met twee pagina's). `__SIM_URL__`/`__EDITOR_URL__`
+  worden per variant ingevuld.
 - Titelbalk "TurtleBot Sim v<versie> · <datum>": versie uit `package.json` (ophogen bij een update voor de studenten),
   datum = laatste commit in htmlsim/ (vandaag bij niet-gecommitte wijzigingen, builddatum in de Docker-build zonder git).
 - Na elke wijziging: `python3 build.py`, dan syntaxcheck van het module-script:
@@ -194,6 +197,57 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
   `/cmd_vel` gaat dan via twist_mux (prioriteiten, snelheidslimiet); een Twist-script rijdt nog rechtstreeks (gaat niet door twist_mux).
   De opdrachten blijven `/cmd_vel` meten. Knop Fenix-pagina zodra :8090 antwoordt.
 - **turtlebot-vis:** `build.py --local` → `dist/index.html` met three.js en Rapier uit `./vendor` (Dockerfile van turtlebot-vis), geserveerd op `http://localhost:8080/sim/`; daar verbindt de pagina vanzelf (`robot htmlsim` start rosbridge).
+- **Robot-editor (template, vóór de hoofdlus; `ED`):** `sim.setFixedJoint(naam, origin)` (core.js) zet `joint.origin`
+  en verschuift de links eronder binnen hun star lichaam (`linkOff` + `colliders` via `setTranslationWrtParent`), zonder
+  herbouw; massa en grondhoogte blijven (sensoren zijn licht). Geeft `null` als er een bewegende joint onder hangt
+  (die frames staan niet in de lijst). Gizmo = three `TransformControls` op `linkNodes[child]`, laag 1, raycaster
+  `layers.enableAll()`; node-pose → origin t.o.v. de ouder via `an.linkT`. `/tf_static` opnieuw bij loslaten (en
+  hoogstens elke 250 ms tijdens het slepen). Sensor toevoegen = link + fixed joint in `model` (camera met optisch frame
+  `OPTICAL_Q`), `cfg[slot]` en herbouw. Export: `patchURDF(ED.text, edits, added)` werkt op de oorspronkelijke tekst
+  (na `preXacro`) en verandert enkel `<origin>` van gewijzigde joints. `ED.orig` = origins bij het laden
+  (`edNewModel` in `loadModelText`/`loadBuiltin`). Hulpweergaven (assen, collisions, scanring) hangen aan de
+  linkknopen en verdwijnen met `robotG.clear()`; `edDecorate()` aan het einde van `buildRobotVisuals`.
+  Test: `node tests/e2e_editor.cjs [map]` (nep-rosbridge op 9092). In de vendorlijst van de Dockerfile staat
+  `TransformControls.js`: een nieuwe three-addon daar ook toevoegen.
+- **Aparte robot-editor (`src/editor.*`, `dist/robot-editor.html`):** robot bouwen of aanpassen. Model = object van
+  `parseURDF`; elke wijziging via `commit()` (geschiedenis 100 stappen, `localStorage tb3editor.autosave`, scène
+  volledig herbouwd). Scène per link: `frame` (= joint.origin, gizmo-doel bij verplaatsen) → `motion` (voorbeeldstand
+  van de joint) → vormen + kinderen. "Enkel de vorm"/schalen: gizmo op de visual-mesh; collision volgt als die gelijk
+  was aan de visual. Export `toURDF(model, extras)` (core.js) schrijft de URDF volledig opnieuw; inertia met
+  `inertial.auto` uit de vorm; onbekende blokken (gazebo, ros2_control, transmission) blijven als ruwe XML in `extras`.
+  Bouwblokken in `PARTS` (wielen: continuous, as +y, cilinder rpy π/2 0 0, zoals de sim ze herkent; zwenkwiel heet
+  caster… = zonder wrijving). Controle gebruikt `analyzeModel` en de laagste punten in de scène.
+  Koppeling met de simulator: editor → sim via `BroadcastChannel("tb3sim")` {type:"urdf"} met `ack` terug; zonder
+  antwoord binnen 0,8 s `localStorage tb3sim.fromEditor` + nieuw tabblad `index#editor-robot`. Sim → editor:
+  `tb3sim.toEditor` + `editor#from-sim` (knop Robot-editor in de titelbalk en onder Robot). In een iframe (artifact)
+  navigeren beide pagina's in hetzelfde kader i.p.v. een nieuw tabblad (`window.self !== window.top`). Test: `node tests/e2e_robot_editor.cjs [map]`
+  (bouwt een robot, sleept met de muis aan de gizmo, rijdt de export in Rapier, stuurt naar een open sim).
+  htmlsim-next: bouwblokken `skid4`, `mecanum4` (jointnamen met mecanum), `ackermann` (achteras + twee stuurjoints om z
+  met elk een wiel), `suspension` (prismatic …_suspension_joint, 3 kg, tussen wiel en ouder; veer/demper → `<dynamics>`),
+  ingebouwde robots (`ROBOT_PRESETS`) in het menu Nieuw / openen; de controle toont `cfg.drive`, sturing, vering, steunpunten.
+- **Inertie, wrijving, jointdynamica (core.js):** `combinedInertia(vormen, massa)` = massa verdeeld volgens volume, zwaartepunt,
+  volledige tensor met Steiner (editor "automatisch", `inertial.auto`); de sim houdt enkel de diagonaal. Wrijving per link uit
+  `<gazebo reference><mu1>/<mu2>` (`link.mu`), anders wiel 1,0 / caster 0 / rest 0,4 (mecanum blijft 0). `jointDyn`/`posMotor`:
+  positiegestuurde joints volgen `limit.velocity` (doel schuift zo snel op) en `limit.effort` (ForceBased, k = effort/0,05 rad,
+  P-actie afgekapt op 0,05 rad ≈ koppelgrens; Rapier 0.14 heeft geen echte); vrije continuous joints: `<dynamics damping>`
+  als viskeuze rem, `friction` ≈ extra demping (koppel bij 0,1 rad/s). Aandrijfwielen negeren effort/velocity (zoals de
+  diff-drive-plugin van Gazebo). Zonder die tags verandert er niets aan bestaande robots.
+  Een link met eigen `mu` krijgt `CoefficientCombineRule.Min` (zoals Gazebo/ODE): anders middelt Rapier met de vloer (0,8) en
+  had µ = 0,05 op een wiel nauwelijks effect.
+- **Maan/Mars (werelden `moon`, `mars`):** wereld-JSON kent `gravity` (m/s², `GRAV` in core: wereld, IMU, veren) en `friction`
+  (bodem en rotsen). Terrein: `rough {amp, len, seed}` (waardenruis, 3 octaven) en `craters [{x, y, r, d, rim}]` (kom + rand).
+  Elementen `rock {x, y, r, flat, seed}` (convex hull uit 48 richtingen, deels ingegraven) en `rocks {n, area, rmin, rmax, seed,
+  keep}` (machtwet, keep = vrije cirkels: spawn, grote rotsen, ArUco). Beeld en collider delen `rockR()` (core.js). De 2D-lidar
+  ziet hellingen en kraterranden als obstakel, zoals in het echt.
+- **Nieuwe wereldelementen (core.js, vóór clearWorld):** `actor` (kinematisch, pad + snelheid, loop/pingpong, wait, phase, z;
+  shape person|cow|box, model = 3D-model; positie = functie van de sim-tijd, `actorPose` vóór `world.step`; beeld: `addActorMesh`,
+  elke frame `setObj`), `maze` (recursieve backtracker met `prng(seed)`; `seed: "student"` → template `useWorld` vult de seed uit
+  `seedOf(student.nr || naam)`, knop Student zetten herlaadt het doolhof; `worldInfo.maze` = wanden voor tests), `grid` (gangen uit
+  een ASCII-kaart, wanden op de grens, dak met `roof: true`), `tunnel` (polylijn, geen T-splitsingen: gebruik `grid`), `track`
+  (gesloten middellijn, boorden met verstek, onderbroken middenlijn), `stairs`, `ramp`, `excavator`, `pipes` (buisrails met
+  `worldInfo.lift`-zones: `liftAt` tilt de spawn zodat een robot op de rails start). Terrein: `pits` (bouwput). Wereld: `dark`
+  (weinig licht, `headlamp` op de camera/rootlink). Daken (`def.roof`) staan op laag 2: robotcamera wel, 3D-overzicht niet.
+  Preset `pipetrolley`: 4 balwielen op de buizen, geleiders met µ 0 (`<gazebo><mu1>0`) aan de binnenkant van elke buis.
 - **Opname:** samengesteld canvas (WebGL + HUD + camera + testpaneel + balk) via `captureStream`, of `getDisplayMedia`
   voor het hele scherm. `drawComposite()` direct na `renderer.render` (anders leeg WebGL-beeld).
   Enkel MP4/H.264 (`pickMime`, 07-11): Toledo speelt .webm niet af. Chrome/Edge ≥ 126 kunnen dat, Firefox en

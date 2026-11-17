@@ -12,6 +12,45 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## Nog niet gebouwd (branch `feature/robot-editor-next`)
+- **Simulator 1.6.0: robot-editor.** Nieuw paneel *Robot-editor (sensoren
+  plaatsen)* onder Instellingen. Vaste frames (lidar, camera, IMU, 3D-lidar)
+  verplaatsen en draaien met een gizmo in het 3D-beeld of met getallen (mm, °),
+  live zonder herbouw: `/tf_static`, scan en camerabeeld volgen meteen, ook
+  tijdens SLAM/Nav2. Frames en collisions tonen, scanring en camerakegel als
+  voorbeeld, waarschuwingen (lidar boven 35 cm, hellend scanvlak, scheve IMU).
+  Sensor toevoegen/verwijderen op een gekozen link. Export: de URDF met enkel
+  de gewijzigde `<origin>`'s en nieuwe links, of per joint `<origin>` +
+  `static_transform_publisher`. Dockerfile: `TransformControls.js` mee in
+  `vendor`.
+- **Aparte robot-editor** (`/sim/editor.html`, knop *Robot-editor openen*):
+  robot bouwen of aanpassen. Onderdelen aanklikken en verslepen/draaien/
+  schalen (snap 5 mm/5°), bouwblokken (wielen, zwenkwiel, lidar, camera,
+  IMU, armsegment, draaischijf, vormen), eigenschappen (joint, as, limieten,
+  maten, kleur, massa; inertia automatisch), spiegelen L↔R, ongedaan maken,
+  controle voor de simulator. *Testen in de simulator* stuurt de robot naar
+  een open simulator-tabblad. Dockerfile kopieert `editor.html` mee.
+- **Inertie, wrijving en joints:** de editor rekent de inertie uit alle vormen
+  samen (of handmatig: zwaartepunt + ixx/iyy/izz), toont het zwaartepunt,
+  en heeft wrijving µ per link (`<gazebo><mu1>`) en per joint max koppel,
+  max snelheid, demping en wrijving. De simulator gebruikt ze: µ per link,
+  armen volgen `limit.velocity`/`limit.effort`, vrije joints `<dynamics>`.
+  Wrijving per link telt als de kleinste µ (zoals Gazebo), niet als gemiddelde
+  met de vloer: µ = 0,05 op de wielen laat ze nu echt slippen.
+- **Werelden Maanlandschap en Mars (krater Jezero):** ruw terrein, kraters,
+  rotsen (botsen en zichtbaar voor lidar/camera), zwaartekracht 1,62 en
+  3,71 m/s² en bodemwrijving per wereld (`gravity`, `friction` in de wereld-JSON).
+- **Acht nieuwe werelden:** doolhof per student (seed uit het studentnummer),
+  donkere mijngang met lamp op de robot en gasbronnen, ruïne na een ramp
+  (puin, trap, helling, slachtoffers als warmtebron), racecircuit, straat en
+  parking met overstekende voetgangers en een rijdende auto, serre met
+  buisrails en de nieuwe Buisrailwagen, bouwwerf met bouwput en graafmachine,
+  stal met voergang, koeien en verschuifbaar voer. Nieuwe elementen: actor,
+  maze, grid, tunnel, track, stairs, ramp, excavator, pipes; terrein pits.
+  Op htmlsim-next ook: 4 wielen (skid), mecanum, auto-onderstel (Ackermann),
+  vering per wiel (veerstijfheid/demping), de ingebouwde robots als
+  startpunt, en de controle toont het aandrijftype.
+
 ## 1.0.18 - 2026-11-14
 - **Simulator 1.5.4: geen pijl meer bij de meetpunten.** Enkel de ring met het
   kruisje (het punt) en de naam; de richting staat bij *Jouw meetpunten*.
