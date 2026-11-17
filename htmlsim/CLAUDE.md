@@ -6,8 +6,11 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
 ## Build en tests
 
 - `python3 build.py` voegt `src/template.html` + `src/style.css` + `src/core.js` + `src/tasks.js` samen tot
-  `dist/tb3-lite-sim-3d.html` (placeholders `/*__CSS__*/`, `/*__CORE__*/`, `/*__TASKS__*/`).
-  `--artifact` geeft `dist/artifact.html` zonder doctype/head/body.
+  `dist/tb3-lite-sim-3d.html` (placeholders `/*__CSS__*/`, `/*__CORE__*/`, `/*__TASKS__*/`), en
+  `src/editor.html` + `editor.css` + `editor.js` (met core.js) tot `dist/robot-editor.html`.
+  `--artifact` geeft `dist/artifact.html` zonder doctype/head/body. `--local` → `index.html` + `editor.html` (vendor),
+  `--site` → `dist/site/index.html` + `editor.html` (CDN, artifact met twee pagina's). `__SIM_URL__`/`__EDITOR_URL__`
+  worden per variant ingevuld.
 - Titelbalk "TurtleBot Sim v<versie> · <datum>": versie uit `package.json` (ophogen bij een update voor de studenten),
   datum = laatste commit in htmlsim/ (vandaag bij niet-gecommitte wijzigingen, builddatum in de Docker-build zonder git).
 - Na elke wijziging: `python3 build.py`, dan syntaxcheck van het module-script:
@@ -196,6 +199,18 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
   linkknopen en verdwijnen met `robotG.clear()`; `edDecorate()` aan het einde van `buildRobotVisuals`.
   Test: `node tests/e2e_editor.cjs [map]` (nep-rosbridge op 9092). In de vendorlijst van de Dockerfile staat
   `TransformControls.js`: een nieuwe three-addon daar ook toevoegen.
+- **Aparte robot-editor (`src/editor.*`, `dist/robot-editor.html`):** robot bouwen of aanpassen. Model = object van
+  `parseURDF`; elke wijziging via `commit()` (geschiedenis 100 stappen, `localStorage tb3editor.autosave`, scène
+  volledig herbouwd). Scène per link: `frame` (= joint.origin, gizmo-doel bij verplaatsen) → `motion` (voorbeeldstand
+  van de joint) → vormen + kinderen. "Enkel de vorm"/schalen: gizmo op de visual-mesh; collision volgt als die gelijk
+  was aan de visual. Export `toURDF(model, extras)` (core.js) schrijft de URDF volledig opnieuw; inertia met
+  `inertial.auto` uit de vorm; onbekende blokken (gazebo, ros2_control, transmission) blijven als ruwe XML in `extras`.
+  Bouwblokken in `PARTS` (wielen: continuous, as +y, cilinder rpy π/2 0 0, zoals de sim ze herkent; zwenkwiel heet
+  caster… = zonder wrijving). Controle gebruikt `analyzeModel` en de laagste punten in de scène.
+  Koppeling met de simulator: editor → sim via `BroadcastChannel("tb3sim")` {type:"urdf"} met `ack` terug; zonder
+  antwoord binnen 0,8 s `localStorage tb3sim.fromEditor` + nieuw tabblad `index#editor-robot`. Sim → editor:
+  `tb3sim.toEditor` + `editor#from-sim` (knop Robot-editor openen). Test: `node tests/e2e_robot_editor.cjs [map]`
+  (bouwt een robot, sleept met de muis aan de gizmo, rijdt de export in Rapier, stuurt naar een open sim).
 - **Opname:** samengesteld canvas (WebGL + HUD + camera + testpaneel + balk) via `captureStream`, of `getDisplayMedia`
   voor het hele scherm. `drawComposite()` direct na `renderer.render` (anders leeg WebGL-beeld).
   Enkel MP4/H.264 (`pickMime`, 07-11): Toledo speelt .webm niet af. Chrome/Edge ≥ 126 kunnen dat, Firefox en

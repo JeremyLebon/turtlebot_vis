@@ -266,6 +266,7 @@
         </div>
         <div class="grid2"><label for="presetSel">Ander type</label><select id="presetSel">
           <option value="" selected>kies een robot…</option></select></div>
+        <div class="row"><button class="act" id="openEditor" title="Robot bouwen of aanpassen in een aparte pagina; 'Testen in de simulator' stuurt hem terug naar dit tabblad">Robot-editor openen</button></div>
         <p class="msg" id="robotMsg">Ingebouwde Burger geladen (primitieve vormen, met camera en 3D-lidar).</p>
       </section>
     </details>
@@ -322,6 +323,7 @@
         </div>
         <div class="row"><button class="ghost" id="edAdd">Toevoegen</button></div>
         <h3 class="sub">Exporteren</h3>
+        <div class="row"><button class="ghost" id="edOpenFull">In de volledige robot-editor</button></div>
         <div class="row"><button class="act" id="edDl">URDF downloaden</button><button class="ghost" id="edCopy">Wijzigingen kopiëren</button></div>
         <textarea id="edOut" readonly rows="5" aria-label="Gewijzigde joints" placeholder="Nog niets gewijzigd."></textarea>
         <p class="hint">Verplaatsen werkt live, ook tijdens SLAM of Nav2: <code>/tf_static</code> en de sensoren volgen meteen. Een sensor toevoegen herbouwt de robot (odometrie terug op nul). Draai je zelf <code>robot_state_publisher</code>, start die dan opnieuw met de gedownloade URDF.</p>
@@ -2745,6 +2747,24 @@ try { const s = JSON.parse(localStorage.getItem("tb3sim.student") || "null"); if
 $("loading").remove();
 renderTopics();
 requestAnimationFrame(t => { lastReal = t; tick(t); });
+// Aparte robot-editor (robot-editor.html / editor.html): huidige robot meegeven, robot terugkrijgen
+// via BroadcastChannel "tb3sim" (open tabblad) of localStorage "tb3sim.fromEditor" + #editor-robot.
+function openEditor() {
+  let urdf = ED.text;
+  try { const { edits } = edChanges(); urdf = patchURDF(ED.text, edits, ED.added.map(a => ({ ...a, origin: model.joints.find(j => j.name === a.joint).origin })), DOMParser, XMLSerializer); } catch {}
+  try { localStorage.setItem("tb3sim.toEditor", JSON.stringify({ urdf, t: Date.now() })); } catch {}
+  const a = document.createElement("a"); a.href = "__EDITOR_URL__#from-sim"; a.target = "_blank"; document.body.appendChild(a); a.click(); a.remove();
+}
+$("openEditor").onclick = $("edOpenFull").onclick = openEditor;
+let edChan = null; try { edChan = new BroadcastChannel("tb3sim"); } catch {}
+if (edChan) edChan.onmessage = e => {
+  if (!e.data || e.data.type !== "urdf") return;
+  edChan.postMessage({ type: "ack", t: e.data.t });
+  loadModelText(e.data.urdf, "robot-editor");
+};
+if (location.hash === "#editor-robot") {
+  try { const o = JSON.parse(localStorage.getItem("tb3sim.fromEditor") || "null"); if (o && o.urdf) loadModelText(o.urdf, "robot-editor"); } catch {}
+}
 // #robot-editor in de URL: meteen naar de robot-editor (link vanuit de GitBook of het concept-artifact)
 if (location.hash === "#robot-editor") { $("tabBtn-cfg").click(); $("edSec").open = true; setTimeout(() => $("edZoom").click(), 300); }
 </script>

@@ -158,6 +158,69 @@ function patchURDF(text, edits, added, DOMParserImpl, XMLSerializerImpl) {
   return out;
 }
 
+/* ===== Robot-editor: model → URDF (volledig opnieuw geschreven, voor de aparte editorpagina) =====
+   model zoals parseURDF het geeft. Inertia met inertial.auto wordt uit de eerste collision (of visual) berekend.
+   extras: ruwe XML-stukken (gazebo, transmission, ros2_control) die de editor niet kent, ongewijzigd terug. */
+function inertiaOf(g, m) {
+  if (!g) return { xx: 1e-5, yy: 1e-5, zz: 1e-5 };
+  if (g.type === "box") { const [x, y, z] = g.size; return { xx: m * (y * y + z * z) / 12, yy: m * (x * x + z * z) / 12, zz: m * (x * x + y * y) / 12 }; }
+  if (g.type === "cylinder") { const r = g.radius, h = g.length, a = m * (3 * r * r + h * h) / 12; return { xx: a, yy: a, zz: m * r * r / 2 }; }
+  if (g.type === "sphere") { const a = 0.4 * m * g.radius * g.radius; return { xx: a, yy: a, zz: a }; }
+  return { xx: m * 1e-3, yy: m * 1e-3, zz: m * 1e-3 };
+}
+function autoInertial(link) {
+  const ie = link.inertial; if (!ie || !ie.auto) return ie;
+  const src = link.collisions[0] || link.visuals[0], I = inertiaOf(src && src.geom, ie.mass);
+  ie.origin = src ? { p: { ...src.origin.p }, q: src.origin.q } : T0();
+  ie.I = { xx: I.xx, yy: I.yy, zz: I.zz, xy: 0, xz: 0, yz: 0 };
+  return ie;
+}
+function toURDF(model, extras = []) {
+  const esc = v => String(v).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  const org = (T, ind) => { if (!T) return ""; const a = originAttrs(T); return a.xyz === "0 0 0" && a.rpy === "0 0 0" ? "" : `${ind}<origin xyz="${a.xyz}" rpy="${a.rpy}"/>\n`; };
+  const geo = (g, ind) => {
+    let e;
+    if (g.type === "box") e = `<box size="${g.size.map(fmtN).join(" ")}"/>`;
+    else if (g.type === "cylinder") e = `<cylinder radius="${fmtN(g.radius)}" length="${fmtN(g.length)}"/>`;
+    else if (g.type === "sphere") e = `<sphere radius="${fmtN(g.radius)}"/>`;
+    else e = `<mesh filename="${esc(g.filename)}"${g.scale && g.scale.some(v => v !== 1) ? ` scale="${g.scale.map(fmtN).join(" ")}"` : ""}/>`;
+    return `${ind}<geometry>${e}</geometry>\n`;
+  };
+  const hex = c => c.slice(0, 3).map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, "0")).join("");
+  const out = [`<?xml version="1.0"?>`, `<!-- gemaakt met de robot-editor van TurtleBot Sim -->`, `<robot name="${esc(model.name || "robot")}">`];
+  const order = [model.root], kidsOf = {};
+  for (const j of model.joints) (kidsOf[j.parent] ||= []).push(j);
+  for (let i = 0; i < order.length; i++) for (const j of kidsOf[order[i]] || []) order.push(j.child);
+  for (const n of Object.keys(model.links)) if (!order.includes(n)) order.push(n);
+  const jointTo = Object.fromEntries(model.joints.map(j => [j.child, j]));
+  for (const ln of order) {
+    const j = jointTo[ln];
+    if (j) {
+      out.push(`  <joint name="${esc(j.name)}" type="${j.type}">`, `    <parent link="${esc(j.parent)}"/>`, `    <child link="${esc(j.child)}"/>`);
+      const o = org(j.origin, "    "); if (o) out.push(o.trimEnd());
+      if (j.type !== "fixed") out.push(`    <axis xyz="${[j.axis.x, j.axis.y, j.axis.z].map(fmtN).join(" ")}"/>`);
+      if (j.type === "revolute" || j.type === "prismatic") { const L = j.limit || { lower: -1.57, upper: 1.57, effort: 10, velocity: 1 };
+        out.push(`    <limit lower="${fmtN(L.lower)}" upper="${fmtN(L.upper)}" effort="${fmtN(L.effort || 10)}" velocity="${fmtN(L.velocity || 1)}"/>`); }
+      out.push(`  </joint>`);
+    }
+    const l = model.links[ln], ie = autoInertial(l), body = [];
+    if (ie && ie.mass > 0) {
+      body.push(`    <inertial>`); const o = org(ie.origin, "      "); if (o) body.push(o.trimEnd());
+      body.push(`      <mass value="${fmtN(ie.mass)}"/>`, `      <inertia ixx="${+ie.I.xx.toPrecision(4)}" ixy="${+(ie.I.xy || 0).toPrecision(4)}" ixz="${+(ie.I.xz || 0).toPrecision(4)}" iyy="${+ie.I.yy.toPrecision(4)}" iyz="${+(ie.I.yz || 0).toPrecision(4)}" izz="${+ie.I.zz.toPrecision(4)}"/>`, `    </inertial>`);
+    }
+    for (const v of l.visuals) {
+      body.push(`    <visual>`); const o = org(v.origin, "      "); if (o) body.push(o.trimEnd()); body.push(geo(v.geom, "      ").trimEnd());
+      if (v.color) body.push(`      <material name="c_${hex(v.color)}"><color rgba="${v.color.map(fmtN).join(" ")}"/></material>`);
+      body.push(`    </visual>`);
+    }
+    for (const c of l.collisions) { body.push(`    <collision>`); const o = org(c.origin, "      "); if (o) body.push(o.trimEnd()); body.push(geo(c.geom, "      ").trimEnd(), `    </collision>`); }
+    out.push(body.length ? `  <link name="${esc(ln)}">\n${body.join("\n")}\n  </link>` : `  <link name="${esc(ln)}"/>`);
+  }
+  for (const x of extras) out.push("  " + x.trim());
+  out.push(`</robot>`, "");
+  return out.join("\n");
+}
+
 /* ===== Nulstand-kinematica en automatische configuratie ===== */
 function analyzeModel(model) {
   const linkT = { [model.root]: T0() }, parentJoint = {}, order = [model.root];
