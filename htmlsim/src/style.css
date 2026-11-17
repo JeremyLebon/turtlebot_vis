@@ -154,3 +154,15 @@ button:disabled{opacity:.45;cursor:default}
 #memLink{font-variant-numeric:tabular-nums}
 #memLink.memWarn{border-color:var(--warn);color:var(--warn)}
 #memLink.memBad{border-color:var(--bad);color:var(--bad)}
+
+/* robot-editor */
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;align-self:flex-start}
+.seg button{border:0;border-right:1px solid var(--line);background:transparent;color:var(--fg);font:500 13px var(--f-body);padding:6px 11px;cursor:pointer}
+.seg button:last-child{border-right:0}
+.seg button.on{background:var(--fg);color:var(--surface)}
+.ed6{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto minmax(0,1fr) auto;gap:6px 6px;align-items:center;font-size:13px}
+.ed6 label{color:var(--muted);text-align:right}
+.ed6 span{color:var(--muted);font-size:12px}
+.ed6 input{width:100%;font:13px var(--f-mono);padding:5px 6px;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--fg)}
+.panel h3.sub{margin:6px 0 0;font:600 11px var(--f-mono);text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+#edOut{width:100%;box-sizing:border-box;font:11px/1.45 var(--f-mono);padding:6px 7px;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--fg);resize:vertical;white-space:pre;overflow:auto}

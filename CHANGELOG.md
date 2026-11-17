@@ -12,6 +12,18 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## Nog niet gebouwd (branch `feature/robot-editor`)
+- **Simulator 1.6.0: robot-editor.** Nieuw paneel *Robot-editor (sensoren
+  plaatsen)* onder Instellingen. Vaste frames (lidar, camera, IMU, 3D-lidar)
+  verplaatsen en draaien met een gizmo in het 3D-beeld of met getallen (mm, °),
+  live zonder herbouw: `/tf_static`, scan en camerabeeld volgen meteen, ook
+  tijdens SLAM/Nav2. Frames en collisions tonen, scanring en camerakegel als
+  voorbeeld, waarschuwingen (lidar boven 35 cm, hellend scanvlak, scheve IMU).
+  Sensor toevoegen/verwijderen op een gekozen link. Export: de URDF met enkel
+  de gewijzigde `<origin>`'s en nieuwe links, of per joint `<origin>` +
+  `static_transform_publisher`. Dockerfile: `TransformControls.js` mee in
+  `vendor`.
+
 ## 1.0.19 - 2026-11-14
 - **Virtuele robot 1.9.11: joystick op de Fenix-pagina.** Knop met de cirkel
   in de balk *Rijden*: slepen = vooruit en draaien tegelijk, traploos, stopt
