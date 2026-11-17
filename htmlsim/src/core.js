@@ -117,10 +117,15 @@ function analyzeModel(model) {
   const find = re => order.find(n => re.test(lname(n))) || "";
   // aandrijfwielen: continuous joints met as langs ±y, links en rechts van het midden
   // stuurbare wielen (Ackermann): revolute om z met een continuous wiel eronder; die wielen worden niet aangedreven
-  const steerJ = model.joints.filter(j => j.type === "revolute" && Math.abs(qrot(linkT[j.child].q, j.axis).z) > 0.9 && (byParent[j.child] || []).some(k => k.type === "continuous"));
-  const steered = new Set(steerJ.flatMap(j => (byParent[j.child] || []).filter(k => k.type === "continuous").map(k => k.name)));
+  // swerve: stuurjoints met "swerve" in de naam; hun wielen worden wel aangedreven. Knik ("articulat"/"knik") en
+  // trekhaak ("hitch") zijn geen stuurjoints. Omniwielen ("omni"): as in elke richting. "trailer"-wielen lopen vrij mee.
+  const zRev = j => j.type === "revolute" && Math.abs(qrot(linkT[j.child].q, j.axis).z) > 0.9;
+  const steerJ = model.joints.filter(j => zRev(j) && !/articulat|knik|hitch|trailer/i.test(j.name) && (byParent[j.child] || []).some(k => k.type === "continuous"));
+  const swerve = steerJ.length > 0 && steerJ.every(j => /swerve/i.test(j.name));
+  const steered = new Set(swerve ? [] : steerJ.flatMap(j => (byParent[j.child] || []).filter(k => k.type === "continuous").map(k => k.name)));
   const cont = model.joints.filter(j => j.type === "continuous" && !steered.has(j.name)).map(j => ({ j, ax: qrot(linkT[j.child].q, j.axis), p: linkT[j.child].p }))
-    .filter(o => Math.abs(o.ax.y) > 0.9 && !/caster/i.test(o.j.name));
+    .filter(o => (Math.abs(o.ax.y) > 0.9 || /omni/i.test(o.j.name)) && !/caster|trailer/i.test(o.j.name));
+  const articJ = model.joints.find(j => zRev(j) && /articulat|knik/i.test(j.name));
   const left = cont.filter(o => o.p.y > 0.01).sort((a, b) => b.p.y - a.p.y)[0];
   const right = cont.filter(o => o.p.y < -0.01).sort((a, b) => a.p.y - b.p.y)[0];
   const wheelR = o => {
@@ -139,14 +144,39 @@ function analyzeModel(model) {
   const lefts = cont.filter(o => o.p.y > 0.01), rights = cont.filter(o => o.p.y < -0.01);
   cfg.leftWheels = lefts.map(o => o.j.name); cfg.rightWheels = rights.map(o => o.j.name);
   cfg.wheelXY = Object.fromEntries(cont.map(o => [o.j.name, [o.p.x, o.p.y]]));
-  cfg.drive = cont.some(o => /mecanum/i.test(o.j.name)) ? "mecanum" : steerJ.length && lefts.length && rights.length ? "ackermann"
+  cfg.wheelAx = Object.fromEntries(cont.map(o => [o.j.name, [o.ax.x, o.ax.y]]));
+  cfg.drive = cont.some(o => /mecanum/i.test(o.j.name)) ? "mecanum" : cont.some(o => /omni/i.test(o.j.name)) ? "omni" : swerve ? "swerve"
+    : articJ ? "articulated" : steerJ.length && lefts.length && rights.length ? "ackermann"
     : lefts.length > 1 || rights.length > 1 ? "skid" : "diff";
+  // balancerende robot (naam met "balanc"/"segway"): 2 wielen zonder steunwiel, valt om zonder regelaar
+  cfg.balance = /balanc|segway/i.test(model.name);
+  // poten (viervoeter, humanoïde): per revolute "knee" een poot met heup opzij (hip_x|hip_roll|abad), heup voor/achter
+  // (hip_y|hip_pitch|thigh) en optioneel enkel (ankle_pitch, ankle_roll). Nulstand = poot recht naar beneden; lengtes uit de
+  // joint-origins (dij = heup → knie, scheen = knie → volgende joint: voet of enkel). Loopgenerator: gaitStep() in createSim.
+  const knees = model.joints.filter(j => /knee/i.test(j.name) && j.type === "revolute");
+  if (knees.length >= 2 && !cont.length) {
+    const axS = (j, k) => j ? Math.sign(qrot(linkT[j.child].q, j.axis)[k]) || 1 : 1, len = j => Math.hypot(j.origin.p.x, j.origin.p.y, j.origin.p.z);
+    cfg.legs = knees.map(k => {
+      const pre = k.name.replace(/_?knee.*$/i, ""), find = re => model.joints.find(j => j.name.startsWith(pre) && re.test(j.name.slice(pre.length)) && j.type === "revolute");
+      const hy = find(/hip_?(y|pitch)(_|$)|thigh/i), hx = find(/hip_?(x|roll)|abad/i), hz = find(/hip_?(z|yaw)/i), ap = find(/ankle_?(y|pitch)/i), ar = find(/ankle_?(x|roll)/i);
+      const below = (byParent[k.child] || [])[0], hp = linkT[(hy || k).child].p, lim = k.limit;
+      return { name: pre, hz: hz?.name, sz: axS(hz, "z"), hx: hx?.name, hy: hy?.name, knee: k.name, ap: ap?.name, ar: ar?.name, x: hp.x, y: hp.y, L1: len(k), L2: below ? len(below) : 0.2,
+        sx: axS(hx, "x"), sy: axS(hy, "y"), sk: axS(k, "y"), sap: axS(ap, "y"), sar: axS(ar, "x"), kneeSign: lim && lim.upper > -lim.lower ? 1 : -1 };
+    });
+    cfg.drive = "legged";
+    cfg.arms = model.joints.filter(j => /shoulder_?(y|pitch)/i.test(j.name)).map(j => ({ name: j.name, left: linkT[j.child].p.y > 0, s: axS(j, "y") }));
+  }
+  if (cfg.drive === "swerve") cfg.steer = { joints: steerJ.map(j => ({ name: j.name, x: linkT[j.child].p.x, y: linkT[j.child].p.y })), max: 1.7 };
+  if (cfg.drive === "articulated") {
+    const jx = linkT[articJ.child].p.x, xs = cont.map(o => o.p.x), Lf = Math.max(...xs) - jx, Lr = jx - Math.min(...xs);
+    cfg.artic = { name: articJ.name, Lf: +Lf.toFixed(4), Lr: +Lr.toFixed(4), max: articJ.limit && articJ.limit.upper > 0 ? articJ.limit.upper : 0.6 };
+  }
   if (cfg.drive === "ackermann") {
     const xr = cont.reduce((a, o) => a + o.p.x, 0) / cont.length, xf = steerJ.reduce((a, j) => a + linkT[j.child].p.x, 0) / steerJ.length;
     cfg.steer = { joints: steerJ.map(j => ({ name: j.name, y: linkT[j.child].p.y })), L: +(xf - xr).toFixed(4),
       max: Math.min(...steerJ.map(j => j.limit && j.limit.upper > 0 ? j.limit.upper : 0.6)) };
   }
-  cfg.fixedBase = !(cfg.leftWheel && cfg.rightWheel) || model.root === "world";
+  cfg.fixedBase = (!(cfg.leftWheel && cfg.rightWheel) && cfg.drive !== "omni" && !cfg.legs) || model.root === "world";
   const movable = model.joints.filter(j => j.type === "revolute" || j.type === "prismatic" || j.type === "continuous");
   return { linkT, parentJoint, order, cfg, movable };
 }
@@ -175,7 +205,7 @@ function createSim(R) {
   let curItem = "";                             // soort wereldelement dat nu gebouwd wordt (labels van de segmentatiecamera)
   let terrain = null;                           // hoogteveld (wereld met "terrain"), anders vlakke vloer op z = 0
   const groundZ = (x, y) => terrain ? terrain.fn(x, y) : 0;                          // body-handle → kleur (gekleurde 3D-lidar), opnieuw bij een andere wereld of doos
-  const params = { odomErr: 0, lidarSigma: 0.01, imuNoise: true, ballWheels: true, wheelAcc: 2.0, odomSource: "truth" };
+  const params = { odomErr: 0, lidarSigma: 0.01, imuNoise: true, ballWheels: true, wheelAcc: 2.0, odomSource: "truth", balanceAssist: true, legAssist: true };
   let simTime = 0, robot = null;
 
   /* ---- wereld (data-gedreven, zie WORLDS onderaan en het JSON-formaat) ---- */
@@ -422,9 +452,10 @@ function createSim(R) {
   function buildRobot(model, cfg, x, y, yaw) {
     removeRobot();
     const an = analyzeModel(model), { linkT, parentJoint, order } = an;
-    const wheelJ = new Set([cfg.leftWheel, cfg.rightWheel, ...(cfg.leftWheels || []), ...(cfg.rightWheels || [])].filter(Boolean));
-    const steerJ = new Set(cfg.drive === "ackermann" && cfg.steer ? cfg.steer.joints.map(s => s.name) : []);
-    const mecanum = cfg.drive === "mecanum";
+    const wheelJ = new Set([cfg.leftWheel, cfg.rightWheel, ...(cfg.leftWheels || []), ...(cfg.rightWheels || []),
+      ...(cfg.drive === "omni" ? Object.keys(cfg.wheelXY || {}) : [])].filter(Boolean));    // omni: ook het wiel op y = 0
+    const steerJ = new Set((cfg.drive === "ackermann" || cfg.drive === "swerve") && cfg.steer ? cfg.steer.joints.map(s => s.name) : []);
+    const mecanum = cfg.drive === "mecanum" || cfg.drive === "omni";        // rollen niet gesimuleerd: wielen zonder wrijving
     // 1. links groeperen tot starre lichamen (fixed joints samenvoegen)
     const bodyOf = {}, bodies = [];
     for (const ln of order) {
@@ -443,7 +474,10 @@ function createSim(R) {
       minZ = Math.min(minZ, geomMinZ(tmul(linkT[ln], c.origin), g));
     }
     const z0 = (isFinite(minZ) ? Math.max(0, -minZ) : 0) + 0.001;
-    const S = { p: V(x, y, z0 + groundZ(x, y)), q: qyaw(yaw) };
+    // terrein: op de hoogste grond onder alle links neerzetten (anders steken voeten bergop in de helling)
+    let gmax = groundZ(x, y);
+    if (terrain) for (const ln of order) { const pl = qrot(qyaw(yaw), linkT[ln].p); gmax = Math.max(gmax, groundZ(x + pl.x, y + pl.y)); }
+    const S = { p: V(x, y, z0 + gmax), q: qyaw(yaw) };
     // 3. Rapier-lichamen, colliders en massa
     for (const [bi, B] of bodies.entries()) {
       const wp = vadd(S.p, qrot(S.q, B.p));
@@ -470,11 +504,12 @@ function createSim(R) {
       const rb = world.createRigidBody(desc);
       for (const ln of B.links) {
         const isWheel = parentJoint[ln] && wheelJ.has(parentJoint[ln].name), caster = /caster/i.test(ln);
+        const freeWheel = !isWheel && !caster && parentJoint[ln]?.type === "continuous" && /wheel/i.test(ln);   // aanhangwagen
         for (const c of model.links[ln].collisions) {
           const cd = colliderDesc(c.geom, isWheel); if (!cd) continue;
           const Tc = tmul(linkOff[ln], c.origin);
           cd.setTranslation(Tc.p.x, Tc.p.y, Tc.p.z).setRotation(qmul(Tc.q, shapeRot(c.geom, isWheel))).setDensity(0)
-            .setFriction(caster || (isWheel && mecanum) ? 0 : isWheel ? 1.0 : 0.4).setCollisionGroups(G_ROBOT);
+            .setFriction(caster || (isWheel && mecanum) ? 0 : isWheel || freeWheel || /foot/i.test(ln) ? 1.0 : 0.4).setCollisionGroups(G_ROBOT);
           if (caster || (isWheel && mecanum)) cd.setFrictionCombineRule(R.CoefficientCombineRule.Min);   // mecanum: het lichaam wordt aangestuurd
           world.createCollider(cd, rb);
         }
@@ -497,12 +532,14 @@ function createSim(R) {
       // rocker-bogie: revolute met "rocker" = differentieel (links + rechts samen 0, de romp houdt het gemiddelde),
       // "bogie" = vrij scharnier (geen motor, enkel limieten)
       const role = wheelJ.has(j.name) ? "wheel" : steerJ.has(j.name) ? "steer" : j.type === "prismatic" && /suspension|shock|spring/i.test(j.name) ? "spring"
-        : j.type === "revolute" && /rocker/i.test(j.name) ? "rocker" : j.type === "revolute" && /bogie/i.test(j.name) ? "passive"
+        : j.type === "revolute" && /rocker/i.test(j.name) ? "rocker" : j.type === "revolute" && /bogie|hitch/i.test(j.name) ? "passive"
+        : cfg.artic && j.name === cfg.artic.name ? "steer"
+        : cfg.legs && cfg.legs.some(L => [L.hz, L.hx, L.hy, L.knee, L.ap, L.ar].includes(j.name)) ? "leg"
         : (j.type === "continuous" ? "passive" : "position");
       // stuurgewrichten zijn licht: met AccelerationBased haalt de sturing haar hoek niet tegen de banden in
-      if (role !== "passive") ij.configureMotorModel(role === "steer" || role === "spring" || role === "rocker" ? R.MotorModel.ForceBased : R.MotorModel.AccelerationBased);
+      if (role !== "passive") ij.configureMotorModel(role === "steer" || role === "spring" || role === "rocker" || role === "leg" ? R.MotorModel.ForceBased : R.MotorModel.AccelerationBased);
       joints.push({ j, ij, b1, b2, a1, a2, axis, role, lim, pos: 0, vel: 0, target: lim ? Math.min(Math.max(0, lim.lower), lim.upper) : 0,
-        sign: role === "wheel" ? Math.sign(axis.y) : 1 });
+        sign: role === "wheel" && cfg.drive !== "omni" ? Math.sign(axis.y) : 1 });
     }
     // veren: zakken 3 cm in onder het eigen gewicht, demping 60 % van kritisch (k en c per veer, in N/m en N·s/m)
     const springs = joints.filter(o => o.role === "spring");
@@ -511,12 +548,12 @@ function createSim(R) {
       for (const o of springs) { o.k = o.j.springK ?? k; o.c = o.j.springC ?? c; o.ij.configureMotorPosition(0, o.k, o.c); }
     }
     const rockers = joints.filter(o => o.role === "rocker");
-    robot = { rockers, model, cfg, an, bodies, bodyOf, linkOff, joints, rootBody: bodies[0], leftSet: new Set([cfg.leftWheel, ...(cfg.leftWheels || [])]), steerAngle: 0,
+    robot = { mTot: bodies.reduce((a, B) => a + (B.mass || 0), 0), rockers, model, cfg, an, bodies, bodyOf, linkOff, joints, rootBody: bodies[0], leftSet: new Set([cfg.leftWheel, ...(cfg.leftWheels || [])]), steerAngle: 0,
       byName: Object.fromEntries(joints.map(o => [o.j.name, o])), prevV: V(), imuAcc: V(0, 0, 9.81) };
     // 0,5 s laten uitzakken met stilstaande motoren, zodat odometrie niet start met een sprongetje
     for (let i = 0; i < 100; i++) {
       for (const o of joints) { if (o.role === "wheel") o.ij.configureMotorVelocity(0, 500); else if (o.role === "position") o.ij.configureMotorPosition(o.target, 20000, 300); else if (o.role === "steer") o.ij.configureMotorPosition(0, STEER_K, STEER_D); }
-      rockerDiff(); world.step();
+      rockerDiff(); if (cfg.legs) gaitStep(0, 0, 0, true); world.step();
     }
     for (const o of joints) { measureJoint(o); if (o.j.type === "continuous") o.pos = 0; }
     const lv0 = bodies[0].rb.linvel(); robot.prevV = V(lv0.x, lv0.y, lv0.z);
@@ -545,6 +582,48 @@ function createSim(R) {
     else { const qr = qmul(qconj(T1.q), T2.q); o.pos = 2 * Math.atan2(vdot(V(qr.x, qr.y, qr.z), o.axis), qr.w); if (o.pos > Math.PI) o.pos -= 2 * Math.PI; if (o.pos < -Math.PI) o.pos += 2 * Math.PI; }
   }
 
+  // loopgenerator voor poten: draf (4 poten, diagonale paren) of stappen (2 poten, met zijwaarts wiegen); voetbaan per poot
+  // uit /cmd_vel (snelheid op de heup = v + ω × r), inverse kinematica per poot (heup opzij, heup voor/achter, knie, enkel)
+  const LEG_K = 30, LEG_D = 0.8;
+  const LEG = { quad: { f: 2.2, lift: 0.06, h: 0.82 }, biped: { f: 1.2, lift: 0.05, h: 0.9, sway: 0.045 } };
+  function legIK(L, X, Y, Z) {
+    const d = Math.hypot(Y, Z), roll = Math.atan2(Y, -Z);
+    const D = Math.max(-1, Math.min(1, (X * X + d * d - L.L1 * L.L1 - L.L2 * L.L2) / (2 * L.L1 * L.L2))), q2 = L.kneeSign * Math.acos(D);
+    return [roll, Math.atan2(-X, d) - Math.atan2(L.L2 * Math.sin(q2), L.L1 + L.L2 * Math.cos(q2)), q2];
+  }
+  function gaitStep(v, vy, w, settle = false) {
+    const c = robot.cfg, quad = c.legs.length >= 4, P = quad ? LEG.quad : LEG.biped, G = robot.gait ||= { ph: 0, amp: 0, v: 0, vy: 0, w: 0 };
+    const ramp = (k, want, a) => { G[k] += Math.max(-a * DT, Math.min(a * DT, want - G[k])); };
+    ramp("v", v, 0.8); ramp("vy", vy, 0.8); ramp("w", w, 2.5);
+    const moving = Math.hypot(v, vy) > 0.005 || Math.abs(w) > 0.02 || Math.hypot(G.v, G.vy) > 0.01 || Math.abs(G.w) > 0.05;
+    G.amp = Math.max(0, Math.min(1, G.amp + (moving ? 3 : -3) * DT));
+    if (G.amp > 0) G.ph = (G.ph + P.f * DT) % 1; else G.ph = 0;
+    // houding (4 poten): voeten langs de echte verticale → romp horizontaal op een helling (lage kant strekt verder)
+    const ub0 = qrot(qconj(bodyT(robot.rootBody).q), V(0, 0, 1)), kf = DT / 0.25, lean = quad ? 1.0 : 0;   // gefilterd (0,4 s): niet op het wiegen van de draf
+    const ub = G.ub = G.ub ? V(G.ub.x + kf * (ub0.x - G.ub.x), G.ub.y + kf * (ub0.y - G.ub.y), G.ub.z + kf * (ub0.z - G.ub.z)) : ub0;
+    for (const L of c.legs) {
+      const off = quad ? ((L.x > 0) === (L.y > 0) ? 0 : 0.5) : (L.y > 0 ? 0 : 0.5);   // draf: LV + RA samen; stappen: links, dan rechts
+      const p = (G.ph + off) % 1, swing = p < 0.5, s = swing ? p * 2 : (p - 0.5) * 2;
+      const u = swing ? -0.5 * Math.cos(Math.PI * s) : 0.5 - s;                       // zwaai: achter → voor, steun: voor → achter
+      const sx = (G.v - G.w * L.y) / (2 * P.f), sy = (G.vy + G.w * L.x) / (2 * P.f), h = P.h * (L.L1 + L.L2);
+      const sway = quad ? 0 : P.sway * G.amp * Math.sin(2 * Math.PI * G.ph);           // romp boven de steunvoet
+      const lev = Math.max(-0.1, Math.min(0.1, lean * (L.x * ub.x + L.y * ub.y) / Math.max(0.5, ub.z)));
+      const [r, q1, q2] = legIK(L, u * sx, u * sy + sway, -h + lev + (swing ? P.lift * G.amp * Math.sin(Math.PI * s) : 0));
+      const set = (n, val) => { const o = n && robot.byName[n]; if (o) o.target = o.lim ? Math.max(o.lim.lower, Math.min(o.lim.upper, val)) : val; };
+      set(L.hz, L.sz * u * G.w / (2 * P.f) * 1.1);                                        // heup om z: draaien (2 benen)
+      set(L.hx, L.sx * r); set(L.hy, L.sy * q1); set(L.knee, L.sk * q2); set(L.ap, -L.sap * (q1 + q2)); set(L.ar, -L.sar * r);   // voet vlak
+    }
+    for (const A of c.arms || []) { const o = robot.byName[A.name]; if (o) o.target = A.s * 0.35 * G.amp * Math.sin(2 * Math.PI * G.ph) * (A.left ? 1 : -1); }
+    // balansondersteuning (enkel 2 poten, optie): koppel op de romp naar rechtop, zoals een onzichtbaar tuigje; yaw blijft vrij
+    const rb = robot.rootBody.rb; rb.resetTorques(true);
+    if (!quad && params.legAssist) {
+      const up = qrot(bodyT(robot.rootBody).q, V(0, 0, 1)), av = rb.angvel(), K = 40 * robot.mTot, D = 6 * robot.mTot;
+      rb.addTorque({ x: K * up.y - D * av.x, y: -K * up.x - D * av.y, z: 0 }, true);
+    }
+    // pootmotoren: PD in N·m/rad, geschaald met de massa van de robot (zoals een servo die het gewicht kan dragen)
+    const K = LEG_K * robot.mTot, Dd = LEG_D * robot.mTot;
+    for (const o of robot.joints) if (o.role === "leg") o.ij.configureMotorPosition(o.target, K, Dd);
+  }
   // differentieel van een rocker-bogie: elke rocker naar (eigen hoek - gemiddelde) → som 0, romp op de gemiddelde helling
   const ROCKER_K = 400, ROCKER_D = 15;                 // N·m/rad, N·m·s/rad
   function rockerDiff() {
@@ -559,9 +638,23 @@ function createSim(R) {
   function step(cmd) {
     const c = robot.cfg;
     const v = Math.max(-c.vmax, Math.min(c.vmax, cmd.v)), w = Math.max(-c.wmax, Math.min(c.wmax, cmd.w));
-    const vy = c.drive === "mecanum" ? Math.max(-c.vmax, Math.min(c.vmax, cmd.vy || 0)) : 0;
+    const holo = c.drive === "mecanum" || c.drive === "omni" || c.drive === "swerve" || c.drive === "legged";
+    const vy = holo ? Math.max(-c.vmax, Math.min(c.vmax, cmd.vy || 0)) : 0;
     cmdTarget = { v, w, vy };
-    const wmaxWheel = c.vmax / c.wheelRadius * (c.drive === "mecanum" ? 2.5 : 1), clampW = s => Math.max(-wmaxWheel, Math.min(wmaxWheel, s));
+    const wmaxWheel = c.vmax / c.wheelRadius * (holo ? 2.5 : c.balance ? 2 : 1), clampW = s => Math.max(-wmaxWheel, Math.min(wmaxWheel, s));
+    // knik: hoek γ uit v en w (w ≈ v·sin γ / (Lf·cos γ + Lr)), traag bijgestuurd; wielen per kant ± w·y
+    if (c.drive === "articulated") {
+      const A = c.artic, want = Math.abs(v) > 0.02 ? Math.max(-A.max, Math.min(A.max, Math.atan(w * (A.Lf + A.Lr) / v))) : robot.steerAngle;
+      robot.steerAngle += Math.max(-1.5 * DT, Math.min(1.5 * DT, want - robot.steerAngle));
+    }
+    // balans: kantelen = versnellen. Gewenste helling uit het snelheidsverschil, wielversnelling uit helling en hoeksnelheid
+    if (c.balance && params.balanceAssist) {
+      const T = bodyT(robot.rootBody), fwd = qrot(T.q, V(1, 0, 0)), up = qrot(T.q, V(0, 0, 1)), av = robot.rootBody.rb.angvel(), lv = robot.rootBody.rb.linvel();
+      const pitch = Math.atan2(vdot(up, V(fwd.x, fwd.y, 0)) / Math.max(1e-6, Math.hypot(fwd.x, fwd.y)), up.z), side = V(-fwd.y, fwd.x, 0);
+      const rate = vdot(V(av.x, av.y, av.z), vscale(side, 1 / Math.max(1e-6, Math.hypot(side.x, side.y)))), vm = (lv.x * fwd.x + lv.y * fwd.y) / Math.max(1e-6, Math.hypot(fwd.x, fwd.y));
+      const ref = Math.max(-0.25, Math.min(0.25, 0.35 * (v - vm)));
+      robot.balV = Math.max(-c.vmax * 2, Math.min(c.vmax * 2, (robot.balV || 0) + (60 * (pitch - ref) + 9 * rate) * DT));
+    }
     // Ackermann: stuurhoek uit v en w (w = v·tan δ / L), traag bijgestuurd; bochtstraal R voor binnen/buiten
     let Rturn = Infinity;
     if (c.drive === "ackermann" && c.steer) {
@@ -570,18 +663,30 @@ function createSim(R) {
       if (Math.abs(robot.steerAngle) > 1e-3) Rturn = c.steer.L / Math.tan(robot.steerAngle);
     }
     for (const o of robot.joints) {
-      if (o.role === "steer") {
+      if (o.role === "steer" && c.drive === "articulated") { o.target = robot.steerAngle; o.ij.configureMotorPosition(o.target, STEER_K * 20, STEER_D * 20); }
+      else if (o.role === "steer" && c.drive === "swerve") {
+        // swerve: elke module wijst in de richting van de gewenste snelheid op die plek, korte weg (± 90°, wiel achteruit)
+        const S = c.steer.joints.find(s => s.name === o.j.name), vx = v - w * S.y, vyy = vy + w * S.x, sp = Math.hypot(vx, vyy);
+        if (sp > 1e-3) { let a = Math.atan2(vyy, vx), d = 1; if (a - o.pos > Math.PI / 2) { a -= Math.PI; d = -1; } else if (a - o.pos < -Math.PI / 2) { a += Math.PI; d = -1; } o.target = a; o.swDir = d; o.swSp = sp; }
+        else o.swSp = 0;
+        o.ij.configureMotorPosition(o.target, STEER_K, STEER_D);
+      } else if (o.role === "steer") {
         const y = c.steer.joints.find(s => s.name === o.j.name).y;
         o.target = isFinite(Rturn) ? Math.atan(c.steer.L / (Rturn - y)) : 0;    // binnenwiel stuurt meer dan buitenwiel
         o.ij.configureMotorPosition(o.target, STEER_K, STEER_D);
       } else if (o.role === "wheel") {
         const [wx, wy] = c.wheelXY?.[o.j.name] || [0, robot.leftSet.has(o.j.name) ? 1 : -1], k = Math.abs(wx) + Math.abs(wy);
         // mecanum (rollen 45°): ω·r = vx ∓ vy ∓ (lx + ly)·ω; enkel voor het beeld en de encoders, het lichaam wordt apart gestuurd
+        const ax = c.wheelAx?.[o.j.name] || [0, 1], st = c.drive === "swerve" ? robot.joints.find(s => s.role === "steer" && s.b2 === o.b1) : null;
         const lin = c.drive === "mecanum" ? v - Math.sign(wx) * Math.sign(wy) * vy - Math.sign(wy) * k * w
+          : c.drive === "omni" ? ax[1] * (v - w * wy) - ax[0] * (vy + w * wx)             // rolrichting = as × z
+          : c.drive === "swerve" ? (st && st.swSp ? st.swDir * st.swSp * Math.cos(st.target - st.pos) : 0)
+          : c.drive === "articulated" ? v - v * Math.sin(robot.steerAngle) / (c.artic.Lf + c.artic.Lr * Math.cos(robot.steerAngle)) * wy   // differentieel per as
           : c.drive === "ackermann" ? (isFinite(Rturn) ? v * (Rturn - wy) / Rturn : v)
+          : c.balance && params.balanceAssist ? robot.balV + (robot.leftSet.has(o.j.name) ? -1 : 1) * w * c.wheelSep / 2
           : robot.leftSet.has(o.j.name) ? v - w * c.wheelSep / 2 : v + w * c.wheelSep / 2;
         // versnellingsbegrenzing per wiel (zoals een motorprofiel); sprongen veroorzaken wielslip
-        const want = clampW(lin / c.wheelRadius), dmax = (params.wheelAcc / c.wheelRadius) * DT;
+        const want = clampW(lin / c.wheelRadius), dmax = ((c.balance ? 40 : params.wheelAcc) / c.wheelRadius) * DT;   // balans: snel bijsturen
         o.cmdW = (o.cmdW || 0) + Math.max(-dmax, Math.min(dmax, want - (o.cmdW || 0)));
         // integrerende term (zoals de snelheidsregeling van een Dynamixel): bergop houdt de P-motor alleen de snelheid
         // niet (15 % helling: -30 %). Enkel bij een constant commando (na de rampe), bij nul meteen leeg.
@@ -595,7 +700,8 @@ function createSim(R) {
       }
     }
     rockerDiff();
-    if (c.drive === "mecanum" && !c.fixedBase) {
+    if (c.legs && !c.fixedBase) gaitStep(v, vy, w);
+    if ((c.drive === "mecanum" || c.drive === "omni") && !c.fixedBase) {
       const rb = robot.rootBody.rb, lv = rb.linvel(), av = rb.angvel(), th = yawOf(bodyT(robot.rootBody).q);
       const tx = cmdRamp(robot, "mx", v, DT), ty = cmdRamp(robot, "my", vy, DT), tw = cmdRamp(robot, "mw", w, DT, 4);
       rb.setLinvel({ x: Math.cos(th) * tx - Math.sin(th) * ty, y: Math.sin(th) * tx + Math.cos(th) * ty, z: lv.z }, true);
@@ -605,7 +711,7 @@ function createSim(R) {
     // kleine trillingen van de bolcontacten, ongeveer 2° per 40 s)
     const wheels = robot.joints.filter(o => o.role === "wheel");
     let braking = false;
-    if (wheels.length && !c.fixedBase && v === 0 && w === 0 && vy === 0 && wheels.every(o => Math.abs(o.cmdW || 0) < 1e-9)) {
+    if (wheels.length && !c.fixedBase && !c.balance && v === 0 && w === 0 && vy === 0 && wheels.every(o => Math.abs(o.cmdW || 0) < 1e-9)) {
       const rb = robot.rootBody.rb, lv = rb.linvel(), av = rb.angvel();
       if (Math.hypot(lv.x, lv.y) < 0.05 && Math.abs(av.z) < 0.3) {
         braking = true;
@@ -632,7 +738,8 @@ function createSim(R) {
 
     // odometrie: "truth" = perfect uit de simulatie (zoals de Gazebo diff-drive-plugin), "wheels" = wielencoders
     const L = robot.byName[c.leftWheel], Rw = robot.byName[c.rightWheel];
-    if (L && Rw && params.odomSource === "truth") {
+    // holonoom, knik, balans: wielodometrie met 2 wielen klopt niet → zoals de odometrie-plugin uit de simulatie
+    if ((L && Rw && params.odomSource === "truth") || ["omni", "swerve", "articulated", "legged"].includes(c.drive) || c.balance) {
       const T = bodyT(robot.rootBody), ref = robot.odomRef, d = vsub(T.p, ref.p), th0 = yawOf(ref.q), th = yawOf(T.q);
       odom.x = Math.cos(th0) * d.x + Math.sin(th0) * d.y; odom.y = -Math.sin(th0) * d.x + Math.cos(th0) * d.y;
       odom.th = Math.atan2(Math.sin(th - th0), Math.cos(th - th0));
@@ -879,6 +986,13 @@ const ROBOT_PRESETS = {
   ackermann: { label: "Auto (Ackermann-sturing)", vmax: 1.0, wmax: 1.5 },
   rover: { label: "Buitenrobot met vering (4 wielen, skid-steer)", vmax: 1.2, wmax: 2.0 },
   rockerbogie: { label: "Rocker-bogie (6 wielen, zoals een Mars-rover)", vmax: 0.4, wmax: 1.0 },
+  omni: { label: "Omniwielen (3 wielen, kiwi-drive, ook zijwaarts)", vmax: 0.5, wmax: 2.0 },
+  swerve: { label: "Swerve-drive (4 apart stuurbare wielen)", vmax: 0.8, wmax: 2.0 },
+  articulated: { label: "Knikbesturing (zoals een wiellader)", vmax: 0.8, wmax: 1.0 },
+  trailer: { label: "Auto met aanhangwagen (Ackermann)", vmax: 0.8, wmax: 1.2 },
+  balance: { label: "Balancerende robot (2 wielen, zoals een Segway)", vmax: 0.6, wmax: 2.0 },
+  quadruped: { label: "Viervoeter (zoals Spot, draf)", vmax: 0.5, wmax: 1.0 },
+  humanoid: { label: "Humanoïde (2 benen, met balansondersteuning)", vmax: 0.3, wmax: 0.6 },
 };
 function presetURDF(kind) {
   const f = x => +x.toFixed(5);
@@ -975,6 +1089,117 @@ ${wheel(`front_${s}_wheel`, `${s}_rocker_link`, 0.25, 0, -0.22, r, 0.07, 0.5)}${
       `\n    <visual><origin xyz="0.05 0 0.2"/><geometry><box size="0.12 0.12 0.28"/></geometry><material name="metal"/></visual>`)}
 ${side("left", W)}${side("right", -W)}
 ${sensors(0.05, 0.36, 0.22, 0.08)}</robot>`;
+  }
+  if (kind === "omni") {                     // rond, r 20 cm, 3 omniwielen om de 120° (as naar buiten, rollen niet gesimuleerd)
+    const r = 0.05, z = 0.07, R0 = 0.17;
+    let w = "";
+    for (const [i, deg] of [0, 120, 240].entries()) {
+      const a = deg * Math.PI / 180, yaw = a - Math.PI / 2;
+      w += `
+  <joint name="omni_wheel${i}_joint" type="continuous"><parent link="base_link"/><child link="omni_wheel${i}_link"/><origin xyz="${f(R0 * Math.cos(a))} ${f(R0 * Math.sin(a))} ${f(r - z)}" rpy="-1.5708 0 ${f(yaw)}"/><axis xyz="0 0 1"/></joint>
+  <link name="omni_wheel${i}_link"><visual><geometry><cylinder radius="${r}" length="0.035"/></geometry><material name="tire"/></visual>
+    <visual><geometry><box size="${f(r * 1.2)} ${f(r * 0.25)} 0.039"/></geometry><material name="metal"/></visual>
+    <collision><geometry><cylinder radius="${r}" length="0.035"/></geometry></collision><inertial><mass value="0.3"/>${cylI(0.3, r, 0.035)}</inertial></link>`;
+    }
+    return `<?xml version="1.0"?><robot name="omni_lite">${mats}
+  <link name="base_footprint"/>
+  <joint name="base_joint" type="fixed"><parent link="base_footprint"/><child link="base_link"/><origin xyz="0 0 ${z}"/></joint>
+  <link name="base_link"><visual><geometry><cylinder radius="0.2" length="0.06"/></geometry><material name="body"/></visual>
+    <collision><geometry><cylinder radius="0.2" length="0.06"/></geometry></collision><inertial><mass value="6"/>${cylI(6, 0.2, 0.06)}</inertial></link>${w}
+${sensors(0.0, 0.08, 0.19, 0.03)}</robot>`;
+  }
+  if (kind === "swerve") {                   // 60 × 60 cm, 4 modules: stuurmotor (revolute z) + aangedreven wiel r 7 cm
+    const r = 0.07, z = 0.12, wz = r - z, mod = (c, x, y) => `
+  <joint name="${c}_swerve_steer_joint" type="revolute"><parent link="base_link"/><child link="${c}_swerve_link"/><origin xyz="${x} ${y} ${f(wz)}"/><axis xyz="0 0 1"/><limit lower="-1.7" upper="1.7" effort="10" velocity="6"/></joint>
+  <link name="${c}_swerve_link"><visual><origin xyz="0 0 0.06"/><geometry><cylinder radius="0.05" length="0.04"/></geometry><material name="dark"/></visual>
+    <inertial><mass value="0.6"/><inertia ixx="0.002" ixy="0" ixz="0" iyy="0.002" iyz="0" izz="0.002"/></inertial></link>${wheel(`${c}_wheel`, `${c}_swerve_link`, 0, 0, 0, r, 0.05, 0.5)}`;
+    return `<?xml version="1.0"?><robot name="swerve_lite">${mats}${base(0.6, 0.6, 0.08, z, 15, "blue")}
+${mod("front_left", 0.24, 0.24)}${mod("rear_left", -0.24, 0.24)}${mod("front_right", 0.24, -0.24)}${mod("rear_right", -0.24, -0.24)}
+${sensors(0.1, 0.1, 0.31, 0.03)}</robot>`;
+  }
+  if (kind === "articulated") {              // wiellader: achterwagen (base_link) + voorwagen aan een knik (revolute z), wielen r 12 cm
+    const r = 0.12, z = 0.16, wz = r - z;
+    return `<?xml version="1.0"?><robot name="articulated_lite">${mats}${base(0.42, 0.42, 0.16, z, 14, "body",
+      `\n    <visual><origin xyz="-0.05 0 0.16"/><geometry><box size="0.22 0.36 0.16"/></geometry><material name="dark"/></visual>`)}
+  <joint name="articulation_joint" type="revolute"><parent link="base_link"/><child link="front_body_link"/><origin xyz="0.26 0 0"/><axis xyz="0 0 1"/><limit lower="-0.6" upper="0.6" effort="200" velocity="1"/></joint>
+  <link name="front_body_link"><visual><origin xyz="0.3 0 0"/><geometry><box size="0.5 0.4 0.14"/></geometry><material name="body"/></visual>
+    <visual><origin xyz="0.62 0 -0.04"/><geometry><box size="0.08 0.6 0.2"/></geometry><material name="metal"/></visual>
+    <visual><origin xyz="-0.03 0 0"/><geometry><cylinder radius="0.04" length="0.1"/></geometry><material name="metal"/></visual>
+    <collision><origin xyz="0.3 0 0"/><geometry><box size="0.5 0.4 0.14"/></geometry></collision>
+    <inertial><origin xyz="0.3 0 0"/><mass value="10"/>${boxI(10, 0.5, 0.4, 0.14)}</inertial></link>
+${wheel("rear_left_wheel", "base_link", -0.08, 0.28, wz, r, 0.09, 1.2)}${wheel("rear_right_wheel", "base_link", -0.08, -0.28, wz, r, 0.09, 1.2)}
+${wheel("front_left_wheel", "front_body_link", 0.34, 0.28, wz, r, 0.09, 1.2)}${wheel("front_right_wheel", "front_body_link", 0.34, -0.28, wz, r, 0.09, 1.2)}
+  <joint name="scan_joint" type="fixed"><parent link="front_body_link"/><child link="base_scan"/><origin xyz="0.3 0 0.1"/></joint>
+  <link name="base_scan"><visual><origin xyz="0 0 -0.0125"/><geometry><cylinder radius="0.035" length="0.025"/></geometry><material name="dark"/></visual></link>
+  <joint name="imu_joint" type="fixed"><parent link="base_link"/><child link="imu_link"/><origin xyz="0 0 0.05"/></joint>
+  <link name="imu_link"/>
+  <joint name="camera_joint" type="fixed"><parent link="front_body_link"/><child link="camera_link"/><origin xyz="0.55 0 0.09"/></joint>
+  <link name="camera_link"><visual><origin xyz="-0.01 0 0"/><geometry><box size="0.02 0.06 0.025"/></geometry><material name="dark"/></visual></link>
+  <joint name="camera_rgb_optical_joint" type="fixed"><parent link="camera_link"/><child link="camera_rgb_optical_frame"/><origin rpy="-1.5708 0 -1.5708"/></joint>
+  <link name="camera_rgb_optical_frame"/></robot>`;
+  }
+  if (kind === "trailer") {                  // de rc-auto (ackermann) met een aanhangwagen aan een trekhaak (revolute z, vrij)
+    const car = presetURDF("ackermann").replace("</robot>", ""), r = 0.05, wz = r - 0.07;
+    return car.replace('robot name="ackermann_lite"', 'robot name="ackermann_trailer_lite"') + `
+  <joint name="hitch_joint" type="revolute"><parent link="base_link"/><child link="trailer_link"/><origin xyz="-0.28 0 -0.01"/><axis xyz="0 0 1"/><limit lower="-1.3" upper="1.3" effort="1" velocity="5"/></joint>
+  <link name="trailer_link"><visual><origin xyz="-0.06 0 0"/><geometry><box size="0.12 0.02 0.015"/></geometry><material name="metal"/></visual>
+    <visual><origin xyz="-0.3 0 0.04"/><geometry><box size="0.36 0.22 0.08"/></geometry><material name="blue"/></visual>
+    <collision><origin xyz="-0.3 0 0.04"/><geometry><box size="0.36 0.22 0.08"/></geometry></collision>
+    <inertial><origin xyz="-0.3 0 0.04"/><mass value="1.2"/>${boxI(1.2, 0.36, 0.22, 0.08)}</inertial></link>
+${wheel("trailer_left_wheel", "trailer_link", -0.3, 0.14, f(wz + 0.01), r, 0.035, 0.12)}${wheel("trailer_right_wheel", "trailer_link", -0.3, -0.14, f(wz + 0.01), r, 0.035, 0.12)}</robot>`;
+  }
+  if (kind === "balance") {                  // 2 wielen r 9 cm, hoge romp (zwaartepunt boven de as): valt om zonder regelaar
+    const r = 0.09, z = 0.09;
+    return `<?xml version="1.0"?><robot name="balance_segway_lite">${mats}
+  <link name="base_footprint"/>
+  <joint name="base_joint" type="fixed"><parent link="base_footprint"/><child link="base_link"/><origin xyz="0 0 ${z}"/></joint>
+  <link name="base_link">
+    <visual><origin xyz="0 0 0.22"/><geometry><box size="0.12 0.26 0.44"/></geometry><material name="body"/></visual>
+    <visual><origin xyz="0 0 0.02"/><geometry><box size="0.1 0.3 0.04"/></geometry><material name="dark"/></visual>
+    <collision><origin xyz="0 0 0.22"/><geometry><box size="0.12 0.26 0.44"/></geometry></collision>
+    <inertial><origin xyz="0 0 0.25"/><mass value="6"/>${boxI(6, 0.12, 0.26, 0.44)}</inertial></link>
+${wheel("left_wheel", "base_link", 0, 0.17, 0, r, 0.04, 0.5)}${wheel("right_wheel", "base_link", 0, -0.17, 0, r, 0.04, 0.5)}
+${sensors(0.0, 0.47, 0.07, 0.38)}</robot>`;
+  }
+  if (kind === "quadruped") {                // ~ 70 × 30 cm, 14 kg; per poot heup opzij (x), heup voor/achter (y), knie (y), dij en scheen 22 cm
+    const L1 = 0.22, L2 = 0.22, rI = (m, r, l) => cylI(m, r, l), leg = (n, x, y) => `
+  <joint name="${n}_hip_x_joint" type="revolute"><parent link="base_link"/><child link="${n}_hip_link"/><origin xyz="${x} ${y} -0.02"/><axis xyz="1 0 0"/><limit lower="-0.6" upper="0.6" effort="40" velocity="8"/></joint>
+  <link name="${n}_hip_link"><visual><geometry><box size="0.08 0.07 0.06"/></geometry><material name="dark"/></visual>
+    <inertial><mass value="1.0"/><inertia ixx="1e-3" ixy="0" ixz="0" iyy="1e-3" iyz="0" izz="1e-3"/></inertial></link>
+  <joint name="${n}_hip_y_joint" type="revolute"><parent link="${n}_hip_link"/><child link="${n}_thigh_link"/><origin xyz="0 ${f(Math.sign(y) * 0.05)} 0"/><axis xyz="0 1 0"/><limit lower="-1.6" upper="1.6" effort="60" velocity="8"/></joint>
+  <link name="${n}_thigh_link"><visual><origin xyz="0 0 ${-L1 / 2}"/><geometry><box size="0.05 0.04 ${L1}"/></geometry><material name="body"/></visual>
+    <inertial><origin xyz="0 0 ${-L1 / 2}"/><mass value="1.2"/>${rI(1.2, 0.025, L1)}</inertial></link>
+  <joint name="${n}_knee_joint" type="revolute"><parent link="${n}_thigh_link"/><child link="${n}_shank_link"/><origin xyz="0 0 ${-L1}"/><axis xyz="0 1 0"/><limit lower="-2.6" upper="-0.1" effort="60" velocity="10"/></joint>
+  <link name="${n}_shank_link"><visual><origin xyz="0 0 ${-L2 / 2}"/><geometry><cylinder radius="0.014" length="${L2}"/></geometry><material name="dark"/></visual>
+    <inertial><origin xyz="0 0 ${-L2 / 2}"/><mass value="0.4"/>${rI(0.4, 0.014, L2)}</inertial></link>
+  <joint name="${n}_foot_joint" type="fixed"><parent link="${n}_shank_link"/><child link="${n}_foot_link"/><origin xyz="0 0 ${-L2}"/></joint>
+  <link name="${n}_foot_link"><visual><geometry><sphere radius="0.025"/></geometry><material name="tire"/></visual>
+    <collision><geometry><sphere radius="0.025"/></geometry></collision></link>`;
+    return `<?xml version="1.0"?><robot name="quadruped_lite">${mats}${base(0.6, 0.24, 0.12, f(L1 + L2 + 0.045), 10, "body",
+      `\n    <visual><origin xyz="0.31 0 0.01"/><geometry><box size="0.04 0.2 0.08"/></geometry><material name="dark"/></visual>`)}
+${leg("fl", 0.24, 0.07)}${leg("fr", 0.24, -0.07)}${leg("rl", -0.24, 0.07)}${leg("rr", -0.24, -0.07)}
+${sensors(0.15, 0.08, 0.33, 0.01)}</robot>`;
+  }
+  if (kind === "humanoid") {                 // ~ 1,45 m, 38 kg; per been heup opzij/voor-achter, knie, enkel voor-achter/opzij; armen zwaaien
+    const L1 = 0.38, L2 = 0.38, J = (n, type, par, ch, xyz, ax, lo, up) => `
+  <joint name="${n}" type="${type}"><parent link="${par}"/><child link="${ch}"/><origin xyz="${xyz}"/><axis xyz="${ax}"/><limit lower="${lo}" upper="${up}" effort="150" velocity="6"/></joint>`;
+    const lk = (n, m, vis = "", col = "") => `
+  <link name="${n}">${vis}${col}<inertial><mass value="${m}"/><inertia ixx="${f(m * 0.01)}" ixy="0" ixz="0" iyy="${f(m * 0.01)}" iyz="0" izz="${f(m * 0.005)}"/></inertial></link>`;
+    const box = (xyz, s, mat) => `<visual><origin xyz="${xyz}"/><geometry><box size="${s}"/></geometry><material name="${mat}"/></visual>`;
+    const leg = (s, y) => J(`${s}_hip_yaw_joint`, "revolute", "base_link", `${s}_hip_yaw_link`, `0 ${y} -0.27`, "0 0 1", -0.6, 0.6) + lk(`${s}_hip_yaw_link`, 0.5)
+      + J(`${s}_hip_roll_joint`, "revolute", `${s}_hip_yaw_link`, `${s}_hip_link`, "0 0 0", "1 0 0", -0.5, 0.5) + lk(`${s}_hip_link`, 1, box("0 0 0", "0.08 0.08 0.06", "dark"))
+      + J(`${s}_hip_pitch_joint`, "revolute", `${s}_hip_link`, `${s}_thigh_link`, "0 0 0", "0 1 0", -1.6, 1.0) + lk(`${s}_thigh_link`, 3, box(`0 0 ${-L1 / 2}`, `0.09 0.09 ${L1}`, "blue"))
+      + J(`${s}_knee_joint`, "revolute", `${s}_thigh_link`, `${s}_shank_link`, `0 0 ${-L1}`, "0 1 0", 0.05, 2.4) + lk(`${s}_shank_link`, 2, box(`0 0 ${-L2 / 2}`, `0.07 0.07 ${L2}`, "metal"))
+      + J(`${s}_ankle_pitch_joint`, "revolute", `${s}_shank_link`, `${s}_ankle_link`, `0 0 ${-L2}`, "0 1 0", -1.0, 1.0) + lk(`${s}_ankle_link`, 0.5)
+      + J(`${s}_ankle_roll_joint`, "revolute", `${s}_ankle_link`, `${s}_foot_link`, "0 0 0", "1 0 0", -0.5, 0.5)
+      + lk(`${s}_foot_link`, 1, box("0.03 0 -0.05", "0.22 0.11 0.04", "dark"), `<collision><origin xyz="0.03 0 -0.05"/><geometry><box size="0.22 0.11 0.04"/></geometry></collision>`);
+    const arm = (s, y) => J(`${s}_shoulder_pitch_joint`, "revolute", "base_link", `${s}_upper_arm_link`, `0 ${y} 0.2`, "0 1 0", -1.5, 1.5)
+      + lk(`${s}_upper_arm_link`, 1.5, box("0 0 -0.14", "0.07 0.07 0.28", "blue"))
+      + J(`${s}_elbow_joint`, "revolute", `${s}_upper_arm_link`, `${s}_forearm_link`, "0 0 -0.28", "0 1 0", -2.0, 0) + lk(`${s}_forearm_link`, 1, box("0 0 -0.13", "0.06 0.06 0.26", "metal"));
+    return `<?xml version="1.0"?><robot name="humanoid_lite">${mats}${base(0.22, 0.34, 0.54, f(0.27 + L1 + L2 + 0.07), 18, "body",
+      `\n    ${box("0 0 0.37", "0.16 0.16 0.18", "metal")}\n    ${box("0 0 0.3", "0.06 0.06 0.06", "dark")}`)}
+${leg("left", 0.09)}${leg("right", -0.09)}${arm("left", 0.21)}${arm("right", -0.21)}
+${sensors(0.0, 0.47, 0.09, 0.38)}</robot>`;
   }
   throw new Error("Onbekende robot: " + kind);
 }

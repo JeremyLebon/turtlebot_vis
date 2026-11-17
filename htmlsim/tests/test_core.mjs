@@ -77,6 +77,31 @@ for (const [k, drive] of [["skid", "skid"], ["tracked", "skid"], ["mecanum", "me
   p = s.truthPose();
   ok("rocker-bogie: trede 10 cm links genomen, differentieel houdt de romp", p.x > 1.5 && dmax > 0.07 && rmax < 0.12 && smax < 0.03,
     `x ${p.x.toFixed(2)} m, rockers tegengesteld max ${(dmax * 57.3).toFixed(1)}°, som max ${(smax * 57.3).toFixed(1)}°, rol romp max ${(rmax * 57.3).toFixed(1)}°`); }
+// omni, swerve: rechtdoor, zijwaarts en schuin; knik: bocht zonder ter plaatse draaien; aanhangwagen; balans
+{ const go = (k, cmd, sec) => { const s = preset(k); run(s, cmd, sec); return s; };
+  for (const k of ["omni", "swerve"]) {
+    let p = go(k, { v: 0, w: 0, vy: 0.3 }, 3).truthPose(); ok(`${k}: rijdt zijwaarts`, p.y > 0.75 && Math.abs(p.x) < 0.05 && Math.abs(p.th) < 0.05, `x ${p.x.toFixed(2)} y ${p.y.toFixed(2)} θ ${(p.th * 57.3).toFixed(1)}°`);
+    p = go(k, { v: 0.3, w: 0, vy: 0.3 }, 3).truthPose(); ok(`${k}: rijdt schuin`, p.x > 0.75 && p.y > 0.75 && Math.abs(p.th) < 0.05, `x ${p.x.toFixed(2)} y ${p.y.toFixed(2)}`);
+    p = go(k, { v: 0, w: 1 }, 2).truthPose(); ok(`${k}: draait ter plaatse`, Math.abs(p.th) > 1.5 && Math.hypot(p.x, p.y) < 0.05, `θ ${(p.th * 57.3).toFixed(0)}°`);
+  }
+  let s = go("articulated", { v: 0.3, w: 0.5 }, 4), p = s.truthPose(), kn = s.robot.joints.find(o => o.role === "steer");
+  ok("knikbesturing: bocht via de knik", p.th > 0.5 && kn.pos > 0.4, `θ ${(p.th * 57.3).toFixed(0)}°, knik ${(kn.pos * 57.3).toFixed(0)}°`);
+  p = go("articulated", { v: 0, w: 1 }, 2).truthPose(); ok("knikbesturing: draait niet ter plaatse", Math.abs(p.th) < 0.05, `θ ${(p.th * 57.3).toFixed(1)}°`);
+  s = go("trailer", { v: 0.4, w: 0.6 }, 5); const h = s.robot.byName.hitch_joint;
+  ok("aanhangwagen: volgt in de bocht (trekhaak draait mee)", s.robot.cfg.drive === "ackermann" && Math.abs(h.pos) > 0.1, `trekhaak ${(h.pos * 57.3).toFixed(0)}°, θ ${(s.truthPose().th * 57.3).toFixed(0)}°`);
+  const tilt = q => Math.acos(Math.max(-1, Math.min(1, 1 - 2 * (q.x * q.x + q.y * q.y))));
+  s = preset("balance"); s.params.balanceAssist = false; s.robot.rootBody.rb.setAngvel({ x: 0, y: 0.3, z: 0 }, true); run(s, { v: 0, w: 0 }, 3);
+  ok("balans: zonder regelaar valt hij om", tilt(s.truthPose().q) > 1.0, `kanteling ${(tilt(s.truthPose().q) * 57.3).toFixed(0)}°`);
+  s = preset("balance"); s.robot.rootBody.rb.setAngvel({ x: 0, y: 0.5, z: 0 }, true); run(s, { v: 0, w: 0 }, 2); run(s, { v: 0.4, w: 0 }, 3); p = s.truthPose();
+  ok("balans: met regelaar blijft hij staan en rijdt", tilt(p.q) < 0.2 && p.x > 0.7, `x ${p.x.toFixed(2)} m, kanteling ${(tilt(p.q) * 57.3).toFixed(1)}°`); }
+// poten: Spot draaft (vooruit, draaien, opzij); humanoïde loopt met balansondersteuning, valt zonder
+{ const tilt = q => Math.acos(Math.max(-1, Math.min(1, 1 - 2 * (q.x * q.x + q.y * q.y)))), go = (k, cmd, sec, f) => { const s = preset(k); if (f) f(s); let tm = 0;
+    for (let i = 0; i < sec * 200; i++) { s.step(cmd); tm = Math.max(tm, tilt(s.truthPose().q)); } return [s.truthPose(), tm]; };
+  let [p, tm] = go("quadruped", { v: 0.3, w: 0 }, 4); ok("viervoeter: 4 poten, draaft vooruit", p.x > 0.5 && Math.abs(p.y) < 0.15 && tm < 0.2, `x ${p.x.toFixed(2)} y ${p.y.toFixed(2)}, kanteling max ${(tm * 57.3).toFixed(1)}°`);
+  [p, tm] = go("quadruped", { v: 0, w: 0.6 }, 3); ok("viervoeter: draait ter plaatse", p.th > 0.9 && Math.hypot(p.x, p.y) < 0.3, `θ ${(p.th * 57.3).toFixed(0)}° (103° gevraagd)`);
+  [p, tm] = go("humanoid", { v: 0.2, w: 0 }, 5); ok("humanoïde: loopt vooruit (met ondersteuning)", p.x > 0.7 && Math.abs(p.y) < 0.2 && tm < 0.1, `x ${p.x.toFixed(2)} y ${p.y.toFixed(2)}, kanteling max ${(tm * 57.3).toFixed(1)}°`);
+  [p, tm] = go("humanoid", { v: 0, w: 0.4 }, 4); ok("humanoïde: draait (heup om z)", p.th > 1.1 && p.th < 2.0, `θ ${(p.th * 57.3).toFixed(0)}° (92° gevraagd)`);
+  [p, tm] = go("humanoid", { v: 0.2, w: 0 }, 4, s => { s.params.legAssist = false; }); ok("humanoïde: zonder ondersteuning valt hij", tm > 1.0, `kanteling max ${(tm * 57.3).toFixed(0)}°`); }
 // 3D-lidar-presets: verdeeld over de omwenteling, tijd per punt, ringen; rozet verandert per scan
 for (const k of ["vlp16", "mid360"]) {
   const s = burger(), P = s.L3_PRESETS[k], st = {}; s.addBox(1.5, 0, 0, 1.0, 1.0); let scan = null, steps = 0;

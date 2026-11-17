@@ -41,7 +41,17 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
   60 % kritische demping); de tussenlink moet zwaar genoeg zijn (±3 kg), anders haalt de wielmotor zijn snelheid niet
   (solver met een lichte schakel tussen romp en wiel). Preset `rover`. **Rocker-bogie:** revolute met "rocker" = role
   `rocker` (ForceBased; `rockerDiff()` elke stap: elke rocker naar eigen hoek − gemiddelde → som 0 = differentieel),
-  revolute met "bogie" = `passive` (vrij, enkel limieten). Preset `rockerbogie` (6 wielen, skid). Ingebouwde robots: `ROBOT_PRESETS` + `presetURDF(k)` in core.js (eigen
+  revolute met "bogie" = `passive` (vrij, enkel limieten). Preset `rockerbogie` (6 wielen, skid).
+  **Meer aandrijvingen (presets):** `omni` (continuous met "omni", as in elke richting, lichaam via setLinvel zoals mecanum,
+  ook wiel op y = 0), `swerve` (stuurjoints met "swerve": elke module naar atan2 van de snelheid op die plek, korte weg ±90°,
+  wielen wel aangedreven), `articulated` (revolute z "articulat"/"knik" = role steer met hoek uit v/w, wielen met
+  differentieel per as), `trailer` (trekhaak "hitch" vrij, "trailer"-wielen vrij met wrijving 1), `balance` (robotnaam met
+  balanc/segway: regelaar in step(), `params.balanceAssist`, vinkje; uit = wielen volgen /cmd_vel). Holonoom + knik +
+  balans + poten: odometrie uit de simulatie. **Poten:** revolute "knee" + hip_x/roll, hip_y/pitch (regex `(_|$)`, anders
+  vangt hip_y ook hip_yaw!), hip_z/yaw, ankle_* → `cfg.legs`, drive `legged`, role `leg` (ForceBased PD, K = 30·massa).
+  `gaitStep()`: draf (4) of stappen met wiegen (2), voetbaan uit v/vy/w, `legIK` (nulstand = recht naar beneden),
+  viervoeter houdt de romp horizontaal (gefilterde helling, 0,25 s); 2 poten: `params.legAssist` = koppel op de romp
+  (onzichtbaar tuigje, vinkje). Op terrein wordt een robot op de hoogste grond onder zijn links neergezet. Ingebouwde robots: `ROBOT_PRESETS` + `presetURDF(k)` in core.js (eigen
   ontwerp, primitieven), keuzelijst `#presetSel`. `cfg.leftWheel`/`rightWheel` blijven het eerste wiel (encoders, odometrie).
 - **Rijknoppen in beeld = joystick:** indrukken en slepen op `#pad`; richting en grootte t.o.v. de STOP-knop (dode zone 25 %),
   ook schuin (vooruit + draaien, nodig voor Ackermann). Mecanum: knop `#padStrafe` of Shift → links/rechts = zijwaarts.

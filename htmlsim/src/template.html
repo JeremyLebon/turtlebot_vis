@@ -266,6 +266,8 @@
         </div>
         <div class="grid2"><label for="presetSel">Ander type</label><select id="presetSel">
           <option value="" selected>kies een robot…</option></select></div>
+        <label class="chk" id="balanceRow" hidden><input type="checkbox" id="balanceAssist" checked> Ingebouwde balansregelaar (uit = zelf balanceren met <code>/imu</code> → <code>/cmd_vel</code>; de wielen volgen dan rechtstreeks <code>/cmd_vel</code>)</label>
+        <label class="chk" id="legAssistRow" hidden><input type="checkbox" id="legAssist" checked> Balansondersteuning: een onzichtbaar "tuigje" houdt de romp rechtop (uit = de humanoïde valt; echt balanceren vraagt een eigen regelaar)</label>
         <p class="msg" id="robotMsg">Ingebouwde Burger geladen (primitieve vormen, met camera en 3D-lidar).</p>
       </section>
     </details>
@@ -1126,7 +1128,8 @@ function buildJointUI() {
 function rebuild(x = START.x, y = START.y, th = START.th) {
   sim.buildRobot(model, cfg, x, y, th); l3State = {};
   // (padStrafe is hier bij het opstarten nog niet gedeclareerd: via de klasse van de knop)
-  $("padStrafe").hidden = cfg.drive !== "mecanum"; if (cfg.drive !== "mecanum" && $("padStrafe").classList.contains("held")) $("padStrafe").click();
+  const holo = ["mecanum", "omni", "swerve", "legged"].includes(cfg.drive); $("balanceRow").hidden = !cfg.balance; $("legAssistRow").hidden = !(cfg.legs && cfg.legs.length === 2);
+  $("padStrafe").hidden = !holo; if (!holo && $("padStrafe").classList.contains("held")) $("padStrafe").click();
   const p0 = sim.truthPose(); odomOrigin = { x: p0.x, y: p0.y, th: p0.th }; clearTrails(); prevRobot = null;
   buildRobotVisuals(); buildJointUI();
   // optisch cameraframe: uit de URDF als het bestaat, anders zelf toevoegen
@@ -1162,6 +1165,10 @@ function loadBuiltin() {
 const DRIVE_INFO = {
   diff: "differentieel (2 wielen)", skid: "skid-steer: alle wielen per kant samen, slipt bij draaien",
   mecanum: "mecanum: ook zijwaarts (linear.y in /cmd_vel; toetsen: Shift + ← →)", ackermann: "Ackermann: sturen met de voorwielen, niet ter plaatse draaien",
+  omni: "omniwielen: ook zijwaarts en schuin (linear.y in /cmd_vel; toetsen: Shift + ← →)",
+  swerve: "swerve: elk wiel stuurt apart, ook zijwaarts (linear.y; Shift + ← →)",
+  articulated: "knikbesturing: de romp scharniert in het midden, niet ter plaatse draaien",
+  legged: "poten: loopgenerator uit /cmd_vel (vooruit, opzij met linear.y / Shift + ← →, draaien)",
 };
 function loadPreset(k) {
   const P = ROBOT_PRESETS[k]; if (!P) return;
@@ -1169,6 +1176,8 @@ function loadPreset(k) {
   showConfig(); sim.params.ballWheels = true; rebuild();
   $("robotMsg").className = "msg"; $("robotMsg").textContent = `${P.label} geladen. Aandrijving ${DRIVE_INFO[cfg.drive]}. Max ${P.vmax} m/s, ${P.wmax} rad/s.`;
 }
+$("legAssist").onchange = () => { sim.params.legAssist = $("legAssist").checked; $("legAssist").blur(); };
+$("balanceAssist").onchange = () => { sim.params.balanceAssist = $("balanceAssist").checked; $("balanceAssist").blur(); };
 for (const [k, P] of Object.entries(sim.L3_PRESETS)) $("l3Preset").insertAdjacentHTML("beforeend", `<option value="${k}">${P.label}</option>`);
 $("l3Preset").onchange = () => { const P = sim.L3_PRESETS[$("l3Preset").value]; $("l3min").value = P.rmin; $("l3max").value = P.rmax; applyLidarRange(); l3State = {};
   try { localStorage.setItem("tb3sim.l3Preset", $("l3Preset").value); } catch {} $("l3Preset").blur(); };
@@ -2373,7 +2382,7 @@ window.addEventListener("blur", () => { keys.clear(); keyCmd = null; padCmd = nu
 const PAD = { f: { v: 1, w: 0 }, b: { v: -1, w: 0 }, l: { v: 0, w: 1 }, r: { v: 0, w: -1 }, x: { v: 0, w: 0 },
   fl: { v: 1, w: 1 }, fr: { v: 1, w: -1 }, bl: { v: -1, w: 1 }, br: { v: -1, w: -1 } };
 let padStrafe = false;
-const driveCmd = (d, strafe) => strafe && cfg.drive === "mecanum" ? { v: d.v * cfg.vmax, vy: d.w * cfg.vmax, w: 0 }
+const driveCmd = (d, strafe) => strafe && ["mecanum", "omni", "swerve", "legged"].includes(cfg.drive) ? { v: d.v * cfg.vmax, vy: d.w * cfg.vmax, w: 0 }
   : { v: d.v * cfg.vmax, w: d.w * cfg.wmax * (d.v ? 0.4 : 0.6) };
 // PAD-namen voor de knoppen: f/b + l/r (fl = vooruit + links)
 $("padStrafe").onclick = () => { padStrafe = !padStrafe; $("padStrafe").classList.toggle("held", padStrafe); $("padStrafe").setAttribute("aria-pressed", padStrafe); };

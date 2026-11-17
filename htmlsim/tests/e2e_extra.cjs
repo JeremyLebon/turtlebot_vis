@@ -97,18 +97,18 @@ const check = (good, txt) => { ok &&= !!good; console.log(`${good ? '✓' : '✗
     }
     // robots per aandrijftype: laden en met de toetsen rijden (Bedrijfsterrein, vrije plek: bij (-6, 0) staat een doos)
     await page.evaluate(() => { const sel = document.getElementById('worldSel'); sel.value = 'yard'; sel.dispatchEvent(new Event('change')); });
-    for (const k of ['skid', 'tracked', 'mecanum', 'ackermann', 'rover', 'rockerbogie']) {
+    for (const k of ['skid', 'tracked', 'mecanum', 'ackermann', 'rover', 'rockerbogie', 'omni', 'swerve', 'articulated', 'trailer', 'balance', 'quadruped', 'humanoid']) {
       await page.evaluate(k => { const s = document.getElementById('presetSel'); s.value = k; s.dispatchEvent(new Event('change')); window.__tb3test.rebuild(-10, -1.5, 0); }, k);
       await wait(1500);
       const p0 = await page.evaluate(() => window.__tb3test.sim.truthPose());
       await page.focus('body');
-      if (k === 'mecanum') { await page.keyboard.down('Shift'); await page.keyboard.down('ArrowLeft'); }
+      if (['mecanum', 'omni', 'swerve'].includes(k)) { await page.keyboard.down('Shift'); await page.keyboard.down('ArrowLeft'); }
       else await page.keyboard.down('ArrowUp');
       await wait(5000);
-      if (k === 'mecanum') { await page.keyboard.up('ArrowLeft'); await page.keyboard.up('Shift'); } else await page.keyboard.up('ArrowUp');
+      if (['mecanum', 'omni', 'swerve'].includes(k)) { await page.keyboard.up('ArrowLeft'); await page.keyboard.up('Shift'); } else await page.keyboard.up('ArrowUp');
       const r = await page.evaluate(() => ({ p: window.__tb3test.sim.truthPose(), msg: document.getElementById('robotMsg').textContent }));
       const dx = r.p.x - p0.x, dy = r.p.y - p0.y;
-      check(k === 'mecanum' ? dy > 0.1 && Math.abs(dx) < 0.05 : dx > 0.1, `${k}: ${r.msg.split('.')[0]}; gereden dx ${dx.toFixed(2)} dy ${dy.toFixed(2)} m`);
+      check(['mecanum', 'omni', 'swerve'].includes(k) ? dy > 0.1 && Math.abs(dx) < 0.05 : dx > 0.1, `${k}: ${r.msg.split('.')[0]}; gereden dx ${dx.toFixed(2)} dy ${dy.toFixed(2)} m`);
     }
     // rijknoppen in beeld: schuin (Ackermann, Burger), zijwaarts (mecanum); numpad 7 = vooruit + links
     const hold = async (sel, ms) => { const b = await page.$(sel), bb = await b.boundingBox(); await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2); await page.mouse.down(); await wait(ms); await page.mouse.up(); };
