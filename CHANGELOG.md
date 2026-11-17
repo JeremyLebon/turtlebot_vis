@@ -30,6 +30,11 @@ Eigen versies, los daarvan:
   maten, kleur, massa; inertia automatisch), spiegelen L↔R, ongedaan maken,
   controle voor de simulator. *Testen in de simulator* stuurt de robot naar
   een open simulator-tabblad. Dockerfile kopieert `editor.html` mee.
+- **Inertie, wrijving en joints:** de editor rekent de inertie uit alle vormen
+  samen (of handmatig: zwaartepunt + ixx/iyy/izz), toont het zwaartepunt,
+  en heeft wrijving µ per link (`<gazebo><mu1>`) en per joint max koppel,
+  max snelheid, demping en wrijving. De simulator gebruikt ze: µ per link,
+  armen volgen `limit.velocity`/`limit.effort`, vrije joints `<dynamics>`.
 
 ## 1.0.19 - 2026-11-14
 - **Virtuele robot 1.9.11: joystick op de Fenix-pagina.** Knop met de cirkel

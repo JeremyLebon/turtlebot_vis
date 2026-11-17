@@ -139,6 +139,13 @@ Doelpubliek: studenten Mobiele Automatisering / ROS 2 (VIVES), docent bouwt eige
   `tb3sim.toEditor` + `editor#from-sim` (knop Robot-editor in de titelbalk en onder Robot). In een iframe (artifact)
   navigeren beide pagina's in hetzelfde kader i.p.v. een nieuw tabblad (`window.self !== window.top`). Test: `node tests/e2e_robot_editor.cjs [map]`
   (bouwt een robot, sleept met de muis aan de gizmo, rijdt de export in Rapier, stuurt naar een open sim).
+- **Inertie, wrijving, jointdynamica (core.js):** `combinedInertia(vormen, massa)` = massa verdeeld volgens volume, zwaartepunt,
+  volledige tensor met Steiner (editor "automatisch", `inertial.auto`); de sim houdt enkel de diagonaal. Wrijving per link uit
+  `<gazebo reference><mu1>/<mu2>` (`link.mu`), anders wiel 1,0 / caster 0 / rest 0,4 (mecanum blijft 0). `jointDyn`/`posMotor`:
+  positiegestuurde joints volgen `limit.velocity` (doel schuift zo snel op) en `limit.effort` (ForceBased, k = effort/0,05 rad,
+  P-actie afgekapt op 0,05 rad ≈ koppelgrens; Rapier 0.14 heeft geen echte); vrije continuous joints: `<dynamics damping>`
+  als viskeuze rem, `friction` ≈ extra demping (koppel bij 0,1 rad/s). Aandrijfwielen negeren effort/velocity (zoals de
+  diff-drive-plugin van Gazebo). Zonder die tags verandert er niets aan bestaande robots.
 - **Opname:** samengesteld canvas (WebGL + HUD + camera + testpaneel + balk) via `captureStream`, of `getDisplayMedia`
   voor het hele scherm. `drawComposite()` direct na `renderer.render` (anders leeg WebGL-beeld).
   Enkel MP4/H.264 (`pickMime`, 07-11): Toledo speelt .webm niet af. Chrome/Edge ≥ 126 kunnen dat, Firefox en

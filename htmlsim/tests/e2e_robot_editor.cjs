@@ -86,6 +86,28 @@ let fails = 0; const ok = (name, c, info = '') => { console.log(`${c ? '✓' : '
     await ed.evaluate(() => window.__edtest.select('base_link'));
     await ed.evaluate(() => { const e = document.getElementById('gX'); e.value = 260; e.dispatchEvent(new Event('change')); });
     ok('maat van de plaat aangepast, collision volgt', await ed.evaluate(() => { const L = window.__edtest.M.links.base_link; return Math.abs(L.visuals[0].geom.size[0] - 0.26) < 1e-9 && Math.abs(L.collisions[0].geom.size[0] - 0.26) < 1e-9; }));
+    // massa, inertie, wrijving, jointparameters
+    ok('controle toont totale massa en zwaartepunt', /Totale massa [\d.]+ kg · zwaartepunt/.test(await ed.$eval('#checks', e => e.textContent)));
+    ok('inertie automatisch: tekst met zwaartepunt en ixx', /zwaartepunt .* mm · ixx/.test(await ed.$eval('#props', e => e.textContent)));
+    await ed.evaluate(() => { const e = document.getElementById('mMode'); e.value = 'man'; e.dispatchEvent(new Event('change')); }); await wait(200);
+    const izz0 = await ed.evaluate(() => window.__edtest.M.links.base_link.inertial.I.zz);
+    await ed.evaluate(() => { const e = document.getElementById('mKg'); e.value = 1.6; e.dispatchEvent(new Event('change')); }); await wait(200);
+    const ie1 = await ed.evaluate(() => window.__edtest.M.links.base_link.inertial);
+    ok('handmatige inertie schaalt mee met de massa', !ie1.auto && Math.abs(ie1.I.zz / izz0 - 2) < 1e-6, `izz ${izz0.toPrecision(3)} → ${ie1.I.zz.toPrecision(3)}`);
+    if (OUT) { const pane = await ed.$('.edright'); await pane.screenshot({ path: path.join(OUT, 'robot_editor_props.png') }); }
+    await ed.evaluate(() => { const e = document.getElementById('iZZ'); e.value = 0.05; e.dispatchEvent(new Event('change')); }); await wait(200);
+    await ed.evaluate(() => window.__edtest.select('caster_back_link'));
+    await ed.evaluate(() => { const e = document.getElementById('mMu'); e.value = 0.05; e.dispatchEvent(new Event('change')); }); await wait(200);
+    await ed.evaluate(() => window.__edtest.select('base_link')); await ed.click('[data-add="arm"]'); await wait(300);
+    await ed.evaluate(() => { const e = document.getElementById('pEff'); e.value = 3; const v = document.getElementById('pVel'); v.value = 0.8; e.dispatchEvent(new Event('change')); }); await wait(200);
+    await ed.evaluate(() => { const v = document.getElementById('pVel'); v.value = 0.8; v.dispatchEvent(new Event('change')); }); await wait(200);
+    await ed.evaluate(() => window.__edtest.select('wheel_left_link'));
+    await ed.evaluate(() => { const e = document.getElementById('pDmp'); e.value = 0.01; e.dispatchEvent(new Event('change')); }); await wait(200);
+    const dynU = await ed.evaluate(() => window.__edtest.exportText());
+    ok('export: handmatige izz, µ zwenkwiel, effort/velocity arm, demping wiel',
+      /izz="0\.05"/.test(dynU) && /<gazebo reference="caster_back_link"><mu1>0\.05<\/mu1><mu2>0\.05<\/mu2><\/gazebo>/.test(dynU) && /effort="3" velocity="0\.8"/.test(dynU) && /<dynamics damping="0\.01"\/>/.test(dynU),
+      (dynU.match(/<limit[^>]*effort="3"[^>]*>/) || ['geen arm-limit'])[0]);
+    await ed.evaluate(() => window.__edtest.select('arm_link')); await ed.click('#aDel'); await wait(200);
     await ed.evaluate(() => { const e = document.getElementById('robotName'); e.value = 'testbot'; e.dispatchEvent(new Event('change')); });
     if (OUT) { await ed.evaluate(() => window.__edtest.select('base_scan')); await wait(300); await ed.screenshot({ path: path.join(OUT, 'robot_editor_2.png') }); }
     // export → rijdt in de fysica
@@ -124,8 +146,10 @@ let fails = 0; const ok = (name, c, info = '') => { console.log(`${c ? '✓' : '
     const frame = () => fr.frames().find(f => f !== fr.mainFrame());
     await frame().evaluate(() => document.getElementById('editorLink').click()); await wait(3000);
     ok('in een iframe: Robot-editor opent in hetzelfde kader', /robot-editor\.html#from-sim$/.test(frame().url()), frame().url());
+    for (let i = 0; i < 30; i++) { if (await frame().evaluate(() => !!(document.getElementById('toSimBtn') && document.getElementById('toSimBtn').onclick && document.getElementById('msg').textContent)).catch(() => false)) break; await wait(300); }
     await frame().evaluate(() => { const e = document.getElementById('robotName'); e.value = 'kaderbot'; e.dispatchEvent(new Event('change')); });
-    await frame().evaluate(() => document.getElementById('toSimBtn').click()); await wait(3500);
+    await frame().evaluate(() => document.getElementById('toSimBtn').click());
+    for (let i = 0; i < 40; i++) { await wait(500); const t = await frame().evaluate(() => document.getElementById('robotMsg') && document.getElementById('robotMsg').textContent).catch(() => ''); if (/kaderbot/.test(t || '')) break; }
     const fm = await frame().evaluate(() => document.getElementById('robotMsg') && document.getElementById('robotMsg').textContent);
     ok('in een iframe: Testen in de simulator gaat terug met de robot', /tb3-lite-sim-3d\.html#editor-robot$/.test(frame().url()) && /robot-editor: kaderbot/.test(fm || ''), (fm || frame().url()).split('\n')[0]);
     ok('geen fouten in de pagina\'s', errs.length === 0, errs.slice(0, 3).join(' | '));
