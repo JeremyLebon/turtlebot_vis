@@ -1,1 +1,1 @@
-turtlebot_docker 2eb8716 (2026-11-18) 1.10.2: Navigatie starten en beginpositie vanuit de vlootkaart (nav_start, nav_pose)
+turtlebot_docker d05d37e (2026-11-18) 1.10.3: opdrachten van de vlootkaart doorlaten (MONITOR_COMMANDS)

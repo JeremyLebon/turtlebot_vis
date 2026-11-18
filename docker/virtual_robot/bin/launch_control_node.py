@@ -775,7 +775,9 @@ MONITOR_COMMANDS = (["start:" + n for n in MONITOR_LAUNCHES] + ["stop:" + n for 
                      # back to the :vorige image / install a tagged version, "arg" = "vX.Y.Z"
                      "rollback", "install_version",
                      # wifi load test: send data to the monitor, "arg" = "<test id>:<s>[:<Mbit/s>[:<down>]]"
-                     "wifitest"])
+                     "wifitest",
+                     # fleet map: goal / initial pose {"x","y","yaw"}, start Navigation on "arg" = map
+                     "nav_goal", "nav_cancel", "nav_pose", "nav_start"])
 
 
 def wifitest_start(monitor, cmd_id, arg):
