@@ -23,7 +23,8 @@
 #                      {"cmd": "relocalize"} -> AMCL global localization + spin 360°
 #   /web/nav_status  std_msgs/String (JSON) out, 2 Hz; also "loc" (AMCL
 #                    uncertainty + quality, t49) and "pose_suggestion" (last
-#                    good pose on this map while AMCL has none yet, t51)
+#                    good pose on this map while AMCL has none yet, t51), "map" (running
+#                    map, None while exploring)
 #   /web/robot_pose  geometry_msgs/PoseStamped out (frame map), 5 Hz - only
 #                    while someone subscribes (the TF listener costs CPU)
 #   /web/zones       std_msgs/String (JSON) out: {"map": name, "zones": [...]},
@@ -1298,6 +1299,7 @@ class NavWebNode(Node):
             self.loc = None
         s["loc"] = self.loc
         name = self.last_tick_map
+        s["map"] = name if name and name != SESSION else None
         s["pose_suggestion"] = load_lastpose(name) if s["nav2_ready"] and self.loc is None \
             and name and name != SESSION else None
         if self.algo:

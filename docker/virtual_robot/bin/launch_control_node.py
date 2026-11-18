@@ -1489,8 +1489,10 @@ class LaunchControlNode(Node):
                 elif cmd == "wifitest":   # runs in its own thread, reports itself when done
                     wifitest_start(self.monitor, c.get("id"), str(c.get("arg", "")))
                     continue
-                elif cmd in ("nav_goal", "nav_cancel"):   # vlootkaart van de monitor (1.4.0+)
+                elif cmd in ("nav_goal", "nav_cancel", "nav_pose"):   # vlootkaart van de monitor (1.4.0+)
                     resp.success, resp.message = self._monitor_nav(cmd, c.get("arg"))
+                elif cmd == "nav_start":   # vlootkaart (1.5.0+): Navigatie op de kaart van de vloot
+                    resp.success, resp.message = self._monitor_nav_start(str(c.get("arg", "")))
                 elif cmd == "beep":
                     subprocess.Popen(["/usr/local/bin/beep.py", "on"], start_new_session=True,
                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -1512,9 +1514,31 @@ class LaunchControlNode(Node):
             g = json.loads(arg) if isinstance(arg, str) else dict(arg)
             g = {k: float(g[k]) for k in ("x", "y", "yaw")}
         except (ValueError, KeyError, TypeError):
-            return False, "ongeldig doel"
+            return False, "ongeldig doel" if cmd == "nav_goal" else "ongeldige beginpositie"
+        if cmd == "nav_pose":   # 2D Pose Estimate, as on the Navigation page
+            self.nav_cmd_pub.publish(String(data=json.dumps(dict(g, cmd="initialpose"))))
+            return True, "beginpositie gezet: x %.2f, y %.2f" % (g["x"], g["y"])
         self.nav_cmd_pub.publish(String(data=json.dumps(dict(g, cmd="goal"))))
         return True, "doel naar Nav2: x %.2f, y %.2f" % (g["x"], g["y"])
+
+    def _monitor_nav_start(self, name):
+        """Navigation on the fleet map's map: fetched from the monitor's map
+        library when this robot doesn't have it, then chosen and started like
+        Mappen > Openen (restarts Navigation when it runs on another map)."""
+        import map_bundle
+        if not map_bundle.NAME_RE.match(name):
+            return False, "ongeldige kaartnaam"
+        fetched = ""
+        if name not in list_maps():
+            ok, msg = self._monitor_map("map_download", name)
+            if not ok or name not in list_maps():
+                return False, msg
+            fetched = "kaart '%s' uit de bibliotheek gehaald; " % name
+        if self._is_running("navigation") and running_map() == name:
+            return True, "Navigatie draait al op '%s'" % name
+        save_nav_options(dict(nav_options(), map=name))
+        resp = self._make_start_cb("navigation")(None, Trigger.Response())
+        return resp.success, fetched + resp.message
 
     def _monitor_map(self, cmd, name):
         """Map library on the monitor: upload a map bundle / download + import one."""

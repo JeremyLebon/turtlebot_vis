@@ -746,11 +746,16 @@ MONITOR_PERIOD = 5.0
 
 def nav_summary(s):
     """Short navigation state for the monitor (~200 bytes) from /web/nav_status:
-    goal or route, point n/m, navigating/paused/failed, distance left.
-    None when Nav2 isn't up."""
+    goal or route, point n/m, navigating/paused/failed, distance left; the
+    map, localized or not and the last good pose (to set the initial pose from
+    the monitor's fleet map). None when Nav2 isn't up."""
     if not s.get("nav2_ready"):
         return None
-    out = {"state": s.get("state"), "mode": s.get("mode")}
+    out = {"state": s.get("state"), "mode": s.get("mode"), "map": s.get("map"),
+           "loc_ok": bool(s.get("loc"))}
+    sug = s.get("pose_suggestion")   # last good pose on this map, while not localized (vlootkaart)
+    if sug:
+        out["suggest"] = {k: round(float(sug[k]), 3) for k in ("x", "y", "yaw")}
     if s.get("waypoints"):
         out["point"] = min(int(s.get("waypoint") or 0) + 1, int(s["waypoints"]))
         out["points"] = int(s["waypoints"])

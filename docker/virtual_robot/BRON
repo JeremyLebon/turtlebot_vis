@@ -1,1 +1,1 @@
-turtlebot_docker 02a35fa (2026-11-18) 1.10.1: costmap-filter pas na de lokalisatie (ROS-fout op turtlebot05)
+turtlebot_docker 2eb8716 (2026-11-18) 1.10.2: Navigatie starten en beginpositie vanuit de vlootkaart (nav_start, nav_pose)
