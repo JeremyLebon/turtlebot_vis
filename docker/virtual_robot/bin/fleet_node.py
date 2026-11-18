@@ -86,7 +86,9 @@ class FleetNode(Node):
         self.base_frame = p("base_frame", "base_footprint").value
         self.map_param = p("map_name", "").value
         self.radius = p("robot_radius", 0.14).value           # Burger ~0.14 m
-        self.margin = p("keepout_margin", 0.25).value         # aflopende rand rond een andere robot
+        self.margin = p("keepout_margin", 0.4).value          # aflopende rand rond een andere robot
+        self.safety = p("keepout_safety", 0.05).value         # extra afstand tussen de twee robots
+        self.lead_s = p("keepout_lead_s", 0.6).value          # schijf vooruit in de rijrichting: v * lead_s
         self.near_r = p("nearby_radius", 2.0).value
         self.memory = FleetMemory(stale_s=p("stale_s", 3.0).value, forget_s=p("forget_s", 15.0).value,
                                   max_grow=p("max_grow", 1.0).value)
@@ -196,7 +198,8 @@ class FleetNode(Node):
             info = CostmapFilterInfo(type=0, filter_mask_topic="/fleet/keepout_mask", base=0.0, multiplier=1.0)
             info.header.frame_id = self.map_frame      # type 0 = KEEPOUT
             self.filter_on = True
-        ox, oy, w, h, data = keepout_mask(self.own, self._others(), self.radius, self.margin)
+        ox, oy, w, h, data = keepout_mask(self.own, self._others(), self.radius, self.margin,
+                                       self.safety, self.lead_s)
         g = OccupancyGrid()
         g.header = Header(frame_id=self.map_frame, stamp=self.get_clock().now().to_msg())
         g.info.resolution, g.info.width, g.info.height = 0.05, w, h
