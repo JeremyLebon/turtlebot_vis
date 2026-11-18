@@ -146,6 +146,16 @@ SPEED_INFO, SPEED_MASK = "/speed_filter_info", "/speed_filter_mask"
 OVERRIDES_FILE = "/root/turtlebot_state/nav2_overrides.yaml"
 LANE_OUTSIDE = 40         # mask value outside preferred zones (cost ~100 of 254)
 WALL_HALF_WIDTH = 0.05    # virtual wall: 10 cm wide
+# Costmap filters come after the layers, so the inflation layer never sees
+# no-go zones and virtual walls: the planner drew paths that touched a zone's
+# corner and the robot got stuck there (2026-11-16). The mask gets its own
+# inflation instead, with TurtleBot3's values (burger.yaml: robot_radius 0.1,
+# inflation_radius 0.5, cost_scaling_factor 5.0). Within the robot radius 99
+# (cost 251), just below "inscribed": a robot that ends up there can still
+# drive out.
+ZONE_ROBOT_RADIUS = 0.1
+ZONE_INFLATION_RADIUS = 0.5
+ZONE_COST_SCALING = 5.0
 
 
 # Zones without a saved map: during SLAM / exploration (explore_demo) the map
@@ -362,7 +372,30 @@ def rasterize(info, zones, lane_outside=None):
                 speed[inside] = int(min(max(z.get("percent", 50), 1), 100))
             else:
                 keepout[inside] = 100
+    inflate_keepout(keepout, res)
     return keepout, lanes, speed
+
+
+def inflate_keepout(keepout, res):
+    """Cost around the lethal (100) cells, like Nav2's InflationLayer (in place)."""
+    lethal = keepout == 100
+    if not lethal.any():
+        return
+    h, w = keepout.shape
+    n = int(math.ceil(ZONE_INFLATION_RADIUS / res))
+    dist = np.full((h, w), np.inf)
+    pad = np.pad(lethal, n)
+    for dy in range(-n, n + 1):
+        for dx in range(-n, n + 1):
+            d = math.hypot(dx, dy) * res
+            if d <= ZONE_INFLATION_RADIUS:
+                shifted = pad[n + dy:n + dy + h, n + dx:n + dx + w]
+                dist[shifted & (dist > d)] = d
+    # Nav2: cost 252 * exp(-k (d - r)) outside the robot radius; mask = cost * 100 / 254
+    cost = np.where(dist <= ZONE_ROBOT_RADIUS, 99.0,
+                    252.0 * np.exp(-ZONE_COST_SCALING * (dist - ZONE_ROBOT_RADIUS)) * 100.0 / 254.0)
+    band = ~lethal & np.isfinite(dist)
+    keepout[band] = np.maximum(keepout[band], np.clip(np.round(cost[band]), 1, 99).astype(np.int8))
 
 
 MAP_FRAME = "map"

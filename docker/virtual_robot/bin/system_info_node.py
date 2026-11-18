@@ -736,6 +736,27 @@ MONITOR_URL = os.environ.get("MONITOR_URL", "").strip()
 MONITOR_PERIOD = 5.0
 
 
+def nav_summary(s):
+    """Short navigation state for the monitor (~200 bytes) from /web/nav_status:
+    goal or route, point n/m, navigating/paused/failed, distance left.
+    None when Nav2 isn't up."""
+    if not s.get("nav2_ready"):
+        return None
+    out = {"state": s.get("state"), "mode": s.get("mode")}
+    if s.get("waypoints"):
+        out["point"] = min(int(s.get("waypoint") or 0) + 1, int(s["waypoints"]))
+        out["points"] = int(s["waypoints"])
+        if s.get("route_loop"):
+            out["lap"] = s.get("lap")
+    if s.get("state") in ("navigating", "paused") and s.get("distance_remaining") is not None:
+        out["left_m"] = s["distance_remaining"]
+    if s.get("recoveries"):
+        out["recoveries"] = s["recoveries"]
+    if s.get("message"):
+        out["msg"] = str(s["message"])[:80]
+    return out
+
+
 class MonitorPush:
     """Posts the robot's status to MONITOR_URL in a background thread; never
     blocks the node. After a failure (laptop not there) it waits 30 s."""
@@ -802,6 +823,9 @@ class SystemInfoNode(Node):
             from sensor_msgs.msg import BatteryState
             self.create_subscription(String, "/launch_status", self._on_launch_status, 10)
             self.create_subscription(BatteryState, "/battery_state", self._on_battery, 10)
+            # navigation state for the monitor tile (nav_web_node, 2 Hz)
+            self.nav = None
+            self.create_subscription(String, "/web/nav_status", self._on_nav_status, 10)
 
     def _on_launch_status(self, msg):
         try:
@@ -819,6 +843,13 @@ class SystemInfoNode(Node):
     def _on_battery(self, msg):
         self.battery = {"v": round(msg.voltage, 2), "t": time.time()}
 
+    def _on_nav_status(self, msg):
+        try:
+            s = json.loads(msg.data)
+        except ValueError:
+            return
+        self.nav = {"t": time.time(), "summary": nav_summary(s)}
+
     def _monitor_payload(self, data):
         keep = ("bringup", "slam", "navigation", "camera", "joystick", "robot_node",
                 "usb_power", "joystick_device", "camera_sensor", "map_running", "changes", "maps", "update",
@@ -831,6 +862,7 @@ class SystemInfoNode(Node):
                 "sent": time.time(), "status": status,
                 "launch": {k: ls.get(k) for k in keep if k in ls},
                 "battery_v": bat["v"] if bat else None,
+                "nav": self.nav["summary"] if self.nav and time.time() - self.nav["t"] < 10 else None,
                 "golden": host.get("golden") if isinstance(host, dict) else None,
                 "setup_commit": host.get("setup_commit") if isinstance(host, dict) else None}
 

@@ -88,7 +88,8 @@ CHILD_PATTERNS = {
     "bringup": "lib/turtlebot3_node/turtlebot3_ros|lib/robot_state_publisher/robot_state_publisher"
                "|lib/ld08_driver/|lib/hls_lfcd_lds_driver/",
     "slam": "lib/cartographer_ros/|lib/nav2_map_server/map_saver_server|lifecycle_manager_slam",
-    "navigation": "/opt/ros/%s/lib/nav2_" % os.environ.get("ROS_DISTRO", "jazzy"),
+    # fleet_node.py: started with Navigation (see FLEET_CMD), stopped with it
+    "navigation": "/opt/ros/%s/lib/(nav2_|opennav_docking/)|fleet_node\\.py" % os.environ.get("ROS_DISTRO", "jazzy"),
     "joystick": "lib/joy/joy_node|lib/teleop_twist_joy/teleop_node",
 }
 if SIM:
@@ -359,6 +360,19 @@ def selected_map():
     return maps[0] if maps else None
 
 
+# Fleet (turtlebot_monitor docs/vloot.md): with Navigation, fleet_node.py sends
+# the robot's pose to the monitor (MONITOR_URL, .../fleet) and puts the other
+# robots on the same map into both costmaps (KeepoutFilter "fleet_filter").
+# Only with a monitor; off on this robot when FLEET_OFF_FILE exists.
+FLEET_OFF_FILE = "/root/turtlebot_state/fleet_off"
+FLEET_CMD = ["python3", "/usr/local/bin/fleet_node.py", "--ros-args",
+             "-p", "use_sim_time:=%s" % ("True" if SIM else "False")]
+
+
+def fleet_enabled():
+    return bool(os.environ.get("MONITOR_URL", "").strip()) and not os.path.exists(FLEET_OFF_FILE)
+
+
 def write_nav2_params():
     import yaml
     with open(TB3_NAV2_PARAMS) as f:
@@ -419,8 +433,12 @@ def write_nav2_params():
         monitor[source]["source_timeout"] = max(monitor[source].get("source_timeout", 0.0), 1.0)
     # Zones (nav.html, nav_web_node publishes the masks): no-go zones and
     # virtual walls in both costmaps, preferred zones only for the planner.
+    # override_lethal_cost (Jazzy): a robot whose pose lies in a no-go zone
+    # (AMCL jitter at a zone's edge) sees the zone as 252 instead of lethal and
+    # can drive out, instead of "start occupied" and no plan at all.
     keepout = {"plugin": "nav2_costmap_2d::KeepoutFilter", "enabled": True,
-               "filter_info_topic": "/keepout_filter_info"}
+               "filter_info_topic": "/keepout_filter_info",
+               "override_lethal_cost": True, "lethal_override_cost": 252}
     lanes = {"plugin": "nav2_costmap_2d::KeepoutFilter", "enabled": True,
              "filter_info_topic": "/lanes_filter_info"}
     gc = params["global_costmap"]["global_costmap"]["ros__parameters"]
@@ -439,6 +457,15 @@ def write_nav2_params():
     lc = params["local_costmap"]["local_costmap"]["ros__parameters"]
     lc["filters"] = ["keepout_filter"]
     lc["keepout_filter"] = dict(keepout)
+    if fleet_enabled():
+        # Other robots (fleet_node publishes a mask around this robot, 2 Hz).
+        # Also in the global costmap: then the planner plans around them.
+        fleet = {"plugin": "nav2_costmap_2d::KeepoutFilter", "enabled": True,
+                 "filter_info_topic": "/fleet/filter_info", "transform_tolerance": 0.2,
+                 "override_lethal_cost": True, "lethal_override_cost": 252}
+        for costmap in (gc, lc):
+            costmap["filters"].append("fleet_filter")
+            costmap["fleet_filter"] = dict(fleet)
     apply_nav2_overrides(params)
     if SIM:
         # Virtual robot: /clock and /tf come from a browser tab via rosbridge.
@@ -1831,6 +1858,16 @@ class LaunchControlNode(Node):
                 response.message = str(exc)
                 return response
 
+            # Fleet: no fleet without Navigation (with SLAM every robot has its
+            # own map frame). Stopped with Navigation (CHILD_PATTERNS).
+            if name == "navigation" and fleet_enabled() and not _pgrep_pids("fleet_node\\.py"):
+                try:
+                    with open("/tmp/launch_fleet.log", "w") as log_file:
+                        subprocess.Popen(FLEET_CMD, preexec_fn=os.setsid,
+                                         stdout=log_file, stderr=subprocess.STDOUT)
+                except Exception as exc:
+                    self.get_logger().warn("fleet_node niet gestart: %s" % exc)
+
             if name == "joystick":
                 time.sleep(2)
                 if proc.poll() is not None:
@@ -1915,6 +1952,8 @@ class LaunchControlNode(Node):
         first = pids()
         stopped = sorted(set(first.values()))
         launch_pids = [p for n in names for p in _pgrep_pids(LAUNCH_PATTERNS[n])]
+        if "navigation" in names:   # own session (FLEET_CMD), no SIGINT from the launch
+            launch_pids += _pgrep_pids("fleet_node\\.py")
         send(signal.SIGINT, launch_pids)
         for sig, wait in ((signal.SIGTERM, 5.0), (signal.SIGKILL, 3.0)):
             deadline = time.time() + wait
