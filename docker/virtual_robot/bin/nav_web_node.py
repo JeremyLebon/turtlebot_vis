@@ -21,6 +21,10 @@
 #                        -> map editor: rewrites <map>.pgm of the running map (first
 #                           time: <map>.orig.pgm backup) and reloads map_server
 #                      {"cmd": "relocalize"} -> AMCL global localization + spin 360°
+#                      {"cmd": "nudge", "dir": "left"|"right"|"fwd"|"back"} -> small step
+#                        with Nav2's behaviors (spin 45°, drive 0.25 m, back up 0.15 m;
+#                        they check the local costmap); stops a goal/route first,
+#                        "cancel" stops it (monitor fleet map, 1.10.5)
 #   /web/nav_status  std_msgs/String (JSON) out, 2 Hz; also "loc" (AMCL
 #                    uncertainty + quality, t49) and "pose_suggestion" (last
 #                    good pose on this map while AMCL has none yet, t51), "map" (running
@@ -61,7 +65,7 @@ import numpy as np
 import rclpy
 from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
-from nav2_msgs.action import NavigateToPose, Spin
+from nav2_msgs.action import BackUp, DriveOnHeading, NavigateToPose, Spin
 from nav2_msgs.msg import CostmapFilterInfo, ParticleCloud
 from nav2_msgs.srv import LoadMap
 from nav_msgs.srv import GetMap
@@ -478,6 +482,9 @@ class NavWebNode(Node):
         self.explore_paused = False
         self.pending_timer = None   # goal/route waiting for the pause to take effect
         self.spin_client = ActionClient(self, Spin, "spin")
+        self.drive_client = ActionClient(self, DriveOnHeading, "drive_on_heading")
+        self.backup_client = ActionClient(self, BackUp, "backup")
+        self.nudge_handle = None
         self.sound_client = self.create_client(Sound, "/sound")
         self.action_timer = None    # wait / photo timeout of a route point action
         self.photo_sub = None
@@ -654,6 +661,7 @@ class NavWebNode(Node):
             return
         kind = cmd.get("cmd")
         if kind in ("goal", "route", "cancel", "explore_resume", "pause", "resume"):
+            self._cancel_nudge()
             self.cmd_seq += 1
             if self.pending_timer is not None:
                 self.pending_timer.cancel()
@@ -677,6 +685,8 @@ class NavWebNode(Node):
         try:
             if kind == "initialpose":
                 self._set_initial_pose(cmd)
+            elif kind == "nudge":
+                self._nudge(str(cmd.get("dir", "")))
             elif kind == "relocalize":
                 self._relocalize()
             elif kind == "explore_resume":
@@ -776,6 +786,46 @@ class NavWebNode(Node):
                 self.lastpose_saved = (pose, time.time())
             except OSError:
                 pass
+
+    NUDGES = {"left": ("spin", math.pi / 4, "45° naar links"), "right": ("spin", -math.pi / 4, "45° naar rechts"),
+              "fwd": ("drive", 0.25, "25 cm vooruit"), "back": ("backup", 0.15, "15 cm achteruit")}
+
+    def _nudge(self, direction):
+        """Small manual step (monitor fleet map): Nav2's behaviors check the
+        local costmap themselves and stop before an obstacle."""
+        if direction not in self.NUDGES:
+            return
+        kind, amount, text = self.NUDGES[direction]
+        client = {"spin": self.spin_client, "drive": self.drive_client, "backup": self.backup_client}[kind]
+        if not client.server_is_ready():
+            self._set_status("unavailable", None, "bijsturen kan niet: behavior_server draait niet - start Navigatie")
+            return
+        self.route = None                 # a goal or route would fight the behavior
+        self._stop_action()
+        self.paused_goal = None
+        if self.goal_handle is not None:
+            self.goal_handle.cancel_goal_async()
+        self._cancel_nudge()
+        if kind == "spin":
+            goal = Spin.Goal()
+            goal.target_yaw = amount
+        else:
+            goal = DriveOnHeading.Goal() if kind == "drive" else BackUp.Goal()
+            goal.target.x = amount        # BackUp drives backwards itself (Jazzy)
+            goal.speed = 0.1 if kind == "drive" else 0.08
+        goal.time_allowance.sec = 10
+        self._set_status("idle", None, "bijsturen: " + text)
+
+        def accepted(fut):
+            h = fut.result()
+            if h is not None and h.accepted:
+                self.nudge_handle = h
+        client.send_goal_async(goal).add_done_callback(accepted)
+
+    def _cancel_nudge(self):
+        if self.nudge_handle is not None:
+            self.nudge_handle.cancel_goal_async()
+            self.nudge_handle = None
 
     def _relocalize(self):
         """AMCL forgets where it is (particles over the whole map), then the

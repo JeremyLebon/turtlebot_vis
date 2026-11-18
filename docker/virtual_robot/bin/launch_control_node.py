@@ -776,8 +776,9 @@ MONITOR_COMMANDS = (["start:" + n for n in MONITOR_LAUNCHES] + ["stop:" + n for 
                      "rollback", "install_version",
                      # wifi load test: send data to the monitor, "arg" = "<test id>:<s>[:<Mbit/s>[:<down>]]"
                      "wifitest",
-                     # fleet map: goal / initial pose {"x","y","yaw"}, start Navigation on "arg" = map
-                     "nav_goal", "nav_cancel", "nav_pose", "nav_start"])
+                     # fleet map: goal / initial pose {"x","y","yaw"}, start Navigation on "arg" = map,
+                     # small manual step "arg" = left|right|fwd|back
+                     "nav_goal", "nav_cancel", "nav_pose", "nav_start", "nav_nudge"])
 
 
 def wifitest_start(monitor, cmd_id, arg):
@@ -1491,7 +1492,7 @@ class LaunchControlNode(Node):
                 elif cmd == "wifitest":   # runs in its own thread, reports itself when done
                     wifitest_start(self.monitor, c.get("id"), str(c.get("arg", "")))
                     continue
-                elif cmd in ("nav_goal", "nav_cancel", "nav_pose"):   # vlootkaart van de monitor (1.4.0+)
+                elif cmd in ("nav_goal", "nav_cancel", "nav_pose", "nav_nudge"):   # vlootkaart van de monitor (1.4.0+)
                     resp.success, resp.message = self._monitor_nav(cmd, c.get("arg"))
                 elif cmd == "nav_start":   # vlootkaart (1.5.0+): Navigatie op de kaart van de vloot
                     resp.success, resp.message = self._monitor_nav_start(str(c.get("arg", "")))
@@ -1509,9 +1510,14 @@ class LaunchControlNode(Node):
         in the navigation state and on the monitor tile."""
         if not self._is_running("navigation"):
             return False, "Navigatie draait niet op deze robot"
-        if cmd == "nav_cancel":
+        if cmd == "nav_cancel":   # also stops a nudge
             self.nav_cmd_pub.publish(String(data=json.dumps({"cmd": "cancel"})))
-            return True, "doel geannuleerd"
+            return True, "gestopt"
+        if cmd == "nav_nudge":
+            if arg not in ("left", "right", "fwd", "back"):
+                return False, "ongeldige richting"
+            self.nav_cmd_pub.publish(String(data=json.dumps({"cmd": "nudge", "dir": arg})))
+            return True, {"left": "45° links", "right": "45° rechts", "fwd": "25 cm vooruit", "back": "15 cm achteruit"}[arg]
         try:
             g = json.loads(arg) if isinstance(arg, str) else dict(arg)
             g = {k: float(g[k]) for k in ("x", "y", "yaw")}

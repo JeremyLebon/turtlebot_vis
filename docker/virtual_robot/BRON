@@ -1,1 +1,1 @@
-turtlebot_docker 4950c62 (2026-11-18) 1.10.4: grotere zone rond andere robots in de fleet-mask
+turtlebot_docker 914b6e4 (2026-11-18) 1.10.5: AMCL-ellips en costmap (op vraag) naar de monitor, bijsturen (nav_nudge)
