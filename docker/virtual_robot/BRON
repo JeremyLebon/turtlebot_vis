@@ -1,1 +1,1 @@
-turtlebot_docker 8202704 (2026-11-18) 1.10.0: vloot (fleet_node) met Navigatie, navigatietoestand naar de monitor
+turtlebot_docker 02a35fa (2026-11-18) 1.10.1: costmap-filter pas na de lokalisatie (ROS-fout op turtlebot05)

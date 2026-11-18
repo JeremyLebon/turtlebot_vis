@@ -459,6 +459,14 @@ def get_services():
     return services
 
 
+# Right after localizing, a costmap filter may ask map -> odom just before
+# AMCL's first one ("extrapolation into the past", turtlebot05 1.10.0): ignored
+# for STARTUP_GRACE_S after the last "map does not exist" (the initial pose
+# was not set yet). Later the same error counts (mask or TF stamps wrong).
+FILTER_STARTUP = re.compile(r"to mask frame \(map\).*extrapolation into the past")
+NO_MAP_YET = re.compile(r'to mask frame \(map\) with error: "map" passed to lookupTransform argument target_frame does not exist')
+STARTUP_GRACE_S = 30.0
+
 # /rosout ERROR/FATAL for the robot alerts on every page (t35); known
 # harmless errors left out: no calibration file yet at every camera start;
 # the zone filters (KeepoutFilter...) of Nav2 at 5 Hz as long as the initial
@@ -813,6 +821,7 @@ class SystemInfoNode(Node):
         # Robot alerts (common.js): last ERROR/FATAL lines from /rosout. Here
         # and not in every page: the pages then don't get every log line.
         self.rosout_errors = collections.deque(maxlen=10)
+        self.no_map_t = -1e9            # last "map does not exist" from a filter (FILTER_STARTUP)
         self.create_subscription(Log, "/rosout", self._on_rosout, 50)
 
         # for the fleet monitor: what runs (launch_control) and the battery
@@ -835,7 +844,12 @@ class SystemInfoNode(Node):
             pass
 
     def _on_rosout(self, msg):
-        if msg.level < LOG_ERROR or ROSOUT_IGNORE.search(msg.msg):
+        if msg.level < LOG_ERROR:
+            return
+        if NO_MAP_YET.search(msg.msg):
+            self.no_map_t = time.monotonic()
+        if ROSOUT_IGNORE.search(msg.msg) or (
+                FILTER_STARTUP.search(msg.msg) and time.monotonic() - self.no_map_t < STARTUP_GRACE_S):
             return
         self.rosout_errors.append({"t": round(msg.stamp.sec + msg.stamp.nanosec / 1e9, 3), "node": msg.name,
                                    "level": "FATAL" if msg.level >= LOG_FATAL else "ERROR", "msg": msg.msg[:300]})

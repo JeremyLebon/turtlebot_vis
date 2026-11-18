@@ -1489,6 +1489,8 @@ class LaunchControlNode(Node):
                 elif cmd == "wifitest":   # runs in its own thread, reports itself when done
                     wifitest_start(self.monitor, c.get("id"), str(c.get("arg", "")))
                     continue
+                elif cmd in ("nav_goal", "nav_cancel"):   # vlootkaart van de monitor (1.4.0+)
+                    resp.success, resp.message = self._monitor_nav(cmd, c.get("arg"))
                 elif cmd == "beep":
                     subprocess.Popen(["/usr/local/bin/beep.py", "on"], start_new_session=True,
                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -1496,6 +1498,23 @@ class LaunchControlNode(Node):
             except Exception as exc:
                 resp.success, resp.message = False, str(exc)
             self.monitor.report(c.get("id"), cmd, bool(resp.success), resp.message)
+
+    def _monitor_nav(self, cmd, arg):
+        """Goal from the monitor's fleet map: same path as a goal in Fenix
+        (/web/nav_cmd -> nav_web_node -> Nav2), so it shows on the page,
+        in the navigation state and on the monitor tile."""
+        if not self._is_running("navigation"):
+            return False, "Navigatie draait niet op deze robot"
+        if cmd == "nav_cancel":
+            self.nav_cmd_pub.publish(String(data=json.dumps({"cmd": "cancel"})))
+            return True, "doel geannuleerd"
+        try:
+            g = json.loads(arg) if isinstance(arg, str) else dict(arg)
+            g = {k: float(g[k]) for k in ("x", "y", "yaw")}
+        except (ValueError, KeyError, TypeError):
+            return False, "ongeldig doel"
+        self.nav_cmd_pub.publish(String(data=json.dumps(dict(g, cmd="goal"))))
+        return True, "doel naar Nav2: x %.2f, y %.2f" % (g["x"], g["y"])
 
     def _monitor_map(self, cmd, name):
         """Map library on the monitor: upload a map bundle / download + import one."""
