@@ -12,6 +12,11 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## 1.1.10 - 2026-11-24 (branch feature/route, image `:route`)
+- **Virtuele robot 1.14.1**: vrij uitwijken als er geen route over het
+  wegennet meer is; volledig pad (aanloopstuk + route) op de kaart; wegennet
+  als stippellijn buiten de editor.
+
 ## 1.1.9 - 2026-11-24 (branch feature/route, image `:route`)
 - **Virtuele robot 1.14.0**: na een mislukt doel of routepunt knoppen
   *Opnieuw proberen* en *Overslaan* op de kaart.

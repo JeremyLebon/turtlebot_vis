@@ -686,13 +686,30 @@
       draw();
     });
 
-  new ROSLIB.Topic({ ros: ros, name: "/plan", messageType: "nav_msgs/msg/Path",
-                     throttle_rate: 500, queue_length: 1 })
+  // Via the road network two paths come on /plan right after each other:
+  // the route (route_server) and then the planner's access path from the
+  // robot to the route's start. The robot follows both joined
+  // (ConcatenatePaths, not published): join them here too, else only the
+  // short access path showed. No throttle: it would drop one of the pair.
+  var planPrev = null, planPrevT = 0;
+  function planNear(a, b) { return a && b && Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.25; }
+  new ROSLIB.Topic({ ros: ros, name: "/plan", messageType: "nav_msgs/msg/Path", queue_length: 2 })
     .subscribe(function (msg) {
-      var step = Math.max(1, Math.floor(msg.poses.length / 300));
-      plan = [];
+      var step = Math.max(1, Math.floor(msg.poses.length / 300)), pts = [];
       for (var i = 0; i < msg.poses.length; i += step)
-        plan.push([msg.poses[i].pose.position.x, msg.poses[i].pose.position.y]);
+        pts.push([msg.poses[i].pose.position.x, msg.poses[i].pose.position.y]);
+      if (msg.poses.length) {
+        var lp = msg.poses[msg.poses.length - 1].pose.position;
+        if (pts.length && (pts[pts.length - 1][0] !== lp.x || pts[pts.length - 1][1] !== lp.y)) pts.push([lp.x, lp.y]);
+      }
+      // both come within ~50 ms; the status (planner "Wegennet") only 2x/s, so
+      // also the checkbox on this page. Nav2's own replanning is 1 Hz: never
+      // two plans within 0.6 s
+      var graphGoal = viaGraph.checked || (navStatus && navStatus.planner === "Wegennet"), now = Date.now();
+      if (graphGoal && planPrev && now - planPrevT < 600 && pts.length && planNear(pts[pts.length - 1], planPrev[0]))
+        plan = pts.concat(planPrev);          // access path + the route that came just before
+      else plan = pts;
+      planPrev = pts; planPrevT = now;
       draw();
     });
 
@@ -1840,8 +1857,11 @@
     var dpr = window.devicePixelRatio || 1, editing = mode === "graph";
     ctx.save();
     ctx.strokeStyle = GRAPH_COLOR; ctx.fillStyle = GRAPH_COLOR;
-    ctx.lineWidth = (editing ? 2.5 : 1.8) * dpr;
-    ctx.globalAlpha = editing || viaGraph.checked ? 1 : 0.7;
+    // editing: solid and bright; otherwise dashed and half transparent, so
+    // the planned path (blue) over the lanes stands out
+    ctx.lineWidth = (editing ? 2.5 : 1.4) * dpr;
+    ctx.globalAlpha = editing ? 1 : 0.45;
+    if (!editing) ctx.setLineDash([6 * dpr, 5 * dpr]);
     graph.edges.forEach(function (e) {
       var a = graphNode(e.from), b = graphNode(e.to);
       if (!a || !b) return;
@@ -1856,6 +1876,7 @@
         ctx.closePath(); ctx.fill();
       }
     });
+    ctx.setLineDash([]);
     ctx.font = "bold " + (11 * dpr) + "px sans-serif";
     graph.nodes.forEach(function (n) {
       var c = toCanvas(n.x, n.y), sel = editing && n.id === graphSel;
@@ -1867,13 +1888,15 @@
         ctx.fillStyle = "#000"; ctx.font = "bold " + (10 * dpr) + "px sans-serif"; ctx.fillText("\u26a1", d[0] - 4 * dpr, d[1] + 4 * dpr);
         ctx.restore();
       }
-      ctx.beginPath(); ctx.arc(c[0], c[1], (sel ? 7 : 5) * dpr, 0, 2 * Math.PI);
+      ctx.beginPath(); ctx.arc(c[0], c[1], (sel ? 7 : editing ? 5 : 3.5) * dpr, 0, 2 * Math.PI);
       ctx.fillStyle = sel ? GRAPH_COLOR : "#0d1b22"; ctx.fill(); ctx.stroke();
       var label = (n.dock !== undefined ? "\u26a1 " : "") + (n.name || (editing || n.dock !== undefined ? (n.dock !== undefined ? "laadplaats" : String(n.id)) : ""));
       if (label) {
+        var ga = ctx.globalAlpha; ctx.globalAlpha = 1;   // names stay readable
         var tw = ctx.measureText(label).width;
         ctx.fillStyle = "#000a"; ctx.fillRect(c[0] + 7 * dpr, c[1] - 17 * dpr, tw + 6 * dpr, 14 * dpr);
         ctx.fillStyle = GRAPH_COLOR; ctx.fillText(label, c[0] + 10 * dpr, c[1] - 6 * dpr);
+        ctx.globalAlpha = ga;
       }
     });
     ctx.restore();
@@ -2084,6 +2107,7 @@
     drawScan();
     drawCloud();
     drawParticles();
+    drawGraph();   // under the planned path: a route over the lanes would hide behind it
 
     // 1 m grid ticks along the edges would clutter small maps; a scale bar instead
     var mPx = 1 / map.res * scale * view.z;
@@ -2109,7 +2133,6 @@
       ctx.strokeStyle = css("--accent"); ctx.lineWidth = 2.5 * dpr; ctx.stroke();
     }
     drawZones();
-    drawGraph();
     if (route.length) {
       ctx.beginPath();
       route.forEach(function (pt, i) { var c = toCanvas(pt.x, pt.y); if (i) ctx.lineTo(c[0], c[1]); else ctx.moveTo(c[0], c[1]); });

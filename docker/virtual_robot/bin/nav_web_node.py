@@ -572,18 +572,25 @@ def resolve_algo(planner, controller):
 # the robot, not at the robot: a robot beside the network got a path starting
 # metres away and the controller gave up at once (2026-11-23). So first the
 # planner plans from the robot to the route's first pose (a few cm when the
-# robot stands on a node), then both paths are joined. Recoveries as in
-# Nav2's default tree, without the spin (the robot stays on its lane).
+# robot stands on a node), then both paths are joined. No route at all (the
+# only lane closed by _close_blocked_lane, or no lane near): the planner
+# plans freely to the goal instead, around the obstacle (Fallback). Recoveries
+# as in Nav2's default tree, without the spin (the robot stays on its lane).
 GRAPH_BT = """<root BTCPP_format="4" main_tree_to_execute="MainTree">
   <BehaviorTree ID="MainTree">
     <RecoveryNode number_of_retries="4" name="NavigateRecovery">
       <PipelineSequence name="NavigateOnGraph">
         <ControllerSelector selected_controller="{selected_controller}" default_controller="FollowPath" topic_name="controller_selector"/>
         <Sequence name="RouteThenFollow">
-          <ComputeRoute goal="{goal}" use_start="false" use_poses="true" path="{route_path}" error_code_id="{compute_route_error_code}"/>
-          <GetPoseFromPath path="{route_path}" index="0" pose="{route_start}"/>
-          <ComputePathToPose goal="{route_start}" path="{access_path}" planner_id="GridBased" error_code_id="{compute_path_error_code}"/>
-          <ConcatenatePaths input_path1="{access_path}" input_path2="{route_path}" output_path="{path}"/>
+          <Fallback name="RouteOrDetour">
+            <Sequence name="ViaRoadNetwork">
+              <ComputeRoute goal="{goal}" use_start="false" use_poses="true" path="{route_path}" error_code_id="{compute_route_error_code}"/>
+              <GetPoseFromPath path="{route_path}" index="0" pose="{route_start}"/>
+              <ComputePathToPose goal="{route_start}" path="{access_path}" planner_id="GridBased" error_code_id="{compute_path_error_code}"/>
+              <ConcatenatePaths input_path1="{access_path}" input_path2="{route_path}" output_path="{path}"/>
+            </Sequence>
+            <ComputePathToPose name="DetourFreely" goal="{goal}" path="{path}" planner_id="GridBased" error_code_id="{compute_path_error_code}"/>
+          </Fallback>
           <RecoveryNode number_of_retries="1" name="FollowPath">
             <FollowPath path="{path}" controller_id="{selected_controller}" error_code_id="{follow_path_error_code}"/>
             <ClearEntireCostmap name="ClearLocalCostmap-Context" service_name="local_costmap/clear_entirely_local_costmap"/>
@@ -2086,7 +2093,8 @@ class NavWebNode(Node):
         req.closed_edges = ids
         self.edges_client.call_async(req)
         names = {n["id"]: n.get("name") or str(n["id"]) for n in self.graph_cur["nodes"]}
-        self.status["message"] = "rijbaan %s - %s geblokkeerd: andere route" % (names[best["from"]], names[best["to"]])
+        self.status["message"] = "rijbaan %s - %s geblokkeerd: andere route (of vrij uitwijken als er geen is)" % (
+            names[best["from"]], names[best["to"]])
         self.get_logger().info("rijbaan %s-%s afgesloten (edges %s)" % (best["from"], best["to"], ids))
 
     def _open_lanes(self):
