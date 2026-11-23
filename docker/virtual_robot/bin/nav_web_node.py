@@ -1740,7 +1740,7 @@ class NavWebNode(Node):
         for node in load_graph(name)["nodes"]:
             if "dock" in node:
                 _, dock = dock_poses(node)
-                if math.hypot(self.loc["x"] - dock[0], self.loc["y"] - dock[1]) < 0.15:
+                if math.hypot(self.loc["x"] - dock[0], self.loc["y"] - dock[1]) < 0.25:
                     return True
         return False
 
@@ -1753,7 +1753,9 @@ class NavWebNode(Node):
         if node is None or self.loc is None or self.target is None:
             return False
         _, dock = dock_poses(node)
-        at_dock = math.hypot(self.loc["x"] - dock[0], self.loc["y"] - dock[1]) < 0.2
+        # 0.3 m: docking_server's threshold is along the dock direction, the
+        # robot ended up to 17 cm beside the dock pose (2026-11-23)
+        at_dock = math.hypot(self.loc["x"] - dock[0], self.loc["y"] - dock[1]) < 0.3
         goal_elsewhere = math.hypot(self.target["x"] - dock[0], self.target["y"] - dock[1]) > 0.5
         return at_dock and goal_elsewhere
 

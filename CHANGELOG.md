@@ -12,6 +12,10 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## 1.1.5 - 2026-11-23 (branch feature/route, image `:route`)
+- **Virtuele robot 1.12.2**: terugkeer naar de laadplaats bij lage batterij
+  betrouwbaar (3/3 in de simulator), juiste melding na het aanmeren.
+
 ## 1.1.4 - 2026-11-23 (branch feature/route, image `:route`)
 - **Virtuele robot 1.12.1**: batterij op de Fenix-pagina = percentage van de
   simulator (was een eigen berekening uit de spanning, andere waarde);
