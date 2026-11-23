@@ -1,1 +1,1 @@
-turtlebot_docker 914b6e4 (2026-11-18) 1.10.5: AMCL-ellips en costmap (op vraag) naar de monitor, bijsturen (nav_nudge)
+turtlebot_docker 9a48b3f (2026-11-23) 1.11.0: wegennet voor de Nav2 Route Server + behavior tree op Navigatie

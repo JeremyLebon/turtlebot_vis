@@ -12,6 +12,17 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## 1.1.0 - 2026-11-23 (branch feature/route, image `:route` - test, niet voor de studenten)
+- **Virtuele robot 1.11.0: wegennet voor de Nav2 Route Server.** Op de
+  Fenix-pagina *Mappen > Wegennet* knopen en rijbanen tekenen (ook
+  eenrichting); bij *Algoritmes* "rijden via het wegennet"; kaart
+  *Behavior tree* op Navigatie die live meekleurt. Zie de
+  CHANGELOG van turtlebot_docker 1.11.0.
+- `docker-compose.yaml` gebruikt op deze branch `nobel86/turtlebot-rpi5-vis:route`:
+  `:jazzy` (de studenten) blijft ongewijzigd. Testen in een aparte map:
+  `git clone -b feature/route ... turtlebot_vis_route`, daarin
+  `./start.sh --pull --fenix`.
+
 ## 1.0.19 - 2026-11-14
 - **Virtuele robot 1.9.11: joystick op de Fenix-pagina.** Knop met de cirkel
   in de balk *Rijden*: slepen = vooruit en draaien tegelijk, traploos, stopt

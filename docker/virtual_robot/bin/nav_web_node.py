@@ -25,17 +25,30 @@
 #                        with Nav2's behaviors (spin 45°, drive 0.25 m, back up 0.15 m;
 #                        they check the local costmap); stops a goal/route first,
 #                        "cancel" stops it (monitor fleet map, 1.10.5)
+#                      {"cmd": "graph", "map", "nodes": [{"id", "x", "y", "name"}],
+#                       "edges": [{"from", "to", "oneway"}]} -> road network of the
+#                        map (state/maps/<map>.graph.json), loaded into Nav2's
+#                        route_server; "goal"/"route" with "graph": true drive along it
+#                      {"cmd": "bt_view", "name": ""|<file>|"wegennet"} -> /web/bt shows
+#                        that behavior tree ("" = the one of the current goal)
 #   /web/nav_status  std_msgs/String (JSON) out, 2 Hz; also "loc" (AMCL
 #                    uncertainty + quality, t49) and "pose_suggestion" (last
 #                    good pose on this map while AMCL has none yet, t51), "map" (running
-#                    map, None while exploring)
+#                    map, None while exploring), "graph" (road network loaded in route_server)
 #   /web/robot_pose  geometry_msgs/PoseStamped out (frame map), 5 Hz - only
 #                    while someone subscribes (the TF listener costs CPU)
-#   /web/zones       std_msgs/String (JSON) out: {"map": name, "zones": [...]},
+#   /web/zones       std_msgs/String (JSON) out: {"map": name, "zones": [...], "graph": {...}},
 #                    on change and every 5 s
 #   /web/map_odom    geometry_msgs/PoseStamped out: map->odom (AMCL), 5 Hz,
 #                    likewise only while subscribed - nav.html places the
 #                    local costmap (odom frame, rolling window) with it
+#   /web/bt          std_msgs/String (JSON) out: {"xml", "name", "active", "available"},
+#                    the behavior tree of the current goal (or one asked with
+#                    bt_view), on change and every 5 s, only while subscribed
+#   /web/bt_status   std_msgs/String (JSON) out: {"s": {uid: status}, "last": {uid:
+#                    last status before IDLE}, "log": [...]},
+#                    from bt_navigator's /behavior_tree_log, 4 Hz on change,
+#                    only while subscribed (nav.html card "Behavior tree")
 #   /web/particles   std_msgs/String (JSON) out: {"n": particles in AMCL,
 #                    "p": [x, y, yaw, ...]} of at most PARTICLES_MAX particles,
 #                    1 Hz, only while subscribed (layer "Particles" on nav.html):
@@ -66,8 +79,8 @@ import rclpy
 from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from nav2_msgs.action import BackUp, DriveOnHeading, NavigateToPose, Spin
-from nav2_msgs.msg import CostmapFilterInfo, ParticleCloud
-from nav2_msgs.srv import LoadMap
+from nav2_msgs.msg import BehaviorTreeLog, CostmapFilterInfo, ParticleCloud
+from nav2_msgs.srv import LoadMap, SetRouteGraph
 from nav_msgs.srv import GetMap
 from nav_msgs.msg import MapMetaData, OccupancyGrid, Odometry
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
@@ -86,6 +99,8 @@ from tf2_ros import Buffer, TransformListener
 DEFAULT_BT = ("/opt/ros/" + os.environ.get("ROS_DISTRO", "jazzy") +
               "/share/nav2_bt_navigator/behavior_trees/"
               "navigate_to_pose_w_replanning_and_recovery.xml")
+BT_DIR = os.path.dirname(DEFAULT_BT)
+BT_LOG_KEEP = 40         # status changes kept for the page (newest last)
 PLANNERS = ("GridBased", "AStar", "Smac2D", "ThetaStar")
 CONTROLLERS = ("FollowPath", "RPP", "MPPI")
 
@@ -337,6 +352,77 @@ def load_zones(map_name):
         return []
 
 
+MAP_FRAME = "map"
+
+# Road network (route graph) per map for Nav2's Route Server: nodes are
+# places, edges the lanes between them, two-way or one-way (AGV style).
+# Saved in Fenix's own small format, written as GeoJSON for route_server
+# (nav2_route) at every load:
+#   <map>.graph.json  {"nodes": [{"id": 1, "x", "y", "name"}],
+#                      "edges": [{"from": 1, "to": 2, "oneway": false}]}
+# A goal "via the road network" uses GRAPH_BT: ComputeRoute (nearest nodes to
+# the robot and the goal, shortest way over the edges) instead of a planner.
+# The route runs node to node: a goal between two nodes ends at the node
+# before it (Jazzy's route_server), so nav.html snaps goals onto a node.
+GRAPH_GEOJSON = "/tmp/route_graph.geojson"
+GRAPH_MAX_NODES = 500
+EDGE_ID0 = 1000   # edge ids after the node ids: route_server has one id space (uint16)
+
+
+def graph_file(map_name):
+    return os.path.join(MAP_DIR, map_name + ".graph.json")
+
+
+def load_graph(map_name):
+    try:
+        with open(graph_file(map_name)) as f:
+            g = json.load(f)
+        return {"nodes": g.get("nodes", []), "edges": g.get("edges", [])}
+    except (OSError, ValueError, AttributeError):
+        return {"nodes": [], "edges": []}
+
+
+def clean_graph(g):
+    """Graph from the page: valid ids, no duplicate nodes or edges."""
+    nodes, ids = [], set()
+    for n in (g.get("nodes") or [])[:GRAPH_MAX_NODES]:
+        i = int(n["id"])
+        if not 1 <= i < EDGE_ID0 or i in ids:
+            continue
+        ids.add(i)
+        node = {"id": i, "x": round(float(n["x"]), 3), "y": round(float(n["y"]), 3)}
+        name = str(n.get("name") or "").strip()[:20]
+        if name:
+            node["name"] = name
+        nodes.append(node)
+    edges, seen = [], set()
+    for e in (g.get("edges") or [])[:2 * GRAPH_MAX_NODES]:
+        a, b = int(e["from"]), int(e["to"])
+        if a == b or a not in ids or b not in ids or (a, b) in seen or (b, a) in seen:
+            continue
+        seen.add((a, b))
+        edges.append({"from": a, "to": b, "oneway": bool(e.get("oneway"))})
+    return {"nodes": nodes, "edges": edges}
+
+
+def graph_geojson(g):
+    """Fenix graph -> route_server's GeoJSON: a two-way lane is two edges."""
+    pos = {n["id"]: [float(n["x"]), float(n["y"])] for n in g["nodes"]}
+    feats = [{"type": "Feature",
+              "properties": {"id": n["id"], "frame": MAP_FRAME, "metadata": {"name": n.get("name", "")}},
+              "geometry": {"type": "Point", "coordinates": pos[n["id"]]}} for n in g["nodes"]]
+    eid = EDGE_ID0
+    for e in g["edges"]:
+        a, b = e["from"], e["to"]
+        for s, t in ((a, b),) if e.get("oneway") else ((a, b), (b, a)):
+            feats.append({"type": "Feature", "properties": {"id": eid, "startid": s, "endid": t},
+                          "geometry": {"type": "MultiLineString", "coordinates": [[pos[s], pos[t]]]}})
+            eid += 1
+    return {"type": "FeatureCollection", "name": "fenix",
+            "crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:EPSG::3857"}},
+            "features": feats}
+
+
 def rasterize(info, zones, lane_outside=None):
     """(keepout, lanes, speed) masks as int8 arrays [row, col] for this map."""
     if lane_outside is None:
@@ -403,7 +489,6 @@ def inflate_keepout(keepout, res):
     keepout[band] = np.maximum(keepout[band], np.clip(np.round(cost[band]), 1, 99).astype(np.int8))
 
 
-MAP_FRAME = "map"
 BASE_FRAME = "base_footprint"
 ODOM_FRAME = "odom"
 
@@ -420,9 +505,47 @@ def resolve_algo(planner, controller):
             controller if controller in CONTROLLERS else "FollowPath")
 
 
-def behavior_tree(planner, controller):
-    """Path of a behavior tree using this planner/controller ("" = Nav2's default)."""
+# Behavior tree for a goal via the road network (route_server): the route is
+# computed once per attempt (a Sequence, not Nav2's 1 Hz replanning: from
+# halfway along an edge the nearest node can lie behind the robot), then
+# followed by the chosen controller. Recoveries as in Nav2's default tree,
+# without the spin (the robot stays on its lane).
+GRAPH_BT = """<root BTCPP_format="4" main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <RecoveryNode number_of_retries="4" name="NavigateRecovery">
+      <PipelineSequence name="NavigateOnGraph">
+        <ControllerSelector selected_controller="{selected_controller}" default_controller="FollowPath" topic_name="controller_selector"/>
+        <Sequence name="RouteThenFollow">
+          <ComputeRoute goal="{goal}" use_start="false" use_poses="true" path="{path}" error_code_id="{compute_route_error_code}"/>
+          <RecoveryNode number_of_retries="1" name="FollowPath">
+            <FollowPath path="{path}" controller_id="{selected_controller}" error_code_id="{follow_path_error_code}"/>
+            <ClearEntireCostmap name="ClearLocalCostmap-Context" service_name="local_costmap/clear_entirely_local_costmap"/>
+          </RecoveryNode>
+        </Sequence>
+      </PipelineSequence>
+      <ReactiveFallback name="RecoveryFallback">
+        <GoalUpdated/>
+        <RoundRobin name="RecoveryActions">
+          <ClearEntireCostmap name="ClearLocalCostmap-Subtree" service_name="local_costmap/clear_entirely_local_costmap"/>
+          <Wait wait_duration="3.0"/>
+          <BackUp backup_dist="0.15" backup_speed="0.08" error_code_id="{backup_code_id}"/>
+        </RoundRobin>
+      </ReactiveFallback>
+    </RecoveryNode>
+  </BehaviorTree>
+</root>
+"""
+
+
+def behavior_tree(planner, controller, graph=False):
+    """Path of a behavior tree using this planner/controller ("" = Nav2's
+    default); graph: via the road network (GRAPH_BT, no planner)."""
     planner, controller = resolve_algo(planner, controller)
+    if graph:
+        path = "/tmp/bt_graph_%s.xml" % controller
+        with open(path, "w") as f:
+            f.write(GRAPH_BT.replace('default_controller="FollowPath"', 'default_controller="%s"' % controller))
+        return path
     if (planner, controller) == ("GridBased", "FollowPath"):
         return ""
     path = "/tmp/bt_%s_%s.xml" % (planner, controller)
@@ -513,6 +636,11 @@ class NavWebNode(Node):
         self.zones_pub = self.create_publisher(String, "/web/zones", 10)
         self.getmap_client = self.create_client(GetMap, "/map_server/map")
         self.loadmap_client = self.create_client(LoadMap, "/map_server/load_map")
+        # road network: loaded into route_server when Nav2 is active and on every change
+        self.graph_client = self.create_client(SetRouteGraph, "/route_server/set_route_graph")
+        self.graph_loaded = None  # (map, mtime of its graph file) route_server has
+        self.graph_nodes = 0      # nodes in that graph
+        self.graph_busy = False
         self.zone_map = None      # map name the masks were made for
         self.last_tick_map = running_map()   # no wipe for a run already going at start
         self.zones = []
@@ -542,6 +670,18 @@ class NavWebNode(Node):
         self.create_timer(0.5, self._publish_status, clock=Clock(clock_type=ClockType.STEADY_TIME))
         self.create_timer(2.0, self._check_nav2_active, clock=Clock(clock_type=ClockType.STEADY_TIME))
         self.create_timer(1.0, self._particles_tick, clock=Clock(clock_type=ClockType.STEADY_TIME))
+        # Behavior tree card on nav.html: the tree of the current goal + live
+        # status from bt_navigator, only while a page subscribes
+        self.bt_pub = self.create_publisher(String, "/web/bt", 10)
+        self.bt_status_pub = self.create_publisher(String, "/web/bt_status", 10)
+        self.bt_path = DEFAULT_BT   # tree of the current/last goal from this page
+        self.bt_view = ""           # tree asked with bt_view ("" = bt_path)
+        self.bt_sub = None
+        self.bt_status, self.bt_log, self.bt_dirty = {}, [], False
+        self.bt_lastst = {}         # last status other than IDLE: after the goal BT.CPP
+                                    # resets every node to IDLE, the page still shows what failed
+        self.bt_last = (None, 0.0)  # (json, time) of the last /web/bt
+        self.create_timer(0.25, self._bt_tick, clock=Clock(clock_type=ClockType.STEADY_TIME))
         self.get_logger().info("nav_web_node ready: /web/nav_cmd -> Nav2, /web/nav_status, /web/robot_pose")
 
     # ---- AMCL particles (layer on nav.html) -------------------------------
@@ -704,12 +844,13 @@ class NavWebNode(Node):
                 self.route = None
                 self._stop_action()
                 self.paused_goal = None
-                self.algo = resolve_algo(cmd.get("planner"), cmd.get("controller"))
+                if not self._graph_ok(cmd, "goal"):
+                    return
+                self.algo = self._algo(cmd)
+                bt = behavior_tree(cmd.get("planner"), cmd.get("controller"), bool(cmd.get("graph")))
                 self.last_goal = {"x": float(cmd["x"]), "y": float(cmd["y"]), "yaw": float(cmd["yaw"]),
-                                  "bt": behavior_tree(cmd.get("planner"), cmd.get("controller")),
-                                  "tol": parse_tolerance(cmd.get("tolerance"))}
-                self._send_goal(cmd, behavior_tree(cmd.get("planner"), cmd.get("controller")), "goal",
-                                parse_tolerance(cmd.get("tolerance")))
+                                  "bt": bt, "tol": parse_tolerance(cmd.get("tolerance"))}
+                self._send_goal(cmd, bt, "goal", parse_tolerance(cmd.get("tolerance")))
             elif kind == "route":
                 poses = cmd.get("poses") or []
                 if not poses:
@@ -717,10 +858,13 @@ class NavWebNode(Node):
                 tol = parse_tolerance(cmd.get("tolerance"))
                 self._stop_action()
                 self.paused_goal = None
+                if not self._graph_ok(cmd, "route"):
+                    return
                 poses = [clean_pose(p) for p in poses][:100]
-                self.algo = resolve_algo(cmd.get("planner"), cmd.get("controller"))
+                self.algo = self._algo(cmd)
                 self.route = {"poses": poses, "loop": bool(cmd.get("loop")), "lap": 1, "index": 0,
-                              "bt": behavior_tree(cmd.get("planner"), cmd.get("controller")),
+                              "bt": behavior_tree(cmd.get("planner"), cmd.get("controller"),
+                                                  bool(cmd.get("graph"))),
                               "tol": tol, "via_tol": parse_tolerance(cmd.get("via_tolerance")) or tol}
                 self._send_route_point()
             elif kind == "cancel":
@@ -732,6 +876,12 @@ class NavWebNode(Node):
                 self._cancel()
             elif kind == "zones":
                 self._set_zones(cmd.get("zones") or [], cmd.get("map"))
+            elif kind == "graph":
+                self._set_graph(cmd)
+            elif kind == "bt_view":
+                name = str(cmd.get("name") or "")
+                self.bt_view = name if name in self._bt_available() else ""
+                self.bt_last = (None, 0.0)
             elif kind in ("route_save", "route_delete"):
                 self._route_file_cmd(kind, cmd)
             elif kind == "zones_adopt":
@@ -909,6 +1059,9 @@ class NavWebNode(Node):
         goal = NavigateToPose.Goal()
         goal.pose = make_pose(self.get_clock().now().to_msg(), pose["x"], pose["y"], pose["yaw"])
         goal.behavior_tree = bt
+        if (bt or DEFAULT_BT) != self.bt_path or mode == "goal":
+            self.bt_status, self.bt_log, self.bt_lastst, self.bt_dirty = {}, [], {}, True
+        self.bt_path = bt or DEFAULT_BT
         self.target = {k: round(float(pose[k]), 3) for k in ("x", "y", "yaw")}
         if mode == "goal":
             self._set_status("sending", "goal", "doel verzonden")
@@ -1213,11 +1366,13 @@ class NavWebNode(Node):
             zones = load_zones(name)
             self.getmap_client.call_async(GetMap.Request()).add_done_callback(
                 lambda f: self._publish_masks(f, name, zones))
+        self._graph_tick(name)
         msg = String()
         msg.data = json.dumps({
             "map": name,
             "zones": self.zones if name == self.zone_map else load_zones(name) if name else [],
             "routes": load_routes(name) if name else {},
+            "graph": load_graph(name) if name else {"nodes": [], "edges": []},
             "map_edited": bool(name) and os.path.exists(os.path.join(MAP_DIR, name + ".orig.pgm")),
         })
         self.zones_pub.publish(msg)
@@ -1242,6 +1397,127 @@ class NavWebNode(Node):
             self.status["message"] = "route '%s' verwijderd" % route_name
         write_json(routes_file(name), {"routes": routes})
         self._zones_tick()
+
+    # ---- behavior tree card (nav.html) ---------------------------------------
+    def _bt_available(self):
+        """Trees to look at: Nav2's own (share/nav2_bt_navigator/behavior_trees) + wegennet."""
+        try:
+            files = sorted(f for f in os.listdir(BT_DIR) if f.endswith(".xml"))
+        except OSError:
+            files = []
+        return ["wegennet"] + files
+
+    def _bt_tick(self):
+        if self.bt_pub.get_subscription_count() > 0:
+            if self.bt_view == "wegennet":
+                path = "/tmp/bt_graph_FollowPath.xml"
+                if not os.path.exists(path):
+                    behavior_tree(None, "FollowPath", graph=True)
+            elif self.bt_view:
+                path = os.path.join(BT_DIR, self.bt_view)
+            else:
+                path = self.bt_path
+            try:
+                with open(path) as f:
+                    xml = f.read()
+            except OSError:
+                xml = ""
+            name = os.path.basename(path)
+            data = json.dumps({"xml": xml, "active": not self.bt_view,
+                               "name": "wegennet (eigen boom)" if name.startswith("bt_graph_")
+                               else "Nav2 standaard + gekozen planner/controller" if name.startswith("bt_")
+                               else name,
+                               "view": self.bt_view, "available": self._bt_available()})
+            if data != self.bt_last[0] or time.monotonic() - self.bt_last[1] > 5:
+                self.bt_pub.publish(String(data=data))
+                self.bt_last = (data, time.monotonic())
+        # /behavior_tree_log only while someone looks at the status
+        want = self.bt_status_pub.get_subscription_count() > 0
+        if want and self.bt_sub is None:
+            self.bt_sub = self.create_subscription(BehaviorTreeLog, "/behavior_tree_log", self._on_bt_log, 10)
+        elif not want and self.bt_sub is not None:
+            self.destroy_subscription(self.bt_sub)
+            self.bt_sub = None
+        if want and self.bt_dirty:
+            self.bt_dirty = False
+            self.bt_status_pub.publish(String(data=json.dumps({"s": self.bt_status, "last": self.bt_lastst, "log": self.bt_log})))
+
+    def _on_bt_log(self, msg):
+        for e in msg.event_log:
+            self.bt_status[str(e.uid)] = e.current_status
+            if e.current_status != "IDLE":
+                self.bt_lastst[str(e.uid)] = e.current_status
+            self.bt_log.append([round(e.timestamp.sec + e.timestamp.nanosec * 1e-9, 2), e.uid,
+                                e.node_name, e.previous_status, e.current_status])
+        del self.bt_log[:-BT_LOG_KEEP]
+        self.bt_dirty = True
+
+    # ---- road network (route_server) -----------------------------------------
+    def _algo(self, cmd):
+        """(planner, controller) for the status; "Wegennet" instead of the planner."""
+        planner, controller = resolve_algo(cmd.get("planner"), cmd.get("controller"))
+        return ("Wegennet" if cmd.get("graph") else planner, controller)
+
+    def _graph_ok(self, cmd, mode):
+        """A goal/route via the road network needs one loaded for this map."""
+        if not cmd.get("graph"):
+            return True
+        if self.graph_loaded and self.graph_loaded[0] == running_map() and self.graph_nodes > 1:
+            return True
+        self._set_status("error", mode, "geen wegennet geladen voor deze kaart - teken er een op Mappen > Wegennet")
+        return False
+
+    def _set_graph(self, cmd):
+        name, loaded = self._target_map(cmd.get("map"), "wegennet")
+        if not name:
+            return
+        if name == SESSION:
+            self._set_status("error", None, "wegennet: sla de kaart eerst op")
+            return
+        g = clean_graph(cmd)
+        if os.path.exists(graph_file(name)) and load_graph(name) != g:
+            shutil.copyfile(graph_file(name), os.path.join(MAP_DIR, name + ".graph.bak.json"))
+        write_json(graph_file(name), g)
+        self.status["message"] = "wegennet bewaard voor kaart %s (%d knopen, %d rijbanen)%s" % (
+            name, len(g["nodes"]), len(g["edges"]),
+            "" if loaded else " - geldt zodra Navigatie met deze kaart start")
+        if loaded:
+            self._zones_tick()
+
+    def _graph_tick(self, name):
+        """Load the running map's road network into route_server: once Nav2 is
+        active, and again after every change of the file. A map without one
+        loads an empty graph: route_server refuses it, but drops the previous
+        map's graph."""
+        if not self.nav2_active or not self.graph_client.service_is_ready():
+            self.graph_loaded = None   # Navigation stopped or restarting: load again
+            return
+        if not name or name == SESSION or self.graph_busy:
+            return
+        try:
+            key = (name, os.path.getmtime(graph_file(name)))
+        except OSError:
+            key = (name, 0)
+        if key == self.graph_loaded:
+            return
+        g = load_graph(name)
+        write_json(GRAPH_GEOJSON, graph_geojson(clean_graph(g)))
+        self.graph_busy = True
+        future = self.graph_client.call_async(SetRouteGraph.Request(graph_filepath=GRAPH_GEOJSON))
+        future.add_done_callback(lambda f: self._on_graph_set(f, key, len(g["nodes"])))
+
+    def _on_graph_set(self, future, key, n):
+        self.graph_busy = False
+        try:
+            ok = future.result().success
+        except Exception:
+            ok = False
+        if ok or n == 0:
+            self.graph_loaded, self.graph_nodes = key, (n if ok else 0)
+            if n:
+                self.get_logger().info("wegennet van kaart %s geladen (%d knopen)" % (key[0], n))
+        else:
+            self.get_logger().warn("wegennet van kaart %s laden mislukt - opnieuw over 5 s" % key[0])
 
     def _map_edit(self, kind, cmd):
         name, loaded = self._target_map(cmd.get("map"), "kaart bewerken")
@@ -1355,6 +1631,7 @@ class NavWebNode(Node):
         if self.algo:
             s["planner"], s["controller"] = self.algo
         s["goal"] = self.target
+        s["graph"] = {"nodes": self.graph_nodes if self.graph_loaded and self.graph_loaded[0] == name else 0}
         s["truth_err"] = self._truth_error(name) if s["nav2_ready"] and self.loc else None
         if self.tolerance:
             s["tolerance"] = {"xy": self.tolerance[0], "yaw": self.tolerance[1]}

@@ -166,6 +166,25 @@
   table.kv td { padding: 4px 0; border-bottom: 1px solid var(--border); }
   table.kv td:first-child { color: var(--muted); width: 45%; }
   #navMsg { margin-top: 8px; font-weight: 600; }
+  /* behavior tree card: the tree indented, a dot per node with its live status */
+  .bt-tree { margin-top: 8px; font-size: 0.82rem; overflow-x: auto; }
+  .bt-tree ul { list-style: none; margin: 0; padding-left: 14px; border-left: 1px solid var(--border); }
+  .bt-tree > ul { padding-left: 0; border-left: 0; }
+  .bt-row { display: flex; align-items: baseline; gap: 6px; padding: 2px 4px; border-radius: 4px; white-space: nowrap; cursor: default; }
+  .bt-dot { width: 8px; height: 8px; border-radius: 50%; background: #3a3f48; flex: none; align-self: center; }
+  .bt-kind { font-size: 0.7rem; padding: 0 5px; border-radius: 3px; border: 1px solid currentColor; }
+  .k-control { color: var(--purple); } .k-decorator { color: var(--orange); }
+  .k-condition { color: #22d3ee; } .k-action { color: var(--accent); }
+  .bt-attr { color: var(--muted); font-size: 0.75rem; }
+  .st-RUNNING > .bt-row { background: rgba(227,179,65,0.16); } .st-RUNNING > .bt-row .bt-dot { background: var(--yellow); }
+  .st-SUCCESS > .bt-row .bt-dot { background: var(--green); }
+  .st-FAILURE > .bt-row { background: rgba(229,72,77,0.14); } .st-FAILURE > .bt-row .bt-dot { background: var(--red); }
+  .was-SUCCESS > .bt-row .bt-dot { background: var(--green); opacity: 0.45; }
+  .was-FAILURE > .bt-row .bt-dot { background: var(--red); opacity: 0.6; }
+  .was-RUNNING > .bt-row .bt-dot { background: var(--yellow); opacity: 0.45; }
+  .bt-legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
+  .bt-legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; background: var(--c); }
+  .bt-log { font-family: ui-monospace, monospace; font-size: 0.75rem; max-height: 14em; overflow-y: auto; margin-top: 4px; }
   #launchMsg { margin-top: 10px; min-height: 1em; }
 
   @media (max-width: 900px) { .main { grid-template-columns: 1fr; } }
@@ -214,6 +233,7 @@
         <button class="btn mode tip-r nav-only" data-mode="route" data-icon="route" aria-label="Route" data-tip="Route: punten na elkaar aanklikken (sleep = richting per punt)"></button>
         <span class="rsep nav-only"></span>
         <button class="btn mode tip-r maps-only" data-mode="zones" data-icon="zones" aria-label="Zones" data-tip="Zones: verboden zones, virtuele muren, voorkeur, snelheid (per kaart)"></button>
+        <button class="btn mode tip-r maps-only" data-mode="graph" data-icon="graph" aria-label="Wegennet" data-tip="Wegennet: knopen en rijbanen voor de Route Server van Nav2 (per kaart)"></button>
         <button class="btn mode tip-r maps-only" data-mode="edit" data-icon="pencil" aria-label="Kaart bewerken" data-tip="Kaart bewerken: muren bij- of wegtekenen (het origineel blijft bewaard)"></button>
         <button class="btn mode tip-r" data-mode="measure" id="measureBtn" data-icon="ruler" aria-label="Meten" data-tip="Meten: sleep van punt A naar punt B"></button>
         <span class="rsep nav-only"></span>
@@ -253,6 +273,18 @@
       <button class="btn" id="zoneSave" data-icon="check" data-tip="Bewaren voor deze kaart en meteen naar Nav2 sturen">Bewaar &amp; toepassen</button>
       <span class="sub" id="zoneInfo"></span>
     </div>
+    <div class="toolbar float" id="graphBar" style="display:none">
+      <span class="brushes"><button class="btn gtool" data-gtool="node" data-icon="plus" data-tip="Knoop: klik op een lege plek = nieuwe knoop, sleep een knoop = verplaatsen, klik een knoop = naam geven">knoop</button><button class="btn gtool" data-gtool="edge" data-icon="graph" data-tip="Rijbaan: klik de ene knoop en dan de andere (je kan doorklikken naar een derde, ...). Klik op een rijbaan = richting wisselen">rijbaan</button><button class="btn gtool" data-gtool="del" data-icon="eraser" data-tip="Wissen: klik een knoop (met zijn rijbanen) of een rijbaan">wis</button></span>
+      <select id="graphDir" title="Richting van een nieuwe rijbaan">
+        <option value="both">beide richtingen</option>
+        <option value="oneway">eenrichting (1e &rarr; 2e knoop)</option>
+      </select>
+      <span id="graphNameBox" style="display:none" class="sub">naam <input type="text" id="graphName" maxlength="20" style="width:7em" placeholder="bv. P1"></span>
+      <button class="btn" id="graphUndo" data-icon="undo">Ongedaan maken</button>
+      <button class="btn stop" id="graphClear" data-icon="trash">Wis alle</button>
+      <button class="btn" id="graphSave" data-icon="check" data-tip="Bewaren voor deze kaart en meteen in de Route Server laden">Bewaar &amp; toepassen</button>
+      <span class="sub" id="graphInfo"></span>
+    </div>
     <div class="toolbar float nav-only" id="poseSuggestBar" style="display:none">
       <span class="sub" id="poseSuggestTxt">Laatst gekende positie op deze kaart</span>
       <button class="btn" id="psOk" data-icon="check">Klopt</button>
@@ -280,10 +312,11 @@
         <button class="btn tip-l layer" data-layer="showScan" data-icon="scan" aria-label="Laserscan" data-tip="Laserscan (rood) op de kaart: ligt hij op de muren, dan klopt de lokalisatie (op Mappen standaard aan)"></button>
         <button class="btn tip-l layer" data-layer="showLocalCm" data-icon="localcm" aria-label="Local costmap" data-tip="Local costmap: obstakels + veiligheidsmarge rond de robot (3 x 3 m)"></button>
         <button class="btn tip-l layer nav-only" data-layer="showParticles" data-icon="particles" aria-label="Particles (AMCL)" data-tip="Particles van AMCL (oranje streepjes): elke streep is een gok waar de robot staat en waar hij naartoe kijkt. Dicht bij elkaar = zeker, uitgewaaierd = onzeker"></button>
+        <button class="btn tip-l layer" data-layer="showGraph" data-icon="graph" aria-label="Wegennet" data-tip="Wegennet: knopen en rijbanen van deze kaart (Route Server)"></button>
         <button class="btn tip-l layer" data-layer="showGlobalCm" data-icon="globalcm" aria-label="Global costmap" data-tip="Global costmap: hele kaart + veiligheidsmarge (planner)"></button>
         <button class="btn tip-l" id="navPadBtn" data-icon="index" aria-label="Bijsturen" data-tip="Bijsturen (teleop) tonen/verbergen - gaat voor op Nav2 zolang je een pijl ingedrukt houdt"></button>
         <button class="btn tip-l" id="camPipBtn" data-icon="camera" aria-label="Camera" data-tip="Camerabeeld in de kaart"></button>
-        <span class="hidden-cbs"><input type="checkbox" id="showLocalCm"><input type="checkbox" id="showScan"><input type="checkbox" id="showGlobalCm"><input type="checkbox" id="showParticles"></span>
+        <span class="hidden-cbs"><input type="checkbox" id="showLocalCm"><input type="checkbox" id="showScan"><input type="checkbox" id="showGlobalCm"><input type="checkbox" id="showParticles"><input type="checkbox" id="showGraph"></span>
       </div>
       <button id="mapSwap" aria-label="Kaart groot" title="Kaart weer groot"></button>
       <div id="navPad" style="display:none">
@@ -308,6 +341,7 @@
       <span style="--c: #3fb950">voorkeurszone</span>
       <span style="--c: #4ea1ff">snelheidszone</span>
       <span style="--c: #e3b341">verkenningsgebied</span>
+      <span style="--c: #22d3ee">wegennet</span>
       <span id="mapInfo"></span>
     </div>
     <div class="sub" id="modeHint" style="margin-top:6px"></div>
@@ -388,6 +422,9 @@
         <option value="RPP" title="Regulated Pure Pursuit - volgt een punt voor zich op het pad, rustig">Pure Pursuit</option>
         <option value="MPPI" title="MPPI - simuleert 1000 mogelijke trajecten per stap en kiest het beste; vloeiend (standaard op deze pagina, afgesteld voor de Pi 5)">MPPI</option>
       </select>
+      <label class="sub" for="viaGraph">Wegennet</label>
+      <span><label class="sub" title="Doel en route over de knopen en rijbanen van het wegennet (Nav2 Route Server) in plaats van vrij over de kaart (planner). Teken het wegennet op Mappen."><input type="checkbox" id="viaGraph"> rijden via het wegennet</label>
+        <span class="sub" id="graphState"></span></span>
       <label class="sub" for="tolSel">Nauwkeurigheid</label>
       <select id="tolSel" title="Wanneer is de robot 'aangekomen'? Nauwkeuriger dan AMCL (5-10 cm) heeft geen zin: dan gaat hij wiebelen of blijven draaien">
         <option value="ruim" title="25 cm, 14 graden - standaard van TurtleBot3">ruim (25 cm)</option>
@@ -424,6 +461,22 @@
       </div>
       <div id="navMsg"></div>
       <div class="sub" id="photoLine" style="display:none">Laatste foto: <a id="photoLink" target="_blank"></a> - <a href="/api/photos" target="_blank">alle foto's</a></div>
+    </div>
+
+    <div class="card nav-only">
+      <details id="btBox">
+        <summary><h2 style="display:inline">Behavior tree</h2> <span class="sub" id="btName"></span></summary>
+        <div class="sub" style="margin:6px 0">Hoe Nav2 (bt_navigator) het doel uitvoert. Tijdens het rijden kleuren de blokken mee;
+          ga met de muis over een blok voor uitleg.</div>
+        <div class="toolbar">
+          <select id="btSel" title="Welke boom tonen"><option value="">van het huidige doel (live)</option></select>
+          <label class="sub"><input type="checkbox" id="btAttrs" checked> parameters</label>
+        </div>
+        <div class="sub bt-legend"><span style="--c: var(--yellow)">bezig</span><span style="--c: var(--green)">gelukt</span><span style="--c: var(--red)">mislukt</span><span style="--c: #3a3f48">wacht</span><span>vaag = laatste status</span></div>
+        <div class="sub" id="btWarn" style="display:none; color: var(--yellow)"></div>
+        <div id="btTree" class="bt-tree"></div>
+        <details style="margin-top:8px"><summary class="sub">Laatste statuswissels</summary><div id="btLog" class="bt-log"></div></details>
+      </details>
     </div>
 
     <div class="card admin-only nav-only">
@@ -628,9 +681,9 @@
   }
   var navOptions = new ROSLIB.Topic({ ros: ros, name: "/launch/nav_options", messageType: "std_msgs/msg/String" });
   mapLib.addEventListener("change", function () {
-    if (fileMap && (editDirty || zoneDirty)) {   // the shown file map changes (t83)
+    if (fileMap && (editDirty || zoneDirty || graphDirty)) {   // the shown file map changes (t83)
       if (!confirm("Niet-bewaarde wijzigingen aan kaart " + zoneMap + " weggooien?")) { mapLib.value = fileMap; return; }
-      editGrid = null; editDirty = false; editUndoStack = []; zoneDirty = false; zoneCur = [];
+      editGrid = null; editDirty = false; editUndoStack = []; zoneDirty = false; zoneCur = []; graphDirty = false; graphUndo = [];
     }
     mapSel.value = mapLib.value;
     mapSel.dispatchEvent(new Event("change"));
@@ -668,7 +721,139 @@
     if (tolSel.value !== "eigen") return tolSel.value;
     return { xy: (parseFloat(tolXy.value) || 10) / 100, yaw: (parseFloat(tolYaw.value) || 9) * Math.PI / 180 };
   }
-  function algo() { return { planner: plannerSel.value, controller: controllerSel.value, tolerance: tolerance() }; }
+  // Via the road network (route_server, nav_web_node's GRAPH_BT): no planner,
+  // goals and route points snap onto a node of the graph
+  var viaGraph = document.getElementById("viaGraph");
+  viaGraph.checked = lsGet("navViaGraph", "0") === "1";
+  function viaGraphUi() { plannerSel.disabled = viaGraph.checked; }
+  viaGraphUi();
+  viaGraph.addEventListener("change", function () { lsSet("navViaGraph", viaGraph.checked ? "1" : "0"); viaGraphUi(); draw(); });
+  function algo() {
+    var a = { planner: plannerSel.value, controller: controllerSel.value, tolerance: tolerance() };
+    if (viaGraph.checked) a.graph = true;
+    return a;
+  }
+
+  // ---- behavior tree card (nav_web_node: /web/bt, /web/bt_status) ----
+  // The XML of the tree Nav2 runs for the current goal, drawn indented. BT.CPP
+  // numbers the nodes depth-first from 1 (uid in /behavior_tree_log), so the
+  // live status maps onto the same walk through the XML.
+  var BT_CONTROL = /^(Sequence|SequenceWithMemory|ReactiveSequence|Fallback|ReactiveFallback|PipelineSequence|RecoveryNode|RoundRobin|Parallel|ParallelAll|IfThenElse|WhileDoElse|Switch\d)$/;
+  var BT_DECORATOR = /^(RateController|DistanceController|SpeedController|GoalUpdater|PathLongerOnApproach|SingleTrigger|Inverter|ForceSuccess|ForceFailure|Repeat|RetryUntilSuccessful|KeepRunningUntilFailure|Timeout|Delay|RunOnce|GoalUpdatedController)$/;
+  var BT_CONDITION = /^(Is|Would|GoalUpdated|GoalReached|InitialPoseReceived|TimeExpired|DistanceTraveled|TransformAvailable|PathExpiringTimer|AreErrorCodesPresent|WouldA)/;
+  var BT_HELP = {
+    RecoveryNode: "Probeert het eerste kind. Mislukt dat, dan het tweede (de recovery) en daarna opnieuw het eerste - maximaal number_of_retries keer.",
+    PipelineSequence: "Sequentie die de vorige kinderen blijft herhalen terwijl het volgende loopt (bv. het pad herplannen tijdens het rijden).",
+    Sequence: "Voert de kinderen na elkaar uit; stopt bij het eerste dat mislukt.",
+    ReactiveSequence: "Zoals Sequence, maar controleert bij elke tick de eerste kinderen opnieuw.",
+    Fallback: "Probeert de kinderen na elkaar tot er één lukt.",
+    ReactiveFallback: "Controleert bij elke tick het eerste kind opnieuw (bv. GoalUpdated) en onderbreekt zo de rest.",
+    RoundRobin: "Telkens het volgende kind: bij elke poging een andere recovery.",
+    RateController: "Laat zijn kind maar hz keer per seconde lopen (bv. 1x per seconde herplannen).",
+    ControllerSelector: "Kiest welke controller (DWB, RPP, MPPI): de keuze op deze pagina.",
+    PlannerSelector: "Kiest welke planner (NavFn, Smac, Theta*): de keuze op deze pagina.",
+    ComputePathToPose: "Planner: berekent een pad naar het doel over de global costmap (planner_server).",
+    ComputeRoute: "Route Server: kortste weg over het wegennet - knopen en rijbanen (route_server).",
+    FollowPath: "Controller: volgt het pad en ontwijkt obstakels in de local costmap (controller_server).",
+    ClearEntireCostmap: "Maakt een costmap leeg: obstakels die er niet meer zijn verdwijnen.",
+    Spin: "Draait ter plaatse (spin_dist in radialen, 1.57 = kwartslag).",
+    Wait: "Wacht wait_duration seconden (bv. tot een persoon voorbij is).",
+    BackUp: "Rijdt backup_dist meter achteruit.",
+    DriveOnHeading: "Rijdt een stuk rechtdoor.",
+    GoalUpdated: "Lukt zodra er een nieuw doel binnenkomt.",
+    WouldAPlannerRecoveryHelp: "Kijkt naar de foutcode van de planner: heeft een recovery zin?",
+    WouldAControllerRecoveryHelp: "Kijkt naar de foutcode van de controller: heeft een recovery zin?",
+    ComputePathThroughPoses: "Planner: pad langs meerdere tussenpunten.",
+    SmoothPath: "Strijkt het pad glad (smoother_server).",
+    TruncatePath: "Knipt het pad af vlak voor het doel.",
+  };
+  var btBox = document.getElementById("btBox"), btSel = document.getElementById("btSel");
+  var btAttrs = document.getElementById("btAttrs");
+  var btData = null, btStatus = null, btNodes = {}, btShownXml = null;
+  var btTopic = new ROSLIB.Topic({ ros: ros, name: "/web/bt", messageType: "std_msgs/msg/String" });
+  var btStatusTopic = new ROSLIB.Topic({ ros: ros, name: "/web/bt_status", messageType: "std_msgs/msg/String", queue_length: 1 });
+  function btKind(tag) {
+    return BT_CONTROL.test(tag) ? "control" : BT_DECORATOR.test(tag) ? "decorator" : BT_CONDITION.test(tag) ? "condition" : "action";
+  }
+  function btRender() {
+    var el = document.getElementById("btTree");
+    if (!btData || !btData.xml) { el.innerHTML = '<div class="sub">nog geen boom - start Navigatie</div>'; return; }
+    var doc = new DOMParser().parseFromString(btData.xml, "application/xml");
+    var rootEl = doc.documentElement, trees = {};
+    Array.prototype.forEach.call(rootEl.getElementsByTagName("BehaviorTree"), function (t) { trees[t.getAttribute("ID")] = t; });
+    var main = trees[rootEl.getAttribute("main_tree_to_execute")] || rootEl.getElementsByTagName("BehaviorTree")[0];
+    if (!main) { el.innerHTML = '<div class="sub">boom niet te lezen</div>'; return; }
+    var uid = 0;
+    btNodes = {};
+    function walk(node) {
+      var tag = node.tagName, id = ++uid, name = node.getAttribute("name") || tag;
+      btNodes[id] = name;
+      var attrs = Array.prototype.filter.call(node.attributes, function (a) { return a.name !== "name"; })
+        .map(function (a) { return a.name + "=" + a.value; }).join("  ");
+      var kids = Array.prototype.filter.call(node.childNodes, function (c) { return c.nodeType === 1; });
+      if (tag === "SubTree" && trees[node.getAttribute("ID")])
+        kids = Array.prototype.filter.call(trees[node.getAttribute("ID")].childNodes, function (c) { return c.nodeType === 1; });
+      var kind = btKind(tag), help = BT_HELP[tag] || "";
+      var h = '<li id="bt' + id + '"><div class="bt-row" title="' + escHtml(tag + (help ? ": " + help : "") + (attrs ? "\n" + attrs : "")) + '">' +
+        '<span class="bt-dot"></span><span class="bt-kind k-' + kind + '">' + escHtml(tag) + "</span>" +
+        (name !== tag ? "<b>" + escHtml(name) + "</b>" : "") +
+        (btAttrs.checked && attrs ? '<span class="bt-attr">' + escHtml(attrs.length > 90 ? attrs.slice(0, 88) + "..." : attrs) + "</span>" : "") + "</div>";
+      if (kids.length) h += "<ul>" + kids.map(walk).join("") + "</ul>";
+      return h + "</li>";
+    }
+    var top = Array.prototype.filter.call(main.childNodes, function (c) { return c.nodeType === 1; });
+    el.innerHTML = "<ul>" + top.map(walk).join("") + "</ul>";
+    btShownXml = btData.xml;
+    btPaint();
+  }
+  function btPaint() {
+    var live = btData && btData.active && btStatus, warn = document.getElementById("btWarn");
+    var mismatch = false;
+    Object.keys(btNodes).forEach(function (id) {
+      var li = document.getElementById("bt" + id);
+      if (!li) return;
+      var st = live ? btStatus.s[id] : null, was = live && btStatus.last ? btStatus.last[id] : null;
+      // after the goal every node is IDLE again: the last status stays, faded
+      li.className = st && st !== "IDLE" ? "st-" + st : was ? "was-" + was : "";
+    });
+    if (live) btStatus.log.forEach(function (e) { if (btNodes[e[1]] && btNodes[e[1]] !== e[2]) mismatch = true; });
+    warn.style.display = mismatch ? "" : "none";
+    warn.textContent = mismatch ? "De live status hoort bij een andere boom (bv. een doel uit je eigen script met een eigen behavior tree)." : "";
+    var log = document.getElementById("btLog");
+    if (!live || !btStatus.log.length) { log.textContent = live ? "nog geen wissels" : ""; return; }
+    var last = btStatus.log[btStatus.log.length - 1][0];
+    log.innerHTML = btStatus.log.slice().reverse().map(function (e) {
+      var c = e[4] === "FAILURE" ? "var(--red)" : e[4] === "SUCCESS" ? "var(--green)" : e[4] === "RUNNING" ? "var(--yellow)" : "var(--muted)";
+      return '<div><span style="color:var(--muted)">' + (e[0] - last).toFixed(1) + " s</span> " + escHtml(e[2]) + " " +
+        escHtml(e[3]) + ' &rarr; <span style="color:' + c + '">' + escHtml(e[4]) + "</span></div>";
+    }).join("");
+  }
+  function btOnMsg(msg) {
+    try { btData = JSON.parse(msg.data); } catch (e) { return; }
+    document.getElementById("btName").textContent = btData.name ? "- " + btData.name : "";
+    var opts = [""].concat(btData.available || []), key = opts.join("|");
+    if (btSel.dataset.key !== key && document.activeElement !== btSel) {
+      btSel.dataset.key = key;
+      btSel.innerHTML = opts.map(function (o) {
+        return '<option value="' + escHtml(o) + '">' + (o ? escHtml(o === "wegennet" ? "wegennet (eigen boom)" : o.replace(/\.xml$/, "")) : "van het huidige doel (live)") + "</option>";
+      }).join("");
+    }
+    if (document.activeElement !== btSel) btSel.value = btData.view || "";
+    if (btData.xml !== btShownXml) btRender();
+  }
+  function btOnStatus(msg) {
+    try { btStatus = JSON.parse(msg.data); } catch (e) { return; }
+    btPaint();
+  }
+  function btSubscribe(on) {
+    if (on) { btTopic.subscribe(btOnMsg); btStatusTopic.subscribe(btOnStatus); }
+    else { btTopic.unsubscribe(); btStatusTopic.unsubscribe(); }
+  }
+  btBox.open = lsGet("navBtOpen", "0") === "1";
+  if (btBox.open) btSubscribe(true);
+  btBox.addEventListener("toggle", function () { lsSet("navBtOpen", btBox.open ? "1" : "0"); btSubscribe(btBox.open); });
+  btSel.addEventListener("change", function () { sendCmd({ cmd: "bt_view", name: btSel.value }); btSel.blur(); });
+  btAttrs.addEventListener("change", function () { btShownXml = null; btRender(); });
 
   // ---- status card ----
   var STATE_TEXT = { idle: "klaar", sending: "verzenden...", navigating: "onderweg", succeeded: "aangekomen",
@@ -709,10 +894,13 @@
     algoEl.textContent = s.controller
       ? optText(plannerSel, s.planner) + " / " + optText(controllerSel, s.controller) : "--";
     // differs from the selection above: that one only applies to the next goal
-    algoEl.style.color = s.controller && (s.planner !== plannerSel.value || s.controller !== controllerSel.value)
+    algoEl.style.color = s.controller && ((viaGraph.checked ? "Wegennet" : plannerSel.value) !== s.planner || s.controller !== controllerSel.value)
       ? "var(--yellow)" : "";
     document.getElementById("nsTol").textContent = s.tolerance
       ? Math.round(s.tolerance.xy * 100) + " cm, " + Math.round(s.tolerance.yaw * 180 / Math.PI) + "\u00b0" : "--";
+    var gs = document.getElementById("graphState"), gn = s.graph ? s.graph.nodes : 0;
+    gs.textContent = !s.nav2_active ? "" : gn ? "(" + gn + " knopen geladen)" : "(geen wegennet voor deze kaart)";
+    gs.style.color = viaGraph.checked && s.nav2_active && !gn ? "var(--red)" : "";
     renderLoc(s);
     document.getElementById("navMsg").textContent = s.message || "";
     document.getElementById("exploreResumeBtn").style.display = s.explore === "paused" ? "" : "none";
@@ -1167,7 +1355,8 @@
       if (fileMap && !d.map) return;   // a saved map from its files (t83): keep its zones
       zoneMap = d.map;
       if (!zoneDirty) { zones = d.zones || []; draw(); }
-      zoneUi();
+      if (!graphDirty) { setGraph(d.graph); draw(); }
+      zoneUi(); graphUi();
       renderRoutes(d.routes || {});
       mapEdited = !!d.map_edited;
       editUi();
@@ -1193,20 +1382,21 @@
   function syncFileMap(force) {
     var want = fileMapWanted();
     if (!want) { fileMap = null; return; }
-    if ((want === fileMap && !force) || fileMapBusy || editDirty || zoneDirty) return;
+    if ((want === fileMap && !force) || fileMapBusy || editDirty || zoneDirty || graphDirty) return;
     fileMapBusy = true;
     fetch("/api/map_file?name=" + encodeURIComponent(want), { cache: "no-store" })
       .then(function (r) { return r.json(); })
       .then(function (j) {
         fileMapBusy = false;
-        if (j.error || fileMapWanted() !== want || editDirty || zoneDirty) return;
+        if (j.error || fileMapWanted() !== want || editDirty || zoneDirty || graphDirty) return;
         var bin = atob(j.data_b64), data = new Int8Array(bin.length);
         for (var i = 0; i < bin.length; i++) data[i] = bin.charCodeAt(i) << 24 >> 24;
         fileMap = want;
         showMap({ info: j.info, data: data });
         zoneMap = want; zones = j.zones || []; mapEdited = !!j.edited;
+        setGraph(j.graph);
         renderRoutes(j.routes || {});
-        zoneUi(); editUi(); draw();
+        zoneUi(); graphUi(); editUi(); draw();
       }, function () { fileMapBusy = false; });
   }
   function zoneFinish() {
@@ -1285,6 +1475,188 @@
     }
   }
   zoneUi();
+
+  // ---- road network (Nav2 Route Server, nav_web_node loads it) ----
+  // Saved per map (state/maps/<map>.graph.json): nodes = places, edges =
+  // lanes between two nodes, both ways or one way. Mappen > Wegennet draws
+  // it; Algoritmes > "rijden via het wegennet" drives over it.
+  var graph = { nodes: [], edges: [] }, graphDirty = false, graphUndo = [];
+  var graphTool = lsGet("graphTool", "node"), graphSel = null, graphDrag = null;
+  var GRAPH_COLOR = "#22d3ee";
+  function setGraph(g) {
+    graph = { nodes: (g && g.nodes) || [], edges: (g && g.edges) || [] };
+    if (graphSel !== null && !graphNode(graphSel)) graphSel = null;
+  }
+  function graphNode(id) {
+    for (var i = 0; i < graph.nodes.length; i++) if (graph.nodes[i].id === id) return graph.nodes[i];
+    return null;
+  }
+  function graphEdit() {   // before every change: one step back with Ongedaan maken
+    graphUndo.push(JSON.stringify(graph));
+    if (graphUndo.length > 50) graphUndo.shift();
+    graphDirty = true;
+  }
+  function nodeAt(c, px) {   // node under canvas point c (within px pixels)
+    var dpr = window.devicePixelRatio || 1, best = null, bd = (px || 12) * dpr;
+    graph.nodes.forEach(function (n) {
+      var p = toCanvas(n.x, n.y), d = Math.hypot(p[0] - c[0], p[1] - c[1]);
+      if (d < bd) { bd = d; best = n; }
+    });
+    return best;
+  }
+  function edgeAt(c) {
+    var dpr = window.devicePixelRatio || 1, best = null, bd = 8 * dpr;
+    graph.edges.forEach(function (e) {
+      var a = graphNode(e.from), b = graphNode(e.to);
+      if (!a || !b) return;
+      var p = toCanvas(a.x, a.y), q = toCanvas(b.x, b.y), dx = q[0] - p[0], dy = q[1] - p[1];
+      var t = Math.max(0, Math.min(1, ((c[0] - p[0]) * dx + (c[1] - p[1]) * dy) / Math.max(dx * dx + dy * dy, 1)));
+      var d = Math.hypot(p[0] + t * dx - c[0], p[1] + t * dy - c[1]);
+      if (d < bd) { bd = d; best = e; }
+    });
+    return best;
+  }
+  function edgeIndex(a, b) {
+    for (var i = 0; i < graph.edges.length; i++) {
+      var e = graph.edges[i];
+      if ((e.from === a && e.to === b) || (e.from === b && e.to === a)) return i;
+    }
+    return -1;
+  }
+  function graphDown(c, w) {
+    var n = nodeAt(c);
+    if (graphTool === "node") {
+      if (n) { graphDrag = { id: n.id, moved: false }; return; }
+      graphEdit();
+      var id = graph.nodes.reduce(function (m, k) { return Math.max(m, k.id); }, 0) + 1;
+      if (id >= 1000) { graphUndo.pop(); return; }
+      graph.nodes.push({ id: id, x: +w[0].toFixed(3), y: +w[1].toFixed(3) });
+      graphSel = id;
+    } else if (graphTool === "edge") {
+      if (n) {
+        if (graphSel !== null && graphSel !== n.id && graphNode(graphSel)) {
+          graphEdit();
+          var i = edgeIndex(graphSel, n.id), e = { from: graphSel, to: n.id, oneway: document.getElementById("graphDir").value === "oneway" };
+          if (i > -1) graph.edges[i] = e; else graph.edges.push(e);
+        }
+        graphSel = n.id;
+      } else {
+        var e2 = edgeAt(c);
+        if (e2) {   // direction: both -> from>to -> to>from -> both
+          graphEdit();
+          if (!e2.oneway) e2.oneway = true;
+          else if (!e2.flipped) { var t = e2.from; e2.from = e2.to; e2.to = t; e2.flipped = true; }
+          else { e2.oneway = false; delete e2.flipped; }
+        }
+        graphSel = null;
+      }
+    } else if (graphTool === "del") {
+      if (n) {
+        graphEdit();
+        graph.nodes = graph.nodes.filter(function (k) { return k !== n; });
+        graph.edges = graph.edges.filter(function (e) { return e.from !== n.id && e.to !== n.id; });
+      } else {
+        var e3 = edgeAt(c);
+        if (e3) { graphEdit(); graph.edges = graph.edges.filter(function (e) { return e !== e3; }); }
+      }
+      graphSel = null;
+    }
+    graphUi(); draw();
+  }
+  function graphMove(w) {
+    var n = graphNode(graphDrag.id);
+    if (!n) return;
+    if (!graphDrag.moved) { graphEdit(); graphDrag.moved = true; }
+    n.x = +w[0].toFixed(3); n.y = +w[1].toFixed(3);
+    draw();
+  }
+  function graphUp() {
+    if (!graphDrag.moved) graphSel = graphDrag.id;   // click on a node: select (name)
+    graphDrag = null;
+    graphUi(); draw();
+  }
+  function graphUi() {
+    document.querySelectorAll(".gtool").forEach(function (b) { b.classList.toggle("active", b.dataset.gtool === graphTool); });
+    var sel = graphSel !== null ? graphNode(graphSel) : null, nameBox = document.getElementById("graphNameBox");
+    nameBox.style.display = sel && graphTool === "node" ? "" : "none";
+    var nameEl = document.getElementById("graphName");
+    if (sel && document.activeElement !== nameEl) nameEl.value = sel.name || "";
+    var nn = graph.nodes.length, ne = graph.edges.length;
+    document.getElementById("graphInfo").textContent =
+      (zoneMap && zoneMap !== "_verkenning" ? "kaart " + zoneMap + (fileMap ? " (bestand, Navigatie uit)" : "") + ": "
+        : zoneMap ? "sla de kaart eerst op - " : "kies een kaart onder Kaarten - ") +
+      nn + (nn === 1 ? " knoop, " : " knopen, ") + ne + (ne === 1 ? " rijbaan" : " rijbanen") +
+      (sel ? ", gekozen: " + (sel.name || "knoop " + sel.id) : "") + (graphDirty ? " (niet bewaard)" : "");
+    document.getElementById("graphSave").disabled = !zoneMap || zoneMap === "_verkenning";
+    document.getElementById("graphUndo").disabled = !graphUndo.length;
+  }
+  document.querySelectorAll(".gtool").forEach(function (b) {
+    b.addEventListener("click", function () { graphTool = b.dataset.gtool; lsSet("graphTool", graphTool); graphSel = null; graphUi(); draw(); });
+  });
+  document.getElementById("graphName").addEventListener("input", function () {
+    var n = graphSel !== null ? graphNode(graphSel) : null;
+    if (!n) return;
+    if (!graphDirty || !graphUndo.length) graphEdit();
+    graphDirty = true;
+    n.name = this.value.trim().slice(0, 20);
+    if (!n.name) delete n.name;
+    graphUi(); draw();
+  });
+  document.getElementById("graphUndo").addEventListener("click", function () {
+    if (!graphUndo.length) return;
+    setGraph(JSON.parse(graphUndo.pop()));
+    graphDirty = true; graphUi(); draw();
+  });
+  document.getElementById("graphClear").addEventListener("click", function () {
+    if (graph.nodes.length && confirm("Het hele wegennet van deze kaart wissen? (pas na Bewaar & toepassen)")) {
+      graphEdit(); graph = { nodes: [], edges: [] }; graphSel = null; graphUi(); draw();
+    }
+  });
+  document.getElementById("graphSave").addEventListener("click", function () {
+    sendCmd({ cmd: "graph", map: zoneMap, nodes: graph.nodes,
+              edges: graph.edges.map(function (e) { return { from: e.from, to: e.to, oneway: !!e.oneway }; }) });
+    graphDirty = false; graphUndo = [];
+    graphUi();
+  });
+  var showGraphBox = document.getElementById("showGraph");
+  showGraphBox.checked = lsGet("navGraph", "1") === "1";
+  showGraphBox.addEventListener("change", function () { lsSet("navGraph", showGraphBox.checked ? "1" : "0"); draw(); });
+  function drawGraph() {
+    if (!graph.nodes.length || !(mode === "graph" || showGraphBox.checked || viaGraph.checked)) return;
+    var dpr = window.devicePixelRatio || 1, editing = mode === "graph";
+    ctx.save();
+    ctx.strokeStyle = GRAPH_COLOR; ctx.fillStyle = GRAPH_COLOR;
+    ctx.lineWidth = (editing ? 2.5 : 1.8) * dpr;
+    ctx.globalAlpha = editing || viaGraph.checked ? 1 : 0.7;
+    graph.edges.forEach(function (e) {
+      var a = graphNode(e.from), b = graphNode(e.to);
+      if (!a || !b) return;
+      var p = toCanvas(a.x, a.y), q = toCanvas(b.x, b.y);
+      ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+      if (e.oneway) {   // arrow head halfway, in the driving direction
+        var ang = Math.atan2(q[1] - p[1], q[0] - p[0]), mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2, L = 9 * dpr;
+        ctx.beginPath();
+        ctx.moveTo(mx + Math.cos(ang) * L / 2, my + Math.sin(ang) * L / 2);
+        ctx.lineTo(mx - Math.cos(ang - 0.5) * L, my - Math.sin(ang - 0.5) * L);
+        ctx.lineTo(mx - Math.cos(ang + 0.5) * L, my - Math.sin(ang + 0.5) * L);
+        ctx.closePath(); ctx.fill();
+      }
+    });
+    ctx.font = "bold " + (11 * dpr) + "px sans-serif";
+    graph.nodes.forEach(function (n) {
+      var c = toCanvas(n.x, n.y), sel = editing && n.id === graphSel;
+      ctx.beginPath(); ctx.arc(c[0], c[1], (sel ? 7 : 5) * dpr, 0, 2 * Math.PI);
+      ctx.fillStyle = sel ? GRAPH_COLOR : "#0d1b22"; ctx.fill(); ctx.stroke();
+      var label = n.name || (editing ? String(n.id) : "");
+      if (label) {
+        var tw = ctx.measureText(label).width;
+        ctx.fillStyle = "#000a"; ctx.fillRect(c[0] + 7 * dpr, c[1] - 17 * dpr, tw + 6 * dpr, 14 * dpr);
+        ctx.fillStyle = GRAPH_COLOR; ctx.fillText(label, c[0] + 10 * dpr, c[1] - 6 * dpr);
+      }
+    });
+    ctx.restore();
+  }
+  graphUi();
 
   // ---- laser scan (optional overlay) ----
   // /scan is in base_scan; on the Burger that frame is 3.2 cm behind
@@ -1471,6 +1843,7 @@
       ctx.strokeStyle = css("--accent"); ctx.lineWidth = 2.5 * dpr; ctx.stroke();
     }
     drawZones();
+    drawGraph();
     if (route.length) {
       ctx.beginPath();
       route.forEach(function (pt, i) { var c = toCanvas(pt.x, pt.y); if (i) ctx.lineTo(c[0], c[1]); else ctx.moveTo(c[0], c[1]); });
@@ -1509,6 +1882,7 @@
     route: "Klik de punten na elkaar aan (slepen = richting). Daarna: Rij route.",
     edit: "Teken op de kaart (slepen). Bewaar kaart = opslaan + map_server laadt ze meteen opnieuw. Het origineel blijft bewaard.",
     zones: "Kies de soort (snelheidszone: met %), klik de hoekpunten aan (muur: 2 of meer punten), Klaar of dubbelklik. Daarna: Bewaar & toepassen.",
+    graph: "Wegennet voor de Route Server: zet knopen (plaatsen) en verbind ze met rijbanen. Bewaar & toepassen. Rijden via het wegennet: vinkje bij Algoritmes op Navigatie.",
     measure: "Sleep van punt A naar punt B. Zoomen: muiswiel of knijpen; in Kijken: slepen = verschuiven.",
   };
   function setMode(m) {
@@ -1517,6 +1891,7 @@
     document.getElementById("routeBar").style.display = m === "route" || route.length ? "" : "none";
     renderRoutePoints();
     document.getElementById("zoneBar").style.display = m === "zones" ? "" : "none";
+    document.getElementById("graphBar").style.display = m === "graph" ? "" : "none";
     document.getElementById("editBar").style.display = m === "edit" ? "" : "none";
     document.getElementById("modeHint").textContent = MODE_HINT[m];
     canvas.style.cursor = m === "view" ? "grab" : "crosshair";
@@ -1611,6 +1986,7 @@
     if (mode === "view") { pan = { cx: c[0], cy: c[1], px: view.px, py: view.py }; return; }
     var w = toWorld(c[0], c[1]);
     if (mode === "zones") { zoneCur.push([w[0], w[1]]); zoneDirty = true; zoneUi(); draw(); return; }
+    if (mode === "graph") { graphDown(c, w); return; }
     if (mode === "edit") { editStart(); editPaint(w); painting = true; return; }
     if (mode === "measure") { measure = { x: w[0], y: w[1], x2: w[0], y2: w[1] }; measuring = true; draw(); return; }
     drag = { x: w[0], y: w[1], x2: w[0], y2: w[1] };
@@ -1634,6 +2010,7 @@
     }
     var w = toWorld(c[0], c[1]);
     if (painting) { editPaint(w); return; }
+    if (graphDrag) { graphMove(w); return; }
     if (measuring) { measure.x2 = w[0]; measure.y2 = w[1]; showMeasure(); draw(); return; }
     if (!drag) return;
     drag.x2 = w[0]; drag.y2 = w[1];
@@ -1644,12 +2021,27 @@
     if (pinch) { if (Object.keys(pointers).length < 2) pinch = null; return; }
     if (pan) { pan = null; return; }
     if (painting) { painting = false; return; }
+    if (graphDrag) { graphUp(); return; }
     if (measuring) { measuring = false; showMeasure(); draw(); return; }
     if (!drag) return;
     if (ev.type === "pointercancel") { drag = null; draw(); return; }
     var pose = { x: drag.x, y: drag.y, yaw: dragYaw() };
     var dragged = Math.hypot(drag.x2 - drag.x, drag.y2 - drag.y) > 0.08;
+    var dragStart = toCanvas(drag.x, drag.y);
     drag = null;
+    if ((mode === "goal" || mode === "route") && viaGraph.checked) {
+      // via the road network: the route ends on a node, so the goal must be one
+      var gn = nodeAt(dragStart, 24);
+      if (!gn) {
+        document.getElementById("navMsg").textContent = graph.nodes.length
+          ? "Via het wegennet: klik op een knoop (cirkel) van het wegennet."
+          : "Deze kaart heeft nog geen wegennet - teken er een op Mappen > Wegennet, of zet het vinkje bij Algoritmes uit.";
+        draw();
+        return;
+      }
+      pose.x = gn.x; pose.y = gn.y;
+      if (!dragged) pose.free = true;
+    }
     if (mode === "initialpose") {
       sendCmd({ cmd: "initialpose", x: pose.x, y: pose.y, yaw: pose.yaw });
       setMode("view");
@@ -1836,7 +2228,7 @@
 
   // ---- Mappen / Navigatie: same page, other tools (#mappen) ----
   function isMaps() { return location.hash === "#mappen"; }
-  var MAPS_MODES = { zones: 1, edit: 1 }, NAV_MODES = { initialpose: 1, goal: 1, route: 1 };
+  var MAPS_MODES = { zones: 1, edit: 1, graph: 1 }, NAV_MODES = { initialpose: 1, goal: 1, route: 1 };
   function applyView() {
     var maps = isMaps();
     document.body.classList.toggle("view-maps", maps);

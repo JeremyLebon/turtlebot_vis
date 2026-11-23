@@ -4,7 +4,7 @@ or through the fleet monitor's map library (launch_control_node.py).
 
     {"format": "turtlebot-map/1", "name", "created", "from",
      "yaml": "<map yaml text>", "pgm_b64": "<map image>",
-     "zones": [...], "routes": {...}}
+     "zones": [...], "routes": {...}, "graph": {"nodes": [...], "edges": [...]}}
 
 Importing never overwrites silently: an existing map of the same name is
 first renamed to <name>_vorige (then _vorige2, ...), and the map Navigation
@@ -27,7 +27,8 @@ FORMAT = "turtlebot-map/1"
 NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
 # what belongs to a map (also launch_control_node.MAP_SUFFIXES)
 SUFFIXES = (".yaml", ".pgm", ".zones.json", ".routes.json", ".orig.pgm",
-            ".zones.bak.json", ".edited.pgm")
+            ".zones.bak.json", ".edited.pgm", ".graph.json", ".graph.bak.json")
+NO_GRAPH = {"nodes": [], "edges": []}
 
 
 def list_maps():
@@ -74,7 +75,18 @@ def export_bundle(name):
     return {"format": FORMAT, "name": name, "created": time.time(), "from": socket.gethostname(),
             "yaml": yaml_text, "pgm_b64": base64.b64encode(pgm).decode(),
             "zones": _read_json(os.path.join(MAP_DIR, name + ".zones.json"), "zones", []),
-            "routes": _read_json(os.path.join(MAP_DIR, name + ".routes.json"), "routes", {})}
+            "routes": _read_json(os.path.join(MAP_DIR, name + ".routes.json"), "routes", {}),
+            "graph": _read_graph(name)}
+
+
+def _read_graph(name):
+    """Road network of a map (nav_web_node, <map>.graph.json)."""
+    try:
+        with open(os.path.join(MAP_DIR, name + ".graph.json")) as f:
+            g = json.load(f)
+        return {"nodes": g.get("nodes", []), "edges": g.get("edges", [])}
+    except (OSError, ValueError, AttributeError):
+        return dict(NO_GRAPH)
 
 
 def _rename_map(src, dst):
@@ -123,6 +135,10 @@ def import_bundle(bundle, name=None):
         if data:
             with open(os.path.join(MAP_DIR, name + suf), "w") as f:
                 json.dump({key: data}, f)
+    graph = bundle.get("graph") or NO_GRAPH
+    if graph.get("nodes"):
+        with open(os.path.join(MAP_DIR, name + ".graph.json"), "w") as f:
+            json.dump({"nodes": graph["nodes"], "edges": graph.get("edges", [])}, f)
     n_z, n_r = len(bundle.get("zones") or []), len(bundle.get("routes") or {})
     return "kaart '%s' geimporteerd (%d zones, %d routes, van %s)%s" % (
         name, n_z, n_r, bundle.get("from", "?"), note)
@@ -130,7 +146,7 @@ def import_bundle(bundle, name=None):
 
 # ---- zip: the ordinary map files (also usable with a map_server elsewhere) ----
 def export_zip(name):
-    """<name>.yaml, <name>.pgm (+ .zones.json, .routes.json) in a zip."""
+    """<name>.yaml, <name>.pgm (+ .zones.json, .routes.json, .graph.json) in a zip."""
     b = export_bundle(name)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
@@ -145,6 +161,8 @@ def export_zip(name):
             z.writestr(name + ".zones.json", json.dumps({"zones": b["zones"]}, indent=1))
         if b["routes"]:
             z.writestr(name + ".routes.json", json.dumps({"routes": b["routes"]}, indent=1))
+        if b["graph"]["nodes"]:
+            z.writestr(name + ".graph.json", json.dumps(b["graph"], indent=1))
     return buf.getvalue()
 
 
@@ -168,7 +186,8 @@ def bundle_from_zip(data):
             return json.loads(z.read(stem + suffix)).get(key, default) if stem + suffix in names else default
         return {"format": FORMAT, "name": os.path.basename(stem), "from": "zip",
                 "yaml": yaml_text, "pgm_b64": base64.b64encode(z.read(img)).decode(),
-                "zones": opt(".zones.json", "zones", []), "routes": opt(".routes.json", "routes", {})}
+                "zones": opt(".zones.json", "zones", []), "routes": opt(".routes.json", "routes", {}),
+                "graph": json.loads(z.read(stem + ".graph.json")) if stem + ".graph.json" in names else NO_GRAPH}
 
 
 def bundle_from_bytes(data):
@@ -243,4 +262,5 @@ def map_grid(name):
             "data_b64": base64.b64encode(cells).decode(),
             "zones": _read_json(os.path.join(MAP_DIR, name + ".zones.json"), "zones", []),
             "routes": _read_json(os.path.join(MAP_DIR, name + ".routes.json"), "routes", {}),
+            "graph": _read_graph(name),
             "edited": os.path.exists(os.path.join(MAP_DIR, name + ".orig.pgm"))}
