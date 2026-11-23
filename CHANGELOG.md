@@ -12,6 +12,11 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## 1.1.8 - 2026-11-24 (branch feature/route, image `:route`)
+- **Virtuele robot 1.13.1**: staat er een doos op een rijbaan, dan sluit
+  Fenix die rijbaan af en rijdt de robot om via het wegennet; weggehaalde
+  obstakels verdwijnen ook uit de costmap met de 3D-lidar.
+
 ## 1.1.7 - 2026-11-24 (branch feature/route, image `:route`)
 - **Simulator 1.5.5: hoogte van een doos kiezen.** Naast de knop *Doos*:
   35 cm (zoals tot nu) of 12 cm (laag). Een lage doos ligt onder de 2D-lidar

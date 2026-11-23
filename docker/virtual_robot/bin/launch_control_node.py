@@ -532,14 +532,22 @@ def write_nav2_params():
                   "min_obstacle_height": 0.03, "max_obstacle_height": 0.35,
                   "obstacle_max_range": 2.5, "obstacle_min_range": 0.0,
                   "raytrace_max_range": 3.0, "raytrace_min_range": 0.0}
+        # Clearing needs the floor hits too: points below min_obstacle_height
+        # are dropped for clearing as well, and the lowest ring only reaches
+        # the floor ~0.9 m away - removed boxes stayed in the local costmap
+        # (Jeremy, 24-11). So a second source from the same cloud that only
+        # clears, without the height filter.
+        points_clear = dict(points, marking=False, clearing=True,
+                            min_obstacle_height=-0.5, max_obstacle_height=2.0)
         lc3 = params["local_costmap"]["local_costmap"]["ros__parameters"]
         gc3 = params["global_costmap"]["global_costmap"]["ros__parameters"]
         for layer in (lc3.get("voxel_layer"), gc3.get("obstacle_layer")):
             if isinstance(layer, dict):
                 srcs = layer.get("observation_sources", "scan").split()
-                if "points" not in srcs:
-                    layer["observation_sources"] = " ".join(srcs + ["points"])
+                layer["observation_sources"] = " ".join(
+                    srcs + [n for n in ("points", "points_clear") if n not in srcs])
                 layer["points"] = dict(points)
+                layer["points_clear"] = dict(points_clear)
     apply_nav2_overrides(params)
     if SIM:
         # Virtual robot: /clock and /tf come from a browser tab via rosbridge.

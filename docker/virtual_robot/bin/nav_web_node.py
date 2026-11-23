@@ -94,7 +94,7 @@ from action_msgs.srv import CancelGoal
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from nav2_msgs.action import BackUp, DockRobot, DriveOnHeading, NavigateToPose, Spin, UndockRobot
 from nav2_msgs.msg import BehaviorTreeLog, CostmapFilterInfo, ParticleCloud
-from nav2_msgs.srv import LoadMap, ManageLifecycleNodes, SetRouteGraph
+from nav2_msgs.srv import DynamicEdges, LoadMap, ManageLifecycleNodes, SetRouteGraph
 from nav_msgs.srv import GetMap
 from nav_msgs.msg import MapMetaData, OccupancyGrid, Odometry
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
@@ -424,6 +424,17 @@ def clean_graph(g):
         seen.add((a, b))
         edges.append({"from": a, "to": b, "oneway": bool(e.get("oneway"))})
     return {"nodes": nodes, "edges": edges}
+
+
+def graph_edge_ids(g):
+    """[(edge id, from, to)] as graph_geojson numbers them (two-way = two edges)."""
+    out, eid = [], EDGE_ID0
+    for e in g["edges"]:
+        a, b = e["from"], e["to"]
+        for s, t in ((a, b),) if e.get("oneway") else ((a, b), (b, a)):
+            out.append((eid, s, t))
+            eid += 1
+    return out
 
 
 def graph_geojson(g):
@@ -783,6 +794,14 @@ class NavWebNode(Node):
         self.graph_loaded = None  # (map, mtime of its graph file) route_server has
         self.graph_nodes = 0      # nodes in that graph
         self.graph_busy = False
+        # Blocked lane (a box on it): after a recovery on a goal via the road
+        # network, the lane the robot stands on is closed in route_server
+        # (DynamicEdges) so the next attempt routes over other lanes; opened
+        # again at the next command or when the goal ends.
+        self.edges_client = self.create_client(DynamicEdges, "/route_server/DynamicEdgesScorer/adjust_edges")
+        self.graph_cur = {"nodes": [], "edges": []}   # graph loaded in route_server
+        self.closed_edges = []   # edge ids closed by this node
+        self.last_recoveries = 0
         self.zone_map = None      # map name the masks were made for
         self.last_tick_map = running_map()   # no wipe for a run already going at start
         self.zones = []
@@ -1369,6 +1388,10 @@ class NavWebNode(Node):
         goal = NavigateToPose.Goal()
         goal.pose = make_pose(self.get_clock().now().to_msg(), pose["x"], pose["y"], pose["yaw"])
         goal.behavior_tree = bt
+        self.last_recoveries = 0
+        if mode in ("goal", "dock") or (mode == "route" and self.route and self.route["index"] == 0
+                                         and self.route["lap"] == 1):
+            self._open_lanes()
         if (bt or DEFAULT_BT) != self.bt_path or mode == "goal":
             self.bt_status, self.bt_log, self.bt_lastst, self.bt_dirty = {}, [], {}, True
         self.bt_path = bt or DEFAULT_BT
@@ -1425,6 +1448,10 @@ class NavWebNode(Node):
     def _on_nav_feedback(self, msg):
         fb = msg.feedback
         eta = fb.estimated_time_remaining.sec + fb.estimated_time_remaining.nanosec * 1e-9
+        if fb.number_of_recoveries > self.last_recoveries:
+            self.last_recoveries = fb.number_of_recoveries
+            if self.algo and self.algo[0] == "Wegennet":
+                self._close_blocked_lane()
         self.status.update({
             "distance_remaining": round(fb.distance_remaining, 2),
             "eta_s": round(eta, 1),
@@ -1998,6 +2025,41 @@ class NavWebNode(Node):
             goal.time_allowance.sec = int(self.UNDOCK_TIMEOUT)
             self.backup_client.send_goal_async(goal).add_done_callback(accepted)
 
+    def _close_blocked_lane(self):
+        """Close the lane the robot stands on (both directions) in route_server."""
+        if self.loc is None or not self.edges_client.service_is_ready():
+            return
+        pos = {n["id"]: (n["x"], n["y"]) for n in self.graph_cur["nodes"]}
+        best, bd = None, 0.5          # only a lane within 50 cm of the robot
+        for e in self.graph_cur["edges"]:
+            (ax, ay), (bx, by) = pos[e["from"]], pos[e["to"]]
+            dx, dy = bx - ax, by - ay
+            t = max(0.0, min(1.0, ((self.loc["x"] - ax) * dx + (self.loc["y"] - ay) * dy) / max(dx * dx + dy * dy, 1e-9)))
+            d = math.hypot(ax + t * dx - self.loc["x"], ay + t * dy - self.loc["y"])
+            if d < bd:
+                best, bd = e, d
+        if best is None:
+            return
+        pair = {best["from"], best["to"]}
+        ids = [eid for eid, a, b in graph_edge_ids(self.graph_cur) if {a, b} == pair and eid not in self.closed_edges]
+        if not ids:
+            return
+        self.closed_edges += ids
+        req = DynamicEdges.Request()
+        req.closed_edges = ids
+        self.edges_client.call_async(req)
+        names = {n["id"]: n.get("name") or str(n["id"]) for n in self.graph_cur["nodes"]}
+        self.status["message"] = "rijbaan %s - %s geblokkeerd: andere route" % (names[best["from"]], names[best["to"]])
+        self.get_logger().info("rijbaan %s-%s afgesloten (edges %s)" % (best["from"], best["to"], ids))
+
+    def _open_lanes(self):
+        if not self.closed_edges or not self.edges_client.service_is_ready():
+            return
+        req = DynamicEdges.Request()
+        req.opened_edges = list(self.closed_edges)
+        self.edges_client.call_async(req)
+        self.closed_edges = []
+
     def _graph_ok(self, cmd, mode):
         """A goal/route via the road network needs one loaded for this map."""
         if not cmd.get("graph"):
@@ -2041,7 +2103,9 @@ class NavWebNode(Node):
         if key == self.graph_loaded:
             return
         g = load_graph(name)
-        write_json(GRAPH_GEOJSON, graph_geojson(clean_graph(g)))
+        self.graph_cur = clean_graph(g)
+        self.closed_edges = []    # a new graph has all lanes open
+        write_json(GRAPH_GEOJSON, graph_geojson(self.graph_cur))
         self.graph_busy = True
         future = self.graph_client.call_async(SetRouteGraph.Request(graph_filepath=GRAPH_GEOJSON))
         future.add_done_callback(lambda f: self._on_graph_set(f, key, len(g["nodes"])))
@@ -2173,6 +2237,7 @@ class NavWebNode(Node):
         s["goal"] = self.target
         s["graph"] = {"nodes": self.graph_nodes if self.graph_loaded and self.graph_loaded[0] == name else 0}
         s["docked"] = self.docked
+        s["closed_edges"] = len(self.closed_edges)
         s["battery_return"] = list(self.battery_return) if self.battery_return else None
         if self.resume:
             c = self.resume["cmd"]
