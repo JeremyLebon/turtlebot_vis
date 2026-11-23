@@ -77,6 +77,7 @@ import numpy as np
 
 import rclpy
 from action_msgs.msg import GoalStatus
+from action_msgs.srv import CancelGoal
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from nav2_msgs.action import BackUp, DriveOnHeading, NavigateToPose, Spin
 from nav2_msgs.msg import BehaviorTreeLog, CostmapFilterInfo, ParticleCloud
@@ -508,15 +509,22 @@ def resolve_algo(planner, controller):
 # Behavior tree for a goal via the road network (route_server): the route is
 # computed once per attempt (a Sequence, not Nav2's 1 Hz replanning: from
 # halfway along an edge the nearest node can lie behind the robot), then
-# followed by the chosen controller. Recoveries as in Nav2's default tree,
-# without the spin (the robot stays on its lane).
+# followed by the chosen controller. The route starts at the node nearest to
+# the robot, not at the robot: a robot beside the network got a path starting
+# metres away and the controller gave up at once (2026-11-23). So first the
+# planner plans from the robot to the route's first pose (a few cm when the
+# robot stands on a node), then both paths are joined. Recoveries as in
+# Nav2's default tree, without the spin (the robot stays on its lane).
 GRAPH_BT = """<root BTCPP_format="4" main_tree_to_execute="MainTree">
   <BehaviorTree ID="MainTree">
     <RecoveryNode number_of_retries="4" name="NavigateRecovery">
       <PipelineSequence name="NavigateOnGraph">
         <ControllerSelector selected_controller="{selected_controller}" default_controller="FollowPath" topic_name="controller_selector"/>
         <Sequence name="RouteThenFollow">
-          <ComputeRoute goal="{goal}" use_start="false" use_poses="true" path="{path}" error_code_id="{compute_route_error_code}"/>
+          <ComputeRoute goal="{goal}" use_start="false" use_poses="true" path="{route_path}" error_code_id="{compute_route_error_code}"/>
+          <GetPoseFromPath path="{route_path}" index="0" pose="{route_start}"/>
+          <ComputePathToPose goal="{route_start}" path="{access_path}" planner_id="GridBased" error_code_id="{compute_path_error_code}"/>
+          <ConcatenatePaths input_path1="{access_path}" input_path2="{route_path}" output_path="{path}"/>
           <RecoveryNode number_of_retries="1" name="FollowPath">
             <FollowPath path="{path}" controller_id="{selected_controller}" error_code_id="{follow_path_error_code}"/>
             <ClearEntireCostmap name="ClearLocalCostmap-Context" service_name="local_costmap/clear_entirely_local_costmap"/>
@@ -579,6 +587,9 @@ class NavWebNode(Node):
     def __init__(self):
         super().__init__("nav_web_node")
         self.nav_client = ActionClient(self, NavigateToPose, "navigate_to_pose")
+        # cancel every navigate_to_pose goal (zero id + zero time), also one
+        # this node didn't send (Simple Commander, before a restart)
+        self.cancel_all_client = self.create_client(CancelGoal, "navigate_to_pose/_action/cancel_goal")
         # navigate_to_pose exists as soon as bt_navigator is configured, also when
         # the bringup stopped halfway (planner_server inactive): ask the lifecycle
         # manager whether all Nav2 nodes are active
@@ -656,6 +667,8 @@ class NavWebNode(Node):
         self.cmd_seq = 0        # +1 per command from the page
 
         self.goal_handle = None
+        self.goal_bt = None      # behavior tree of the running goal (goal_handle)
+        self.switch_wait = None  # (old handle, timer) while a goal with another tree stops
         self.status = {"state": "idle", "mode": None, "message": ""}
         self.route = None  # {"poses": [...], "loop": bool, "lap": int, "index": int, "bt": str}
 
@@ -1056,6 +1069,49 @@ class NavWebNode(Node):
         self._send_goal_now(pose, bt, mode)
 
     def _send_goal_now(self, pose, bt, mode):
+        # bt_navigator only preempts a goal with one that uses the same tree:
+        # a goal with another tree (other planner/controller, via the road
+        # network or not) was refused while the old goal drove on (2026-11-23).
+        # Our own goal with the same tree: preempt as usual. Otherwise stop
+        # the running goal first - ours, or any (cancel all: a goal from
+        # Simple Commander or from before a restart of this node) - and send
+        # the new one once it has ended.
+        old = self.goal_handle
+        if not (old is not None and (bt or DEFAULT_BT) == self.goal_bt) and not getattr(self, "_switching", False):
+            self.goal_handle = None          # its result no longer counts
+            seq = self.cmd_seq
+            if self.switch_wait:
+                self.switch_wait.cancel()
+                self.switch_wait = None
+
+            def go():
+                if self.switch_wait:
+                    self.switch_wait.cancel()
+                    self.switch_wait = None
+                if seq != self.cmd_seq or (mode == "route" and (self.route is None or self.route.get("paused"))):
+                    return                   # cancelled or replaced meanwhile
+                self._switching = True
+                try:
+                    self._send_goal_now(pose, bt, mode)
+                finally:
+                    self._switching = False
+
+            def later(seconds):
+                self.switch_wait = self.create_timer(seconds, go, clock=Clock(clock_type=ClockType.STEADY_TIME))
+
+            def cancelled(f):
+                try:
+                    busy = bool(f.result().goals_canceling)
+                except Exception:
+                    busy = True
+                if busy:
+                    self._set_status("sending", mode, "vorig doel stoppen (andere behavior tree)...")
+                later(1.5 if busy else 0.05)  # nothing was running: at once
+            if not self.cancel_all_client.service_is_ready():
+                later(0.05)
+            else:
+                self.cancel_all_client.call_async(CancelGoal.Request()).add_done_callback(cancelled)
+            return
         goal = NavigateToPose.Goal()
         goal.pose = make_pose(self.get_clock().now().to_msg(), pose["x"], pose["y"], pose["yaw"])
         goal.behavior_tree = bt
@@ -1066,7 +1122,7 @@ class NavWebNode(Node):
         if mode == "goal":
             self._set_status("sending", "goal", "doel verzonden")
         future = self.nav_client.send_goal_async(goal, feedback_callback=self._on_nav_feedback)
-        future.add_done_callback(lambda f: self._on_accepted(f, mode))
+        future.add_done_callback(lambda f, b=(bt or DEFAULT_BT): self._on_accepted(f, mode, b))
 
     def _send_route_point(self):
         r = self.route
@@ -1094,7 +1150,7 @@ class NavWebNode(Node):
             self._set_status("idle", None, "niets om te annuleren")
 
     # ---- action callbacks --------------------------------------------------
-    def _on_accepted(self, future, mode):
+    def _on_accepted(self, future, mode, handle_bt=None):
         handle = future.result()
         if not handle.accepted:
             self.route = None
@@ -1104,6 +1160,7 @@ class NavWebNode(Node):
             handle.cancel_goal_async()  # route was cancelled while this point was being sent
             return
         self.goal_handle = handle
+        self.goal_bt = handle_bt
         if mode == "route":
             self.status.update({"state": "navigating", "mode": "route",
                                 "message": "onderweg naar punt %d" % (self.route["index"] + 1)})

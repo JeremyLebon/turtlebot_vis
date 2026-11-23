@@ -184,6 +184,25 @@
   .was-RUNNING > .bt-row .bt-dot { background: var(--yellow); opacity: 0.45; }
   .bt-legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
   .bt-legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; background: var(--c); }
+  /* Groot-style view: full screen, cards top-down */
+  #btOverlay { position: fixed; inset: 0; z-index: 80; background: var(--bg); display: flex; flex-direction: column;
+               padding: max(12px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 12px max(16px, env(safe-area-inset-left, 0px)); }
+  #btOverlay[hidden] { display: none; }
+  .btg-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  .btg-head h2 { margin: 0; font-size: 1rem; }
+  #btgWrap { flex: 1; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+  #btgSvg text { font-family: inherit; pointer-events: none; }
+  .btg-node rect.box { fill: var(--card); stroke: #3a3f48; stroke-width: 1.5; }
+  .btg-node.st-RUNNING rect.box { stroke: var(--yellow); stroke-width: 3; fill: #2b2618; }
+  .btg-node.st-SUCCESS rect.box { stroke: var(--green); stroke-width: 3; }
+  .btg-node.st-FAILURE rect.box { stroke: var(--red); stroke-width: 3; fill: #2b1a1c; }
+  .btg-node.was-SUCCESS rect.box { stroke: var(--green); stroke-dasharray: 5 4; }
+  .btg-node.was-FAILURE rect.box { stroke: var(--red); stroke-dasharray: 5 4; }
+  .btg-node.was-RUNNING rect.box { stroke: var(--yellow); stroke-dasharray: 5 4; }
+  .btg-node { cursor: pointer; }
+  .btg-node.sel rect.box { filter: drop-shadow(0 0 6px rgba(255,255,255,0.35)); }
+  .btg-edge { fill: none; stroke: #4a505a; stroke-width: 1.5; }
+  #btgInfo { margin-top: 8px; font-size: 0.85rem; min-height: 2.6em; }
   .bt-log { font-family: ui-monospace, monospace; font-size: 0.75rem; max-height: 14em; overflow-y: auto; margin-top: 4px; }
   #launchMsg { margin-top: 10px; min-height: 1em; }
 
@@ -424,7 +443,9 @@
       </select>
       <label class="sub" for="viaGraph">Wegennet</label>
       <span><label class="sub" title="Doel en route over de knopen en rijbanen van het wegennet (Nav2 Route Server) in plaats van vrij over de kaart (planner). Teken het wegennet op Mappen."><input type="checkbox" id="viaGraph"> rijden via het wegennet</label>
-        <span class="sub" id="graphState"></span></span>
+        <span class="sub" id="graphState"></span>
+        <span class="sub" id="graphTip" style="display:none; color: var(--yellow)"><br>Tip: <b>Pure Pursuit</b> volgt de rijbanen het nauwkeurigst
+          (simulator: gemiddeld 3 cm naast de lijn, DWB 6 cm, MPPI 10-20 cm - MPPI snijdt bochten af).</span></span>
       <label class="sub" for="tolSel">Nauwkeurigheid</label>
       <select id="tolSel" title="Wanneer is de robot 'aangekomen'? Nauwkeuriger dan AMCL (5-10 cm) heeft geen zin: dan gaat hij wiebelen of blijven draaien">
         <option value="ruim" title="25 cm, 14 graden - standaard van TurtleBot3">ruim (25 cm)</option>
@@ -471,12 +492,26 @@
         <div class="toolbar">
           <select id="btSel" title="Welke boom tonen"><option value="">van het huidige doel (live)</option></select>
           <label class="sub"><input type="checkbox" id="btAttrs" checked> parameters</label>
+          <button class="btn" id="btBig" data-icon="fit" data-tip="De boom groot tonen, zoals in Groot: kaartjes van boven naar onder">Groot tonen</button>
         </div>
         <div class="sub bt-legend"><span style="--c: var(--yellow)">bezig</span><span style="--c: var(--green)">gelukt</span><span style="--c: var(--red)">mislukt</span><span style="--c: #3a3f48">wacht</span><span>vaag = laatste status</span></div>
         <div class="sub" id="btWarn" style="display:none; color: var(--yellow)"></div>
         <div id="btTree" class="bt-tree"></div>
         <details style="margin-top:8px"><summary class="sub">Laatste statuswissels</summary><div id="btLog" class="bt-log"></div></details>
       </details>
+    </div>
+    <div id="btOverlay" hidden role="dialog" aria-label="Behavior tree">
+      <div class="btg-head">
+        <h2>Behavior tree</h2><span class="sub" id="btgName"></span>
+        <span class="sub bt-legend" style="margin:0"><span style="--c: var(--yellow)">bezig</span><span style="--c: var(--green)">gelukt</span><span style="--c: var(--red)">mislukt</span><span>stippellijn = laatste status</span></span>
+        <span style="flex:1"></span>
+        <button class="btn" id="btgOut" data-icon="minus" aria-label="Kleiner"></button>
+        <button class="btn" id="btgIn" data-icon="plus" aria-label="Groter"></button>
+        <button class="btn" id="btgFit" data-icon="fit">Passend</button>
+        <button class="btn" id="btgClose" data-icon="x">Sluiten</button>
+      </div>
+      <div id="btgWrap"><svg id="btgSvg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+      <div id="btgInfo" class="sub">Klik op een blok voor uitleg en parameters.</div>
     </div>
 
     <div class="card admin-only nav-only">
@@ -725,7 +760,11 @@
   // goals and route points snap onto a node of the graph
   var viaGraph = document.getElementById("viaGraph");
   viaGraph.checked = lsGet("navViaGraph", "0") === "1";
-  function viaGraphUi() { plannerSel.disabled = viaGraph.checked; }
+  function viaGraphUi() {
+    plannerSel.disabled = viaGraph.checked;
+    document.getElementById("graphTip").style.display = viaGraph.checked && controllerSel.value !== "RPP" ? "" : "none";
+  }
+  controllerSel.addEventListener("change", viaGraphUi);
   viaGraphUi();
   viaGraph.addEventListener("change", function () { lsSet("navViaGraph", viaGraph.checked ? "1" : "0"); viaGraphUi(); draw(); });
   function algo() {
@@ -753,6 +792,8 @@
     ControllerSelector: "Kiest welke controller (DWB, RPP, MPPI): de keuze op deze pagina.",
     PlannerSelector: "Kiest welke planner (NavFn, Smac, Theta*): de keuze op deze pagina.",
     ComputePathToPose: "Planner: berekent een pad naar het doel over de global costmap (planner_server).",
+    GetPoseFromPath: "Haalt één pose uit een pad (hier: het begin van de route).",
+    ConcatenatePaths: "Plakt twee paden aan elkaar (hier: van de robot naar het wegennet + de route).",
     ComputeRoute: "Route Server: kortste weg over het wegennet - knopen en rijbanen (route_server).",
     FollowPath: "Controller: volgt het pad en ontwijkt obstakels in de local costmap (controller_server).",
     ClearEntireCostmap: "Maakt een costmap leeg: obstakels die er niet meer zijn verdwijnen.",
@@ -785,27 +826,121 @@
     if (!main) { el.innerHTML = '<div class="sub">boom niet te lezen</div>'; return; }
     var uid = 0;
     btNodes = {};
-    function walk(node) {
-      var tag = node.tagName, id = ++uid, name = node.getAttribute("name") || tag;
-      btNodes[id] = name;
-      var attrs = Array.prototype.filter.call(node.attributes, function (a) { return a.name !== "name"; })
-        .map(function (a) { return a.name + "=" + a.value; }).join("  ");
-      var kids = Array.prototype.filter.call(node.childNodes, function (c) { return c.nodeType === 1; });
-      if (tag === "SubTree" && trees[node.getAttribute("ID")])
-        kids = Array.prototype.filter.call(trees[node.getAttribute("ID")].childNodes, function (c) { return c.nodeType === 1; });
-      var kind = btKind(tag), help = BT_HELP[tag] || "";
-      var h = '<li id="bt' + id + '"><div class="bt-row" title="' + escHtml(tag + (help ? ": " + help : "") + (attrs ? "\n" + attrs : "")) + '">' +
-        '<span class="bt-dot"></span><span class="bt-kind k-' + kind + '">' + escHtml(tag) + "</span>" +
-        (name !== tag ? "<b>" + escHtml(name) + "</b>" : "") +
+    function elems(n) { return Array.prototype.filter.call(n.childNodes, function (c) { return c.nodeType === 1; }); }
+    function build(node) {   // XML -> {id, tag, name, attrs, kids}, ids depth-first like BT.CPP
+      var tag = node.tagName, n = { id: ++uid, tag: tag, name: node.getAttribute("name") || tag };
+      n.attrs = Array.prototype.filter.call(node.attributes, function (a) { return a.name !== "name"; })
+        .map(function (a) { return [a.name, a.value]; });
+      var kids = tag === "SubTree" && trees[node.getAttribute("ID")] ? elems(trees[node.getAttribute("ID")]) : elems(node);
+      btNodes[n.id] = n.name;
+      n.kids = kids.map(build);
+      return n;
+    }
+    btTreeData = elems(main).map(build);
+    function li(n) {
+      var attrs = n.attrs.map(function (a) { return a[0] + "=" + a[1]; }).join("  ");
+      var help = BT_HELP[n.tag] || "";
+      var h = '<li id="bt' + n.id + '"><div class="bt-row" title="' + escHtml(n.tag + (help ? ": " + help : "") + (attrs ? "\n" + attrs : "")) + '">' +
+        '<span class="bt-dot"></span><span class="bt-kind k-' + btKind(n.tag) + '">' + escHtml(n.tag) + "</span>" +
+        (n.name !== n.tag ? "<b>" + escHtml(n.name) + "</b>" : "") +
         (btAttrs.checked && attrs ? '<span class="bt-attr">' + escHtml(attrs.length > 90 ? attrs.slice(0, 88) + "..." : attrs) + "</span>" : "") + "</div>";
-      if (kids.length) h += "<ul>" + kids.map(walk).join("") + "</ul>";
+      if (n.kids.length) h += "<ul>" + n.kids.map(li).join("") + "</ul>";
       return h + "</li>";
     }
-    var top = Array.prototype.filter.call(main.childNodes, function (c) { return c.nodeType === 1; });
-    el.innerHTML = "<ul>" + top.map(walk).join("") + "</ul>";
+    el.innerHTML = "<ul>" + btTreeData.map(li).join("") + "</ul>";
     btShownXml = btData.xml;
+    if (!btOverlay.hidden) btDrawBig();
     btPaint();
   }
+
+  // ---- Groot-style view: cards top-down, lines from parent to children ----
+  var btOverlay = document.getElementById("btOverlay"), btTreeData = [], btZoom = 0, btSelId = null;
+  var BTG_W = 176, BTG_H = 50, BTG_GX = 14, BTG_GY = 44;
+  var BTG_COLOR = { control: "--purple", decorator: "--orange", condition: null, action: "--accent" };
+  function btDrawBig() {
+    var svg = document.getElementById("btgSvg");
+    document.getElementById("btgName").textContent = btData && btData.name ? btData.name : "";
+    var leaf = 0, maxDepth = 0, nodes = [], edges = [];
+    function place(n, depth) {   // leaves side by side, a parent centred above its children
+      maxDepth = Math.max(maxDepth, depth);
+      n.y = 16 + depth * (BTG_H + BTG_GY);
+      if (!n.kids.length) n.x = 16 + leaf++ * (BTG_W + BTG_GX);
+      else {
+        n.kids.forEach(function (k) { place(k, depth + 1); });
+        n.x = (n.kids[0].x + n.kids[n.kids.length - 1].x) / 2;
+      }
+      nodes.push(n);
+      n.kids.forEach(function (k) { edges.push([n, k]); });
+    }
+    btTreeData.forEach(function (n) { place(n, 0); });
+    var W = 32 + Math.max(leaf, 1) * (BTG_W + BTG_GX) - BTG_GX, H = 32 + (maxDepth + 1) * (BTG_H + BTG_GY) - BTG_GY;
+    function cut(t, max) { return t.length > max ? t.slice(0, max - 1) + "\u2026" : t; }
+    var h = edges.map(function (e) {
+      var x1 = e[0].x + BTG_W / 2, y1 = e[0].y + BTG_H, x2 = e[1].x + BTG_W / 2, y2 = e[1].y, my = y1 + BTG_GY / 2;
+      return '<path class="btg-edge" d="M' + x1 + "," + y1 + "V" + my + "H" + x2 + "V" + y2 + '"/>';
+    }).join("");
+    h += nodes.map(function (n) {
+      var kind = btKind(n.tag), c = BTG_COLOR[kind] ? css(BTG_COLOR[kind]) : "#22d3ee";
+      return '<g class="btg-node" id="btg' + n.id + '" data-id="' + n.id + '" transform="translate(' + n.x + "," + n.y + ')">' +
+        '<rect class="box" width="' + BTG_W + '" height="' + BTG_H + '" rx="7"/>' +
+        '<rect width="' + BTG_W + '" height="17" rx="7" fill="' + c + '" opacity="0.25"/>' +
+        '<text x="8" y="12.5" font-size="10.5" fill="' + c + '">' + escHtml(cut(n.tag, 28)) + "</text>" +
+        '<text x="8" y="36" font-size="12.5" font-weight="600" fill="currentColor">' + escHtml(cut(n.name, 25)) + "</text></g>";
+    }).join("");
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    svg.dataset.w = W; svg.dataset.h = H;
+    svg.innerHTML = h;
+    btgSize();
+    svg.querySelectorAll(".btg-node").forEach(function (g) {
+      g.addEventListener("click", function () { btSelId = +g.dataset.id; btgShowInfo(); btPaint(); });
+    });
+    btgShowInfo();
+  }
+  function btgSize() {   // btZoom 0 = fit the width, but never so small the text can't be read
+    var svg = document.getElementById("btgSvg"), wrap = document.getElementById("btgWrap");
+    var W = +svg.dataset.w || 1, H = +svg.dataset.h || 1;
+    var k = btZoom || Math.max(0.85, Math.min(1.25, (wrap.clientWidth - 4) / W));
+    svg.setAttribute("width", Math.round(W * k)); svg.setAttribute("height", Math.round(H * k));
+    svg.style.color = css("--text") || "#e6edf3";
+  }
+  function btgFind(list, id) {
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === id) return list[i];
+      var f = btgFind(list[i].kids, id);
+      if (f) return f;
+    }
+    return null;
+  }
+  function btgShowInfo() {
+    var info = document.getElementById("btgInfo"), n = btSelId !== null ? btgFind(btTreeData, btSelId) : null;
+    if (!n) { info.innerHTML = "Klik op een blok voor uitleg en parameters."; return; }
+    var st = btStatus && btData && btData.active ? (btStatus.s[n.id] || "") : "";
+    info.innerHTML = "<b>" + escHtml(n.name) + "</b> (" + escHtml(n.tag) + ")" + (st ? " - " + escHtml(st) : "") +
+      (BT_HELP[n.tag] ? "<br>" + escHtml(BT_HELP[n.tag]) : "") +
+      (n.attrs.length ? '<br><span style="font-family:ui-monospace,monospace">' +
+        n.attrs.map(function (a) { return escHtml(a[0]) + "=" + escHtml(a[1]); }).join("&nbsp;&nbsp; ") + "</span>" : "");
+  }
+  function btOpenBig(open) {
+    btOverlay.hidden = !open;
+    if (open) { btBox.open = true; btBox.dispatchEvent(new Event("toggle")); btDrawBig(); btPaint(); }
+  }
+  document.getElementById("btBig").addEventListener("click", function () { btOpenBig(true); });
+  document.getElementById("btgClose").addEventListener("click", function () { btOpenBig(false); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !btOverlay.hidden) btOpenBig(false); });
+  (function () {   // drag = scroll (wide trees)
+    var wrap = document.getElementById("btgWrap"), d = null;
+    wrap.addEventListener("pointerdown", function (e) { if (e.target.closest(".btg-node")) return; d = { x: e.clientX, y: e.clientY, l: wrap.scrollLeft, t: wrap.scrollTop }; wrap.style.cursor = "grabbing"; });
+    window.addEventListener("pointermove", function (e) { if (d) { wrap.scrollLeft = d.l - (e.clientX - d.x); wrap.scrollTop = d.t - (e.clientY - d.y); } });
+    window.addEventListener("pointerup", function () { d = null; wrap.style.cursor = ""; });
+  })();
+  document.getElementById("btgFit").addEventListener("click", function () { btZoom = 0; btgSize(); });
+  document.getElementById("btgIn").addEventListener("click", function () {
+    var svg = document.getElementById("btgSvg"); btZoom = Math.min(3, (+svg.getAttribute("width") / +svg.dataset.w) * 1.25); btgSize();
+  });
+  document.getElementById("btgOut").addEventListener("click", function () {
+    var svg = document.getElementById("btgSvg"); btZoom = Math.max(0.3, (+svg.getAttribute("width") / +svg.dataset.w) / 1.25); btgSize();
+  });
+  window.addEventListener("resize", function () { if (!btOverlay.hidden && !btZoom) btgSize(); });
   function btPaint() {
     var live = btData && btData.active && btStatus, warn = document.getElementById("btWarn");
     var mismatch = false;
@@ -815,7 +950,10 @@
       var st = live ? btStatus.s[id] : null, was = live && btStatus.last ? btStatus.last[id] : null;
       // after the goal every node is IDLE again: the last status stays, faded
       li.className = st && st !== "IDLE" ? "st-" + st : was ? "was-" + was : "";
+      var g = document.getElementById("btg" + id);
+      if (g) g.setAttribute("class", "btg-node " + li.className + (+id === btSelId ? " sel" : ""));
     });
+    if (!btOverlay.hidden && btSelId !== null) btgShowInfo();
     if (live) btStatus.log.forEach(function (e) { if (btNodes[e[1]] && btNodes[e[1]] !== e[2]) mismatch = true; });
     warn.style.display = mismatch ? "" : "none";
     warn.textContent = mismatch ? "De live status hoort bij een andere boom (bv. een doel uit je eigen script met een eigen behavior tree)." : "";
@@ -2099,8 +2237,11 @@
     box.innerHTML = '<span class="sub">Bij punt:</span>' + route.map(function (p, i) {
       return '<label class="sub">' + (i + 1) + ' <select data-pt="' + i + '">' + ACTIONS.map(function (a) {
         return '<option value="' + a[0] + '"' + ((p.action || "") === a[0] ? " selected" : "") + ">" + a[1] + "</option>";
-      }).join("") + "</select></label>";
+      }).join("") + '</select><button class="btn" data-del="' + i + '" title="Punt ' + (i + 1) + ' uit de route halen" aria-label="Punt ' + (i + 1) + ' wissen" style="padding:0 6px">&times;</button></label>';
     }).join("");
+    box.querySelectorAll("button[data-del]").forEach(function (b) {
+      b.addEventListener("click", function () { route.splice(+b.dataset.del, 1); updateRoute(); draw(); });
+    });
     box.querySelectorAll("select").forEach(function (sel) {
       sel.addEventListener("change", function () {
         var p = route[+sel.dataset.pt];

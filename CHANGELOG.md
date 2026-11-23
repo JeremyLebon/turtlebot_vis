@@ -12,6 +12,13 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## 1.1.2 - 2026-11-23 (branch feature/route, image `:route`)
+- **Virtuele robot 1.11.1**: doel met een andere behavior tree wordt niet
+  meer geweigerd (eerst het lopende doel stoppen); rijden via het wegennet
+  ook als de robot ernaast staat; behavior tree *Groot tonen* (kaartjes van
+  boven naar onder); route: elk punt apart wissen; tip Pure Pursuit voor het
+  wegennet. Zie de CHANGELOG van turtlebot_docker 1.11.1.
+
 ## 1.1.1 - 2026-11-23 (branch feature/route)
 - **`start.sh` vervangt de container van een andere map.** Staat er al een
   `turtlebot-vis` van de gewone map `turtlebot_vis` (ander compose-project,
