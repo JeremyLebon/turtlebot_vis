@@ -256,6 +256,8 @@
         <button class="btn mode tip-r maps-only" data-mode="edit" data-icon="pencil" aria-label="Kaart bewerken" data-tip="Kaart bewerken: muren bij- of wegtekenen (het origineel blijft bewaard)"></button>
         <button class="btn mode tip-r" data-mode="measure" id="measureBtn" data-icon="ruler" aria-label="Meten" data-tip="Meten: sleep van punt A naar punt B"></button>
         <span class="rsep nav-only"></span>
+        <button class="btn tip-r nav-only" id="dockBtn" data-icon="bolt" aria-label="Naar laadplaats" data-tip="Naar de laadplaats (knoop van het wegennet) en daar aanmeren"></button>
+        <button class="btn tip-r nav-only" id="undockBtn" data-icon="fwd" style="display:none" aria-label="Vertrek van laadplaats" data-tip="Vertrekken van de laadplaats (achteruit weg)"></button>
         <button class="btn tip-r nav-only" id="pauseBtn" data-icon="pause" style="display:none" aria-label="Pauze" data-tip="Pauze: doel of route onderbreken (later verder)"></button>
         <button class="btn tip-r nav-only" id="resumeBtn" data-icon="play" style="display:none" aria-label="Verder" data-tip="Verder rijden"></button>
         <button class="btn danger tip-r nav-only" id="cancelBtn" data-icon="x" aria-label="Annuleer" data-tip="Doel of route annuleren"></button>
@@ -298,7 +300,12 @@
         <option value="both">beide richtingen</option>
         <option value="oneway">eenrichting (1e &rarr; 2e knoop)</option>
       </select>
-      <span id="graphNameBox" style="display:none" class="sub">naam <input type="text" id="graphName" maxlength="20" style="width:7em" placeholder="bv. P1"></span>
+      <span id="graphNameBox" style="display:none" class="sub">naam <input type="text" id="graphName" maxlength="20" style="width:7em" placeholder="bv. P1">
+        <label title="Laadplaats: de robot rijdt naar deze knoop en meert dan 30 cm verder aan (docking_server), in de gekozen richting"><input type="checkbox" id="graphDock"> laadplaats</label>
+        <select id="graphDockDir" title="Richting waarin de robot aanmeert (en dan staat)">
+          <option value="0">&rarr; oost</option><option value="45">&nearr; noordoost</option><option value="90">&uarr; noord</option><option value="135">&nwarr; noordwest</option>
+          <option value="180">&larr; west</option><option value="-135">&swarr; zuidwest</option><option value="-90">&darr; zuid</option><option value="-45">&searr; zuidoost</option>
+        </select></span>
       <button class="btn" id="graphUndo" data-icon="undo">Ongedaan maken</button>
       <button class="btn stop" id="graphClear" data-icon="trash">Wis alle</button>
       <button class="btn" id="graphSave" data-icon="check" data-tip="Bewaren voor deze kaart en meteen in de Route Server laden">Bewaar &amp; toepassen</button>
@@ -361,6 +368,7 @@
       <span style="--c: #4ea1ff">snelheidszone</span>
       <span style="--c: #e3b341">verkenningsgebied</span>
       <span style="--c: #22d3ee">wegennet</span>
+      <span style="--c: #e3b341">laadplaats</span>
       <span id="mapInfo"></span>
     </div>
     <div class="sub" id="modeHint" style="margin-top:6px"></div>
@@ -439,13 +447,18 @@
       <select id="controllerSel" title="Lokale controller: volgt het pad en ontwijkt obstakels">
         <option value="FollowPath" title="DWB - probeert veel snelheden uit en kiest de beste (standaard van TurtleBot3)">DWB</option>
         <option value="RPP" title="Regulated Pure Pursuit - volgt een punt voor zich op het pad, rustig">Pure Pursuit</option>
+        <option value="RPPStrict" title="Pure Pursuit strikt: mikt 15 cm voor zich, rijdt tot op de knoop en draait daar ter plaatse - voor rijden via het wegennet (trager, 0,15 m/s)">Pure Pursuit strikt (rijbanen)</option>
         <option value="MPPI" title="MPPI - simuleert 1000 mogelijke trajecten per stap en kiest het beste; vloeiend (standaard op deze pagina, afgesteld voor de Pi 5)">MPPI</option>
       </select>
       <label class="sub" for="viaGraph">Wegennet</label>
       <span><label class="sub" title="Doel en route over de knopen en rijbanen van het wegennet (Nav2 Route Server) in plaats van vrij over de kaart (planner). Teken het wegennet op Mappen."><input type="checkbox" id="viaGraph"> rijden via het wegennet</label>
         <span class="sub" id="graphState"></span>
-        <span class="sub" id="graphTip" style="display:none; color: var(--yellow)"><br>Tip: <b>Pure Pursuit</b> volgt de rijbanen het nauwkeurigst
-          (simulator: gemiddeld 3 cm naast de lijn, DWB 6 cm, MPPI 10-20 cm - MPPI snijdt bochten af).</span></span>
+        <span class="sub" id="graphTip" style="display:none; color: var(--yellow)"><br>Tip: <b>Pure Pursuit strikt</b> volgt de rijbanen exact en draait op de knopen; <b>Pure Pursuit</b> rijdt vlotter
+          (simulator, gemiddeld naast de rijbaan: strikt 1 cm, Pure Pursuit 3-4 cm, DWB 6 cm, MPPI 10-20 cm - MPPI snijdt bochten af).</span></span>
+      <label class="sub" for="batReturn">Batterij</label>
+      <span><label class="sub" title="Zakt de batterij onder deze grens tijdens een doel of route via het wegennet, dan stopt de robot en rijdt hij naar de laadplaats (behavior tree: IsBatteryLow). Vraagt een laadplaats in het wegennet."><input type="checkbox" id="batReturn"> terug naar de laadplaats onder</label>
+        <input type="number" id="batReturnPct" min="5" max="90" step="5" value="20" style="width:4em"> %
+        <span class="sub" id="batReturnInfo"></span></span>
       <label class="sub" for="tolSel">Nauwkeurigheid</label>
       <select id="tolSel" title="Wanneer is de robot 'aangekomen'? Nauwkeuriger dan AMCL (5-10 cm) heeft geen zin: dan gaat hij wiebelen of blijven draaien">
         <option value="ruim" title="25 cm, 14 graden - standaard van TurtleBot3">ruim (25 cm)</option>
@@ -760,9 +773,23 @@
   // goals and route points snap onto a node of the graph
   var viaGraph = document.getElementById("viaGraph");
   viaGraph.checked = lsGet("navViaGraph", "0") === "1";
+  // Back to the laadplaats on a low battery: % on the page, volts to Nav2
+  // (IsBatteryLow is_voltage; same scale as the header, BATT_EMPTY..BATT_FULL)
+  var batReturn = document.getElementById("batReturn"), batReturnPct = document.getElementById("batReturnPct");
+  batReturn.checked = lsGet("navBatReturn", "0") === "1";
+  batReturnPct.value = lsGet("navBatReturnPct", "20");
+  function batVolt(pct) { return +(BATT_EMPTY + pct / 100 * (BATT_FULL - BATT_EMPTY)).toFixed(2); }
+  function batReturnUi() {
+    batReturn.disabled = !viaGraph.checked;
+    document.getElementById("batReturnInfo").textContent = "(" + batVolt(+batReturnPct.value || 20).toFixed(2) + " V" +
+      (viaGraph.checked ? "" : ", enkel via het wegennet") + ")";
+  }
+  batReturn.addEventListener("change", function () { lsSet("navBatReturn", batReturn.checked ? "1" : "0"); });
+  batReturnPct.addEventListener("change", function () { lsSet("navBatReturnPct", batReturnPct.value); batReturnUi(); });
   function viaGraphUi() {
+    batReturnUi();
     plannerSel.disabled = viaGraph.checked;
-    document.getElementById("graphTip").style.display = viaGraph.checked && controllerSel.value !== "RPP" ? "" : "none";
+    document.getElementById("graphTip").style.display = viaGraph.checked && !/^RPP/.test(controllerSel.value) ? "" : "none";
   }
   controllerSel.addEventListener("change", viaGraphUi);
   viaGraphUi();
@@ -770,6 +797,7 @@
   function algo() {
     var a = { planner: plannerSel.value, controller: controllerSel.value, tolerance: tolerance() };
     if (viaGraph.checked) a.graph = true;
+    if (viaGraph.checked && batReturn.checked) a.battery_return = batVolt(+batReturnPct.value || 20);
     return a;
   }
 
@@ -792,6 +820,10 @@
     ControllerSelector: "Kiest welke controller (DWB, RPP, MPPI): de keuze op deze pagina.",
     PlannerSelector: "Kiest welke planner (NavFn, Smac, Theta*): de keuze op deze pagina.",
     ComputePathToPose: "Planner: berekent een pad naar het doel over de global costmap (planner_server).",
+    IsBatteryLow: "Lukt als de batterij onder min_battery zit (hier in volt, van /battery_state).",
+    Inverter: "Keert het resultaat om: gelukt wordt mislukt en omgekeerd.",
+    DockRobot: "Meert aan de laadplaats (docking_server): nauwkeurig inparkeren vanaf het punt ervoor.",
+    UndockRobot: "Vertrekt van de laadplaats (achteruit weg).",
     GetPoseFromPath: "Haalt één pose uit een pad (hier: het begin van de route).",
     ConcatenatePaths: "Plakt twee paden aan elkaar (hier: van de robot naar het wegennet + de route).",
     ComputeRoute: "Route Server: kortste weg over het wegennet - knopen en rijbanen (route_server).",
@@ -1010,7 +1042,8 @@
     ready.textContent = !s.nav2_ready ? "niet gestart" : waiting ? (s.loc ? "start op..." : "wacht op beginpositie") : "actief";
     ready.style.color = !s.nav2_ready ? "var(--muted)" : waiting ? "var(--yellow)" : "var(--green)";
     var stEl = document.getElementById("nsState");
-    stEl.textContent = (STATE_TEXT[s.state] || s.state) + (s.mode ? " (" + (s.mode === "route" ? "route" : "doel") + ")" : "");
+    stEl.textContent = (STATE_TEXT[s.state] || s.state) + (s.mode ? " (" + (s.mode === "route" ? "route" : s.mode === "dock" ? "laadplaats" : "doel") + ")" : "");
+    document.getElementById("undockBtn").style.display = s.docked ? "" : "none";
     stEl.style.color = s.state === "succeeded" ? "var(--green)" : (s.state === "aborted" || s.state === "error" || s.state === "rejected") ? "var(--red)" : "";
     var nav = s.state === "navigating";
     document.getElementById("nsDist").textContent = nav && s.distance_remaining != null ? s.distance_remaining.toFixed(2) + " m" : "--";
@@ -1719,6 +1752,10 @@
     nameBox.style.display = sel && graphTool === "node" ? "" : "none";
     var nameEl = document.getElementById("graphName");
     if (sel && document.activeElement !== nameEl) nameEl.value = sel.name || "";
+    var dockEl = document.getElementById("graphDock"), dirEl = document.getElementById("graphDockDir");
+    dockEl.checked = !!(sel && sel.dock !== undefined);
+    dirEl.style.display = dockEl.checked ? "" : "none";
+    if (sel && sel.dock !== undefined) dirEl.value = String(Math.round(sel.dock * 180 / Math.PI / 45) * 45 === -180 ? 180 : Math.round(sel.dock * 180 / Math.PI / 45) * 45);
     var nn = graph.nodes.length, ne = graph.edges.length;
     document.getElementById("graphInfo").textContent =
       (zoneMap && zoneMap !== "_verkenning" ? "kaart " + zoneMap + (fileMap ? " (bestand, Navigatie uit)" : "") + ": "
@@ -1740,6 +1777,16 @@
     if (!n.name) delete n.name;
     graphUi(); draw();
   });
+  function graphDockSet() {
+    var n = graphSel !== null ? graphNode(graphSel) : null;
+    if (!n) return;
+    graphEdit();
+    if (document.getElementById("graphDock").checked) n.dock = +document.getElementById("graphDockDir").value * Math.PI / 180;
+    else delete n.dock;
+    graphUi(); draw();
+  }
+  document.getElementById("graphDock").addEventListener("change", graphDockSet);
+  document.getElementById("graphDockDir").addEventListener("change", graphDockSet);
   document.getElementById("graphUndo").addEventListener("click", function () {
     if (!graphUndo.length) return;
     setGraph(JSON.parse(graphUndo.pop()));
@@ -1783,9 +1830,17 @@
     ctx.font = "bold " + (11 * dpr) + "px sans-serif";
     graph.nodes.forEach(function (n) {
       var c = toCanvas(n.x, n.y), sel = editing && n.id === graphSel;
+      if (n.dock !== undefined) {   // laadplaats: dashed line to the dock pose (30 cm on) + square
+        var d = toCanvas(n.x + 0.3 * Math.cos(n.dock), n.y + 0.3 * Math.sin(n.dock));
+        ctx.save(); ctx.strokeStyle = "#e3b341"; ctx.fillStyle = "#e3b341"; ctx.setLineDash([4 * dpr, 3 * dpr]);
+        ctx.beginPath(); ctx.moveTo(c[0], c[1]); ctx.lineTo(d[0], d[1]); ctx.stroke(); ctx.setLineDash([]);
+        var hs = 6 * dpr; ctx.fillRect(d[0] - hs, d[1] - hs, 2 * hs, 2 * hs);
+        ctx.fillStyle = "#000"; ctx.font = "bold " + (10 * dpr) + "px sans-serif"; ctx.fillText("\u26a1", d[0] - 4 * dpr, d[1] + 4 * dpr);
+        ctx.restore();
+      }
       ctx.beginPath(); ctx.arc(c[0], c[1], (sel ? 7 : 5) * dpr, 0, 2 * Math.PI);
       ctx.fillStyle = sel ? GRAPH_COLOR : "#0d1b22"; ctx.fill(); ctx.stroke();
-      var label = n.name || (editing ? String(n.id) : "");
+      var label = (n.dock !== undefined ? "\u26a1 " : "") + (n.name || (editing || n.dock !== undefined ? (n.dock !== undefined ? "laadplaats" : String(n.id)) : ""));
       if (label) {
         var tw = ctx.measureText(label).width;
         ctx.fillStyle = "#000a"; ctx.fillRect(c[0] + 7 * dpr, c[1] - 17 * dpr, tw + 6 * dpr, 14 * dpr);
@@ -2268,6 +2323,17 @@
   document.getElementById("routeUndo").addEventListener("click", function () { route.pop(); updateRoute(); draw(); });
   document.getElementById("routeClear").addEventListener("click", function () { route = []; updateRoute(); draw(); });
   document.getElementById("cancelBtn").addEventListener("click", function () { sendCmd({ cmd: "cancel" }); });
+  document.getElementById("dockBtn").addEventListener("click", function () {
+    if (!graph.nodes.some(function (n) { return n.dock !== undefined; })) {
+      document.getElementById("navMsg").textContent = "Nog geen laadplaats: kies op Mappen > Wegennet een knoop en vink 'laadplaats' aan.";
+      return;
+    }
+    if (!exploreOk()) return;
+    goal = null; route = []; updateRoute();
+    var a = algo(); delete a.battery_return;
+    sendCmd(Object.assign({ cmd: "dock" }, a));
+  });
+  document.getElementById("undockBtn").addEventListener("click", function () { sendCmd({ cmd: "undock" }); });
   document.getElementById("pauseBtn").addEventListener("click", function () { sendCmd({ cmd: "pause" }); });
   document.getElementById("resumeBtn").addEventListener("click", function () { sendCmd({ cmd: "resume" }); });
   // Exploring sends its own goals to the same Nav2: nav_web_node pauses it for ours

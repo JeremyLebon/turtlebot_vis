@@ -1,1 +1,1 @@
-turtlebot_docker 1dfef57 (2026-11-23) 1.11.1: doel met andere behavior tree, start naast het wegennet, BT groot tonen
+turtlebot_docker 35e59c8 (2026-11-23) 1.12.0: laadplaats + aanmeren, terug bij lage batterij, Pure Pursuit strikt

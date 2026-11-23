@@ -14,7 +14,10 @@
 LOG=/tmp/vis_services
 PROCS="twist_mux --ros-args|cmd_vel_guard\.py|status_page_server\.py|system_info_node\.py|launch_control_node\.py|nav_web_node\.py"
 # wat de knoppen starten (SLAM, Navigatie, bringup) gaat mee uit bij het stoppen
-LAUNCHED="sim_bringup|cartographer_headless\.launch\.py|lib/cartographer_ros/|map_saver_server|lifecycle_manager_slam|navigation2\.launch\.py|/opt/ros/jazzy/lib/nav2_"
+# (opennav_docking = docking_server, not under lib/nav2_: a stray one from an
+# earlier Navigation answered the next one's lifecycle manager and docking
+# requests - "Failed to change state for node: docking_server", 2026-11-23)
+LAUNCHED="sim_bringup|cartographer_headless\.launch\.py|lib/cartographer_ros/|map_saver_server|lifecycle_manager_slam|navigation2\.launch\.py|/opt/ros/jazzy/lib/nav2_|/opt/ros/jazzy/lib/opennav_docking/"
 
 stop() {
     pkill -TERM -f "$PROCS|$LAUNCHED" 2>/dev/null || return 0

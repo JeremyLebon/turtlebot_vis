@@ -12,6 +12,18 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## 1.1.3 - 2026-11-23 (branch feature/route, image `:route`)
+- **Virtuele robot 1.12.0**: laadplaats in het wegennet + knop *Naar
+  laadplaats* (aanmeren met docking_server), terug naar de laadplaats bij
+  lage batterij, controller *Pure Pursuit strikt (rijbanen)*, Nav2-bringup
+  die blijft steken wordt opnieuw gestart. Zie de CHANGELOG van
+  turtlebot_docker 1.12.0.
+- **`fenix stop` / wisselen van modus liet `docking_server` draaien**
+  (`virtual_robot_start.sh`: enkel `lib/nav2_*`, niet `lib/opennav_docking/`).
+  De achtergebleven node antwoordde op de lifecycle manager van de volgende
+  Navigatie ("Failed to change state for node: docking_server", Nav2 startte
+  niet volledig) en op aanmeerverzoeken. Ook in `jazzy` (studentenversie).
+
 ## 1.1.2 - 2026-11-23 (branch feature/route, image `:route`)
 - **Virtuele robot 1.11.1**: doel met een andere behavior tree wordt niet
   meer geweigerd (eerst het lopende doel stoppen); rijden via het wegennet

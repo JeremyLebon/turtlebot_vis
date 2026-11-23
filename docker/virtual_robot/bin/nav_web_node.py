@@ -29,6 +29,11 @@
 #                       "edges": [{"from", "to", "oneway"}]} -> road network of the
 #                        map (state/maps/<map>.graph.json), loaded into Nav2's
 #                        route_server; "goal"/"route" with "graph": true drive along it
+#                      {"cmd": "dock", "node": id (optional), "controller", "graph"} -> to the
+#                        laadplaats (a road network node with "dock": yaw) and dock there
+#                        (docking_server); {"cmd": "undock"} -> drive off it. A goal/route
+#                        while docked undocks first. "goal"/"route" with "battery_return": V
+#                        (and "graph"): back to the laadplaats when the battery drops below V
 #                      {"cmd": "bt_view", "name": ""|<file>|"wegennet"} -> /web/bt shows
 #                        that behavior tree ("" = the one of the current goal)
 #   /web/nav_status  std_msgs/String (JSON) out, 2 Hz; also "loc" (AMCL
@@ -79,19 +84,20 @@ import rclpy
 from action_msgs.msg import GoalStatus
 from action_msgs.srv import CancelGoal
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
-from nav2_msgs.action import BackUp, DriveOnHeading, NavigateToPose, Spin
+from nav2_msgs.action import BackUp, DockRobot, DriveOnHeading, NavigateToPose, Spin, UndockRobot
 from nav2_msgs.msg import BehaviorTreeLog, CostmapFilterInfo, ParticleCloud
-from nav2_msgs.srv import LoadMap, SetRouteGraph
+from nav2_msgs.srv import LoadMap, ManageLifecycleNodes, SetRouteGraph
 from nav_msgs.srv import GetMap
 from nav_msgs.msg import MapMetaData, OccupancyGrid, Odometry
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from lifecycle_msgs.srv import GetState
 from rcl_interfaces.msg import Parameter, ParameterType, ParameterValue
 from rcl_interfaces.srv import SetParameters
 from rclpy.action import ActionClient
 from rclpy.clock import Clock, ClockType
 from rclpy.node import Node
 from rclpy.time import Time
-from sensor_msgs.msg import CompressedImage
+from sensor_msgs.msg import BatteryState, CompressedImage
 from std_msgs.msg import Bool, String
 from std_srvs.srv import Empty, Trigger
 from turtlebot3_msgs.srv import Sound
@@ -103,7 +109,7 @@ DEFAULT_BT = ("/opt/ros/" + os.environ.get("ROS_DISTRO", "jazzy") +
 BT_DIR = os.path.dirname(DEFAULT_BT)
 BT_LOG_KEEP = 40         # status changes kept for the page (newest last)
 PLANNERS = ("GridBased", "AStar", "Smac2D", "ThetaStar")
-CONTROLLERS = ("FollowPath", "RPP", "MPPI")
+CONTROLLERS = ("FollowPath", "RPP", "RPPStrict", "MPPI")
 
 # Goal tolerance: set on Nav2's goal checker (controller_server, dynamic
 # parameters) just before each goal. One checker, not one per preset: with
@@ -395,6 +401,8 @@ def clean_graph(g):
         name = str(n.get("name") or "").strip()[:20]
         if name:
             node["name"] = name
+        if n.get("dock") is not None:   # laadplaats: direction the robot faces when docked
+            node["dock"] = round(float(n["dock"]), 3)
         nodes.append(node)
     edges, seen = [], set()
     for e in (g.get("edges") or [])[:2 * GRAPH_MAX_NODES]:
@@ -410,7 +418,8 @@ def graph_geojson(g):
     """Fenix graph -> route_server's GeoJSON: a two-way lane is two edges."""
     pos = {n["id"]: [float(n["x"]), float(n["y"])] for n in g["nodes"]}
     feats = [{"type": "Feature",
-              "properties": {"id": n["id"], "frame": MAP_FRAME, "metadata": {"name": n.get("name", "")}},
+              "properties": {"id": n["id"], "frame": MAP_FRAME,
+                             "metadata": dict({"name": n.get("name", "")}, **({"dock": n["dock"]} if "dock" in n else {}))},
               "geometry": {"type": "Point", "coordinates": pos[n["id"]]}} for n in g["nodes"]]
     eid = EDGE_ID0
     for e in g["edges"]:
@@ -422,6 +431,26 @@ def graph_geojson(g):
     return {"type": "FeatureCollection", "name": "fenix",
             "crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:EPSG::3857"}},
             "features": feats}
+
+
+# Laadplaats (docking_server, see launch_control_node's Nav2 parameters):
+# a node of the road network with "dock" = the direction the robot faces when
+# docked. The robot drives over the road network to that node (the staging
+# pose), then docking_server parks it DOCK_DEPTH further on (dock pose).
+DOCK_DEPTH = 0.3
+DOCK_TYPE = "tb_dock"
+
+
+def dock_poses(node):
+    """(staging (x, y, yaw), dock (x, y, yaw)) of a laadplaats node."""
+    yaw = float(node["dock"])
+    return ((node["x"], node["y"], yaw),
+            (node["x"] + DOCK_DEPTH * math.cos(yaw), node["y"] + DOCK_DEPTH * math.sin(yaw), yaw))
+
+
+def bt_pose(x, y, yaw):
+    """PoseStamped as a BT port value: stamp;frame;x;y;z;qx;qy;qz;qw."""
+    return "0;map;%.3f;%.3f;0;0;0;%.4f;%.4f" % (x, y, math.sin(yaw / 2), math.cos(yaw / 2))
 
 
 def rasterize(info, zones, lane_outside=None):
@@ -493,6 +522,10 @@ def inflate_keepout(keepout, res):
 BASE_FRAME = "base_footprint"
 ODOM_FRAME = "odom"
 
+# First node each Nav2 lifecycle manager activates (nav2_bringup's launch files)
+BRINGUP_FIRST = {"lifecycle_manager_navigation": "controller_server",
+                 "lifecycle_manager_localization": "map_server"}
+
 STATE_NAMES = {
     GoalStatus.STATUS_SUCCEEDED: "succeeded",
     GoalStatus.STATUS_ABORTED: "aborted",
@@ -545,14 +578,55 @@ GRAPH_BT = """<root BTCPP_format="4" main_tree_to_execute="MainTree">
 """
 
 
-def behavior_tree(planner, controller, graph=False):
+# Back to the laadplaats when the battery runs low (goal via the road network
+# with "battery_return"): the goal's tree runs as long as IsBatteryLow fails
+# (re-checked every tick, ReactiveSequence); once the voltage drops below the
+# limit it is halted and the second branch drives over the road network to
+# the laadplaats and docks. Voltage, not percentage: the robot's OpenCR and
+# the simulator both report volts the same way (nav.html converts its %).
+BATTERY_BT = """<root BTCPP_format="4" main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Fallback name="GoalOrLaadplaats">
+      <ReactiveSequence name="WhileBatteryOk">
+        <Inverter name="BatteryNotLow">
+          <IsBatteryLow name="BatteryLow" min_battery="@VOLT@" is_voltage="true" battery_topic="/battery_state"/>
+        </Inverter>
+@MAIN@
+      </ReactiveSequence>
+      <Sequence name="BackToLaadplaats">
+        <IsBatteryLow name="BatteryStillLow" min_battery="@VOLT@" is_voltage="true" battery_topic="/battery_state"/>
+        <ControllerSelector selected_controller="{selected_controller}" default_controller="@CTRL@" topic_name="controller_selector"/>
+        <ComputeRoute name="RouteToLaadplaats" goal="@STAGING@" use_start="false" use_poses="true" path="{dock_route}" error_code_id="{dock_route_error_code}"/>
+        <GetPoseFromPath path="{dock_route}" index="0" pose="{dock_route_start}"/>
+        <ComputePathToPose goal="{dock_route_start}" path="{dock_access}" planner_id="GridBased" error_code_id="{dock_path_error_code}"/>
+        <ConcatenatePaths input_path1="{dock_access}" input_path2="{dock_route}" output_path="{dock_path}"/>
+        <FollowPath name="DriveToLaadplaats" path="{dock_path}" controller_id="{selected_controller}" error_code_id="{dock_follow_error_code}"/>
+        <DockRobot name="DockAtLaadplaats" use_dock_id="false" dock_pose="@DOCK@" dock_type="@TYPE@" navigate_to_staging_pose="false"/>
+      </Sequence>
+    </Fallback>
+  </BehaviorTree>
+</root>
+"""
+
+
+def behavior_tree(planner, controller, graph=False, battery=None):
     """Path of a behavior tree using this planner/controller ("" = Nav2's
-    default); graph: via the road network (GRAPH_BT, no planner)."""
+    default); graph: via the road network (GRAPH_BT, no planner); battery:
+    (volt, laadplaats node) -> BATTERY_BT around it."""
     planner, controller = resolve_algo(planner, controller)
     if graph:
+        tree = GRAPH_BT.replace('default_controller="FollowPath"', 'default_controller="%s"' % controller)
         path = "/tmp/bt_graph_%s.xml" % controller
+        if battery:
+            volt, node = battery
+            staging, dock = dock_poses(node)
+            main = tree.split('<BehaviorTree ID="MainTree">')[1].split("</BehaviorTree>")[0].strip("\n")
+            tree = (BATTERY_BT.replace("@MAIN@", main).replace("@VOLT@", "%.2f" % volt)
+                    .replace("@CTRL@", controller).replace("@STAGING@", bt_pose(*staging))
+                    .replace("@DOCK@", bt_pose(*dock)).replace("@TYPE@", DOCK_TYPE))
+            path = "/tmp/bt_graph_battery_%s.xml" % controller
         with open(path, "w") as f:
-            f.write(GRAPH_BT.replace('default_controller="FollowPath"', 'default_controller="%s"' % controller))
+            f.write(tree)
         return path
     if (planner, controller) == ("GridBased", "FollowPath"):
         return ""
@@ -596,6 +670,24 @@ class NavWebNode(Node):
         self.nav2_active_client = self.create_client(Trigger, "/lifecycle_manager_navigation/is_active")
         self.nav2_active = False
         self.nav2_active_call, self.nav2_active_t = None, 0.0   # pending is_active request
+        # Nav2 bringup aborted by a lifecycle manager ("Failed to change state
+        # for node: docking_server" - the node itself configured fine a few ms
+        # later: a lost service reply over Zenoh, 2 of 4 starts on 2026-11-23,
+        # also seen on the robots as "stop en start Navigatie opnieuw"). An
+        # aborted bringup leaves every node configured but inactive; a normal
+        # one waiting for the initial pose has controller_server (first in the
+        # list) active and planner_server activating. So: the first node of a
+        # manager not active for BRINGUP_STUCK checks while Nav2 runs -> reset
+        # and start that manager again, at most BRINGUP_RETRIES times.
+        # (/rosout's "Aborting bringup" was tried first: over Zenoh a late
+        # subscriber did not get it.)
+        self.bringup_retries = 0
+        self.bringup_stuck = {}     # manager -> consecutive checks its first node was not active
+        self.bringup_probe = {}     # manager -> pending get_state future
+        self.manage_clients = {m: self.create_client(ManageLifecycleNodes, "/%s/manage_nodes" % m)
+                               for m in BRINGUP_FIRST}
+        self.state_clients = {m: self.create_client(GetState, "/%s/get_state" % n)
+                              for m, n in BRINGUP_FIRST.items()}
         self.initialpose_pub = self.create_publisher(PoseWithCovarianceStamped, "/initialpose", 10)
         self.status_pub = self.create_publisher(String, "/web/nav_status", 10)
         self.pose_pub = self.create_publisher(PoseStamped, "/web/robot_pose", 10)
@@ -619,6 +711,15 @@ class NavWebNode(Node):
         self.drive_client = ActionClient(self, DriveOnHeading, "drive_on_heading")
         self.backup_client = ActionClient(self, BackUp, "backup")
         self.nudge_handle = None
+        self.dock_client = ActionClient(self, DockRobot, "dock_robot")
+        self.undock_client = ActionClient(self, UndockRobot, "undock_robot")
+        self.docked = False      # parked at the laadplaats (dock_robot succeeded)
+        self.dock_node = None    # laadplaats node of the running "dock" command
+        self.dock_handle = None
+        self.battery_v = None    # last /battery_state voltage
+        self.battery_return = None   # volt limit of the running goal/route, or None
+        self.create_subscription(BatteryState, "/battery_state",
+                                 lambda m: setattr(self, "battery_v", m.voltage), 10)
         self.sound_client = self.create_client(Sound, "/sound")
         self.action_timer = None    # wait / photo timeout of a route point action
         self.photo_sub = None
@@ -813,7 +914,11 @@ class NavWebNode(Node):
         except ValueError:
             return
         kind = cmd.get("cmd")
-        if kind in ("goal", "route", "cancel", "explore_resume", "pause", "resume"):
+        if kind in ("goal", "route", "dock") and self.docked:
+            # parked at the laadplaats: first drive off it, then the command
+            self._undock(lambda: self._on_cmd(msg))
+            return
+        if kind in ("goal", "route", "cancel", "explore_resume", "pause", "resume", "dock", "undock"):
             self._cancel_nudge()
             self.cmd_seq += 1
             if self.pending_timer is not None:
@@ -860,7 +965,8 @@ class NavWebNode(Node):
                 if not self._graph_ok(cmd, "goal"):
                     return
                 self.algo = self._algo(cmd)
-                bt = behavior_tree(cmd.get("planner"), cmd.get("controller"), bool(cmd.get("graph")))
+                bt = behavior_tree(cmd.get("planner"), cmd.get("controller"), bool(cmd.get("graph")),
+                                   self._battery_arg(cmd))
                 self.last_goal = {"x": float(cmd["x"]), "y": float(cmd["y"]), "yaw": float(cmd["yaw"]),
                                   "bt": bt, "tol": parse_tolerance(cmd.get("tolerance"))}
                 self._send_goal(cmd, bt, "goal", parse_tolerance(cmd.get("tolerance")))
@@ -877,11 +983,14 @@ class NavWebNode(Node):
                 self.algo = self._algo(cmd)
                 self.route = {"poses": poses, "loop": bool(cmd.get("loop")), "lap": 1, "index": 0,
                               "bt": behavior_tree(cmd.get("planner"), cmd.get("controller"),
-                                                  bool(cmd.get("graph"))),
+                                                  bool(cmd.get("graph")), self._battery_arg(cmd)),
                               "tol": tol, "via_tol": parse_tolerance(cmd.get("via_tolerance")) or tol}
                 self._send_route_point()
             elif kind == "cancel":
                 self.route = None
+                self.dock_node = None
+                if self.dock_handle is not None:
+                    self.dock_handle.cancel_goal_async()
                 self._stop_action()
                 if self.paused_goal is not None and self.goal_handle is None:
                     self._set_status("canceled", None, "geannuleerd")
@@ -891,6 +1000,11 @@ class NavWebNode(Node):
                 self._set_zones(cmd.get("zones") or [], cmd.get("map"))
             elif kind == "graph":
                 self._set_graph(cmd)
+            elif kind == "dock":
+                self._dock_start(cmd)
+            elif kind == "undock":
+                self.route = None
+                self._undock(None)
             elif kind == "bt_view":
                 name = str(cmd.get("name") or "")
                 self.bt_view = name if name in self._bt_available() else ""
@@ -1012,6 +1126,11 @@ class NavWebNode(Node):
         self._set_status("relocalizing", None, "opnieuw lokaliseren: robot draait ter plaatse")
 
     def _check_nav2_active(self):
+        if not self.nav_client.server_is_ready() or self.nav2_active:
+            self.bringup_retries = 0      # next Navigation start: retries again
+            self.bringup_stuck = {}
+        else:
+            self._probe_bringup()
         if not self.nav2_active_client.service_is_ready():
             self.nav2_active, self.nav2_active_call = False, None
             return
@@ -1030,6 +1149,45 @@ class NavWebNode(Node):
         self.nav2_active_t = time.monotonic()
         self.nav2_active_call = self.nav2_active_client.call_async(Trigger.Request())
         self.nav2_active_call.add_done_callback(done)
+
+    BRINGUP_RETRIES = 3
+    BRINGUP_STUCK = 4      # checks of 2 s: a normal bringup activates controller_server within ~1 s
+
+    def _probe_bringup(self):
+        for manager, client in self.state_clients.items():
+            if not client.service_is_ready() or self.bringup_probe.get(manager):
+                continue
+            future = client.call_async(GetState.Request())
+            self.bringup_probe[manager] = future
+            future.add_done_callback(lambda f, m=manager: self._on_bringup_state(f, m))
+
+    def _on_bringup_state(self, future, manager):
+        self.bringup_probe[manager] = None
+        try:
+            label = future.result().current_state.label
+        except Exception:
+            return
+        if label not in ("unconfigured", "inactive") or self.nav2_active:
+            self.bringup_stuck[manager] = 0
+            return
+        self.bringup_stuck[manager] = self.bringup_stuck.get(manager, 0) + 1
+        if self.bringup_stuck[manager] < self.BRINGUP_STUCK:
+            return
+        self.bringup_stuck[manager] = 0
+        client = self.manage_clients[manager]
+        if self.bringup_retries >= self.BRINGUP_RETRIES or not client.service_is_ready():
+            self._set_status("error", None, "Nav2 start niet volledig (%s) - stop en start Navigatie opnieuw" % manager)
+            return
+        self.bringup_retries += 1
+        n = self.bringup_retries
+        self.get_logger().warn("%s: bringup bleef steken (%s %s) - opnieuw, poging %d"
+                               % (manager, BRINGUP_FIRST[manager], label, n))
+        self._set_status("idle", None, "Nav2 start opnieuw op (poging %d van %d)..." % (n, self.BRINGUP_RETRIES))
+
+        def startup(_f):
+            client.call_async(ManageLifecycleNodes.Request(command=ManageLifecycleNodes.Request.STARTUP))
+        client.call_async(ManageLifecycleNodes.Request(command=ManageLifecycleNodes.Request.RESET)) \
+            .add_done_callback(startup)
 
     def _send_goal(self, pose, bt, mode, tol=None):
         if not self.nav_client.server_is_ready():
@@ -1165,7 +1323,7 @@ class NavWebNode(Node):
             self.status.update({"state": "navigating", "mode": "route",
                                 "message": "onderweg naar punt %d" % (self.route["index"] + 1)})
         else:
-            self._set_status("navigating", mode, "onderweg")
+            self._set_status("navigating", mode, "naar de laadplaats" if mode == "dock" else "onderweg")
         handle.get_result_async().add_done_callback(lambda f, h=handle: self._on_result(f, h, mode))
 
     def _on_nav_feedback(self, msg):
@@ -1189,6 +1347,19 @@ class NavWebNode(Node):
         if state == "canceled" and (self.paused_goal is not None or (
                 mode == "route" and self.route and self.route.get("paused"))):
             return   # paused from the page: status already says so
+        if mode == "dock":
+            if state == "succeeded" and self.dock_node is not None:
+                self._dock_now()
+                return
+            message = "naar de laadplaats: " + message
+            self.dock_node = None
+        elif state == "succeeded" and self.battery_return and self.battery_v is not None \
+                and self.battery_v < self.battery_return:
+            # BATTERY_BT took the second branch: the robot is at the laadplaats
+            self.route, self.docked = None, True
+            self._set_status("succeeded", "dock", "batterij bijna leeg (%.2f V): teruggereden naar de laadplaats en aangemeerd"
+                             % self.battery_v)
+            return
         if mode == "route" and self.route:
             r = self.route
             if state == "succeeded":
@@ -1504,6 +1675,11 @@ class NavWebNode(Node):
             self.bt_status[str(e.uid)] = e.current_status
             if e.current_status != "IDLE":
                 self.bt_lastst[str(e.uid)] = e.current_status
+            # BATTERY_BT checks the battery every tick (10 ms): only its change
+            # to "low" goes in the list, not the IDLE/FAILURE blinking
+            if e.node_name in ("BatteryLow", "BatteryNotLow", "BatteryStillLow") and not (
+                    e.node_name == "BatteryLow" and e.current_status == "SUCCESS"):
+                continue
             self.bt_log.append([round(e.timestamp.sec + e.timestamp.nanosec * 1e-9, 2), e.uid,
                                 e.node_name, e.previous_status, e.current_status])
         del self.bt_log[:-BT_LOG_KEEP]
@@ -1514,6 +1690,110 @@ class NavWebNode(Node):
         """(planner, controller) for the status; "Wegennet" instead of the planner."""
         planner, controller = resolve_algo(cmd.get("planner"), cmd.get("controller"))
         return ("Wegennet" if cmd.get("graph") else planner, controller)
+
+    def _laadplaats(self, node_id=None):
+        """Laadplaats node of the running map's road network (first, or that id)."""
+        name = running_map()
+        docks = [n for n in load_graph(name)["nodes"] if "dock" in n] if name else []
+        if node_id is not None:
+            docks = [n for n in docks if n["id"] == int(node_id)]
+        return docks[0] if docks else None
+
+    def _battery_arg(self, cmd):
+        """(volt, laadplaats node) for BATTERY_BT, or None."""
+        volt = cmd.get("battery_return")
+        node = self._laadplaats() if volt and cmd.get("graph") else None
+        self.battery_return = float(volt) if node else None
+        return (float(volt), node) if node else None
+
+    def _dock_start(self, cmd):
+        node = self._laadplaats(cmd.get("node"))
+        if node is None:
+            self._set_status("error", "dock", "geen laadplaats in het wegennet van deze kaart - zet er een op Mappen > Wegennet")
+            return
+        self.route = None
+        self._stop_action()
+        self.paused_goal = None
+        self.battery_return = None
+        graph = bool(cmd.get("graph"))
+        if graph and not self._graph_ok(cmd, "dock"):
+            return
+        self.dock_node = node
+        self.algo = self._algo(dict(cmd, graph=graph))
+        staging, _ = dock_poses(node)
+        self._send_goal({"x": staging[0], "y": staging[1], "yaw": staging[2]},
+                        behavior_tree(cmd.get("planner"), cmd.get("controller"), graph), "dock",
+                        parse_tolerance("normaal"))
+
+    def _dock_now(self):
+        """At the staging node: docking_server parks the robot (dock pose)."""
+        node = self.dock_node
+        if not self.dock_client.server_is_ready():
+            self.dock_node = None
+            self._set_status("error", "dock", "docking_server draait niet - herstart Navigatie")
+            return
+        _, dock = dock_poses(node)
+        goal = DockRobot.Goal()
+        goal.use_dock_id = False
+        # stamp 0 = the latest transform: with "now" docking_server could not
+        # transform the pose yet and gave up with DOCK_NOT_VALID (902)
+        goal.dock_pose = make_pose(Time().to_msg(), *dock)
+        goal.dock_type = DOCK_TYPE
+        goal.navigate_to_staging_pose = False
+        self.status.update({"state": "navigating", "mode": "dock", "message": "aanmeren aan de laadplaats..."})
+
+        def accepted(f):
+            h = f.result()
+            if not h.accepted:
+                self.dock_node = None
+                self._set_status("rejected", "dock", "docking_server weigerde het aanmeren")
+                return
+            self.dock_handle = h
+            h.get_result_async().add_done_callback(lambda r, h=h: self._on_docked(r, h))
+        self.dock_client.send_goal_async(goal).add_done_callback(accepted)
+
+    def _on_docked(self, future, handle):
+        if handle is not self.dock_handle:
+            return
+        self.dock_handle = None
+        res = future.result()
+        name = (self.dock_node or {}).get("name") or "laadplaats"
+        self.dock_node = None
+        if res.status == GoalStatus.STATUS_SUCCEEDED and res.result.success:
+            self.docked = True
+            self._set_status("succeeded", "dock", "aangemeerd aan %s" % name)
+        elif res.status == GoalStatus.STATUS_CANCELED:
+            self._set_status("canceled", "dock", "aanmeren geannuleerd")
+        else:
+            self._set_status("aborted", "dock", "aanmeren mislukt (foutcode %d)" % res.result.error_code)
+
+    def _undock(self, then):
+        """Drive off the laadplaats (docking_server), then run then()."""
+        if not self.undock_client.server_is_ready():
+            self.docked = False
+            if then:
+                then()
+            return
+        goal = UndockRobot.Goal()
+        goal.dock_type = DOCK_TYPE
+        self._set_status("sending", "dock", "vertrekken van de laadplaats...")
+
+        def done(ok):
+            self.docked = False
+            if then:
+                then()
+            else:
+                self._set_status("succeeded" if ok else "aborted", "dock",
+                                 "vertrokken van de laadplaats" if ok else "vertrekken mislukt")
+
+        def accepted(f):
+            h = f.result()
+            if not h.accepted:
+                done(False)
+                return
+            h.get_result_async().add_done_callback(
+                lambda r: done(r.result().status == GoalStatus.STATUS_SUCCEEDED))
+        self.undock_client.send_goal_async(goal).add_done_callback(accepted)
 
     def _graph_ok(self, cmd, mode):
         """A goal/route via the road network needs one loaded for this map."""
@@ -1689,6 +1969,8 @@ class NavWebNode(Node):
             s["planner"], s["controller"] = self.algo
         s["goal"] = self.target
         s["graph"] = {"nodes": self.graph_nodes if self.graph_loaded and self.graph_loaded[0] == name else 0}
+        s["docked"] = self.docked
+        s["battery_return"] = self.battery_return
         s["truth_err"] = self._truth_error(name) if s["nav2_ready"] and self.loc else None
         if self.tolerance:
             s["tolerance"] = {"xy": self.tolerance[0], "yaw": self.tolerance[1]}

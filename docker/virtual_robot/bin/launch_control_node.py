@@ -139,6 +139,9 @@ NAV_OPTIONS_FILE = "/root/turtlebot_state/nav_options.json"
 #   local_costmap/local_costmap:
 #     inflation_layer.inflation_radius: 0.5
 NAV2_OVERRIDES_FILE = "/root/turtlebot_state/nav2_overrides.yaml"
+# Laadplaats (docking_server): the dock pose lies this far beyond the
+# laadplaats node of the road network, in its direction (also nav_web_node)
+DOCK_DEPTH = 0.3
 # TurtleBot3 Nav2 parameters + extra planners/controllers, written at every
 # Navigation start (see write_nav2_params)
 NAV2_PARAMS_OUT = "/tmp/nav2_params.yaml"
@@ -179,6 +182,24 @@ EXTRA_CONTROLLERS = {
             "use_rotate_to_heading": True, "allow_reversing": False,
             "rotate_to_heading_min_angle": 0.785, "max_angular_accel": 3.2,
             "max_robot_pose_search_dist": 10.0, "use_interpolation": False},
+    # Strict Pure Pursuit for the road network (route_server, nav.html "rijden
+    # via het wegennet"): carrot 15 cm ahead instead of 25-80 cm, so the robot
+    # drives on to the node before it turns; turns on the spot from ~17 deg
+    # instead of 45 (RPP's own rotate-to-heading), then straight on along the
+    # next lane. Slower (0.15 m/s) and no cutting of corners.
+    "RPPStrict": {"plugin": "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController",
+                  "desired_linear_vel": 0.15, "lookahead_dist": 0.15, "min_lookahead_dist": 0.12,
+                  "max_lookahead_dist": 0.2, "lookahead_time": 1.0,
+                  "rotate_to_heading_angular_vel": 1.0, "transform_tolerance": 0.2,
+                  "use_velocity_scaled_lookahead_dist": False, "min_approach_linear_velocity": 0.05,
+                  "approach_velocity_scaling_dist": 0.3, "use_collision_detection": True,
+                  "max_allowed_time_to_collision_up_to_carrot": 1.0,
+                  "use_regulated_linear_velocity_scaling": True,
+                  "use_cost_regulated_linear_velocity_scaling": False,
+                  "regulated_linear_scaling_min_radius": 0.9, "regulated_linear_scaling_min_speed": 0.08,
+                  "use_rotate_to_heading": True, "allow_reversing": False,
+                  "rotate_to_heading_min_angle": 0.3, "max_angular_accel": 3.2,
+                  "max_robot_pose_search_dist": 10.0, "use_interpolation": True},
     # MPPI (Nav2 docs example) scaled down for the Pi 5 and the Burger:
     # 1000 instead of 2000 sampled trajectories, a 3 s horizon of 30 x 0.1 s
     # steps (model_dt = 1 / controller_frequency 10 Hz), Burger limits
@@ -406,6 +427,11 @@ def write_nav2_params():
     # server to acknowledge goal request for compute_path_to_pose" (2026-10-28,
     # turtlebot09). Only an upper limit, a normal goal is not slower.
     params["bt_navigator"]["ros__parameters"]["default_server_timeout"] = 5000
+    # DockRobot / UndockRobot BT nodes (nav_web_node's BATTERY_BT: back to the
+    # laadplaats on a low battery) are not in bt_navigator's default list;
+    # plugin_lib_names adds to that list (Jazzy)
+    params["bt_navigator"]["ros__parameters"]["plugin_lib_names"] = [
+        "opennav_dock_action_bt_node", "opennav_undock_action_bt_node"]
     # Map: only via the launch's map:= argument. Jazzy's localization_launch
     # passes it as a "/**" wildcard parameter, and TurtleBot3's
     # "map_server: yaml_filename: map.yaml" names the node, so it wins over
@@ -466,6 +492,28 @@ def write_nav2_params():
         for costmap in (gc, lc):
             costmap["filters"].append("fleet_filter")
             costmap["fleet_filter"] = dict(fleet)
+    # Docking (nav.html "Naar laadplaats", nav_web_node): the TurtleBot has no
+    # charging contacts, so docking = parking precisely at a spot: no dock
+    # detection (the pose from the request), docked = pose reached (no
+    # battery status). The laadplaats is a node of the road network; the dock
+    # pose lies DOCK_DEPTH further in its direction and comes with every
+    # request, so the one dock instance below is only a placeholder.
+    # Replaces TurtleBot3's example (nova_carter_dock at 0,0 / 10,10 / 30,30).
+    old_dock = params.get("docking_server", {}).get("ros__parameters", {})
+    params["docking_server"] = {"ros__parameters": {
+        "use_sim_time": old_dock.get("use_sim_time", False),
+        "enable_stamped_cmd_vel": old_dock.get("enable_stamped_cmd_vel", True),
+        "dock_plugins": ["tb_dock"],
+        "tb_dock": {"plugin": "opennav_docking::SimpleChargingDock",
+                    "use_external_detection_pose": False, "use_battery_status": False,
+                    "staging_x_offset": -DOCK_DEPTH, "staging_yaw_offset": 0.0,
+                    "docking_threshold": 0.05},
+        "docks": ["fenix_dock"],
+        "fenix_dock": {"type": "tb_dock", "frame": "map", "pose": [0.0, 0.0, 0.0]},
+        "controller": {"v_linear_min": 0.03, "v_linear_max": 0.12, "v_angular_max": 0.6,
+                       "slowdown_radius": 0.2},
+        "dock_approach_timeout": 30.0, "max_retries": 2,
+        "undock_linear_tolerance": 0.05, "undock_angular_tolerance": 0.1}}
     apply_nav2_overrides(params)
     if SIM:
         # Virtual robot: /clock and /tf come from a browser tab via rosbridge.
