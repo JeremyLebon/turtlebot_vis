@@ -12,6 +12,14 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## 1.1.1 - 2026-11-23 (branch feature/route)
+- **`start.sh` vervangt de container van een andere map.** Staat er al een
+  `turtlebot-vis` van de gewone map `turtlebot_vis` (ander compose-project,
+  zelfde naam), dan weigerde `docker compose up` hem. Nu: extra stap
+  "Container van map '...' vervangen" (`docker rm -f`); `ros2_ws` hoort bij
+  elke map apart en blijft bewaard. Terug naar de gewone map vraagt (nog)
+  eenmaal `docker rm -f turtlebot-vis`: die start.sh kent dit niet.
+
 ## 1.1.0 - 2026-11-23 (branch feature/route, image `:route` - test, niet voor de studenten)
 - **Virtuele robot 1.11.0: wegennet voor de Nav2 Route Server.** Op de
   Fenix-pagina *Mappen > Wegennet* knopen en rijbanen tekenen (ook

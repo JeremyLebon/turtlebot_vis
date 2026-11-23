@@ -97,6 +97,18 @@ elif $PULL; then
     if out=$(docker compose pull -q 2>&1); then step_ok; else
         step_warn; echo "$out"; row warn "Image" "docker pull lukt niet (internet?), verder met de huidige"; fi
 fi
+# Container turtlebot-vis van een andere map (bv. de gewone turtlebot_vis naast een
+# testbranch in turtlebot_vis_route): zelfde naam, ander compose-project, dus
+# `docker compose up` weigert hem ("name already in use"). Vervangen: de werkmap
+# ros2_ws hoort bij elke map apart en blijft bewaard.
+other=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' turtlebot-vis 2>/dev/null || true)
+mine=$(docker compose config 2>/dev/null | sed -n 's/^name: //p' | head -1)
+if [ -n "$other" ] && [ -n "$mine" ] && [ "$other" != "$mine" ]; then
+    step "Container van map '$other' vervangen"
+    docker rm -f turtlebot-vis > /dev/null && step_ok
+    row ok "Container" "die van map '$other' vervangen"
+    was_running=
+fi
 step "Container starten"
 out=$(docker compose up -d 2>&1) || { echo "${R}✘${E}"; echo "$out"; exit 1; }
 step_ok
