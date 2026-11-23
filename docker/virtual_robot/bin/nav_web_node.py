@@ -32,8 +32,9 @@
 #                      {"cmd": "dock", "node": id (optional), "controller", "graph"} -> to the
 #                        laadplaats (a road network node with "dock": yaw) and dock there
 #                        (docking_server); {"cmd": "undock"} -> drive off it. A goal/route
-#                        while docked undocks first. "goal"/"route" with "battery_return": V
-#                        (and "graph"): back to the laadplaats when the battery drops below V
+#                        while docked undocks first. "goal"/"route" with "battery_return_pct":
+#                        % (fallback "battery_return": V) and "graph": back to the laadplaats
+#                        when the battery drops below it
 #                      {"cmd": "bt_view", "name": ""|<file>|"wegennet"} -> /web/bt shows
 #                        that behavior tree ("" = the one of the current goal)
 #   /web/nav_status  std_msgs/String (JSON) out, 2 Hz; also "loc" (AMCL
@@ -579,31 +580,46 @@ GRAPH_BT = """<root BTCPP_format="4" main_tree_to_execute="MainTree">
 
 
 # Back to the laadplaats when the battery runs low (goal via the road network
-# with "battery_return"): the goal's tree runs as long as IsBatteryLow fails
-# (re-checked every tick, ReactiveSequence); once the voltage drops below the
-# limit it is halted and the second branch drives over the road network to
-# the laadplaats and docks. Voltage, not percentage: the robot's OpenCR and
-# the simulator both report volts the same way (nav.html converts its %).
+# with "battery_return"): WhileDoElse re-checks the battery every tick, runs
+# the goal's tree while it is not low, else halts it and drives over the road
+# network to the laadplaats and docks. One IsBatteryLow only: with a
+# Fallback and a second IsBatteryLow at the start of the return branch, that
+# second node had read no message yet when first ticked, said "not low" and
+# the whole goal failed (2 of 4 returns, 2026-11-23). On the percentage of /battery_state, like the
+# header of nav.html (IsBatteryLow compares it as sent: 0-1 or 0-100); only
+# for a robot that reports no percentage on the voltage (is_voltage).
+# The second branch first waits 1 s and retries driving and docking: right
+# after the halt controller_server was still cancelling the goal's FollowPath
+# and refused the new one - the return failed 2 of 4 times (2026-11-23).
 BATTERY_BT = """<root BTCPP_format="4" main_tree_to_execute="MainTree">
   <BehaviorTree ID="MainTree">
-    <Fallback name="GoalOrLaadplaats">
-      <ReactiveSequence name="WhileBatteryOk">
-        <Inverter name="BatteryNotLow">
-          <IsBatteryLow name="BatteryLow" min_battery="@VOLT@" is_voltage="true" battery_topic="/battery_state"/>
-        </Inverter>
+    <WhileDoElse name="GoalOrLaadplaats">
+      <Inverter name="BatteryNotLow">
+        <IsBatteryLow name="BatteryLow" min_battery="@VOLT@" is_voltage="@ISV@" battery_topic="/battery_state"/>
+      </Inverter>
 @MAIN@
-      </ReactiveSequence>
       <Sequence name="BackToLaadplaats">
-        <IsBatteryLow name="BatteryStillLow" min_battery="@VOLT@" is_voltage="true" battery_topic="/battery_state"/>
+        <Wait name="LetControllerStop" wait_duration="1.0"/>
         <ControllerSelector selected_controller="{selected_controller}" default_controller="@CTRL@" topic_name="controller_selector"/>
-        <ComputeRoute name="RouteToLaadplaats" goal="@STAGING@" use_start="false" use_poses="true" path="{dock_route}" error_code_id="{dock_route_error_code}"/>
-        <GetPoseFromPath path="{dock_route}" index="0" pose="{dock_route_start}"/>
-        <ComputePathToPose goal="{dock_route_start}" path="{dock_access}" planner_id="GridBased" error_code_id="{dock_path_error_code}"/>
-        <ConcatenatePaths input_path1="{dock_access}" input_path2="{dock_route}" output_path="{dock_path}"/>
-        <FollowPath name="DriveToLaadplaats" path="{dock_path}" controller_id="{selected_controller}" error_code_id="{dock_follow_error_code}"/>
-        <DockRobot name="DockAtLaadplaats" use_dock_id="false" dock_pose="@DOCK@" dock_type="@TYPE@" navigate_to_staging_pose="false"/>
+        <RecoveryNode number_of_retries="3" name="DriveToLaadplaatsRetry">
+          <Sequence name="DriveToLaadplaats">
+            <ComputeRoute name="RouteToLaadplaats" goal="@STAGING@" use_start="false" use_poses="true" path="{dock_route}" error_code_id="{dock_route_error_code}"/>
+            <GetPoseFromPath path="{dock_route}" index="0" pose="{dock_route_start}"/>
+            <ComputePathToPose goal="{dock_route_start}" path="{dock_access}" planner_id="GridBased" error_code_id="{dock_path_error_code}"/>
+            <ConcatenatePaths input_path1="{dock_access}" input_path2="{dock_route}" output_path="{dock_path}"/>
+            <FollowPath name="FollowToLaadplaats" path="{dock_path}" controller_id="{selected_controller}" error_code_id="{dock_follow_error_code}"/>
+          </Sequence>
+          <Sequence name="RetryAfter">
+            <ClearEntireCostmap name="ClearLocalCostmap-Dock" service_name="local_costmap/clear_entirely_local_costmap"/>
+            <Wait wait_duration="2.0"/>
+          </Sequence>
+        </RecoveryNode>
+        <RecoveryNode number_of_retries="2" name="DockRetry">
+          <DockRobot name="DockAtLaadplaats" use_dock_id="false" dock_pose="@DOCK@" dock_type="@TYPE@" navigate_to_staging_pose="false"/>
+          <Wait wait_duration="2.0"/>
+        </RecoveryNode>
       </Sequence>
-    </Fallback>
+    </WhileDoElse>
   </BehaviorTree>
 </root>
 """
@@ -612,16 +628,17 @@ BATTERY_BT = """<root BTCPP_format="4" main_tree_to_execute="MainTree">
 def behavior_tree(planner, controller, graph=False, battery=None):
     """Path of a behavior tree using this planner/controller ("" = Nav2's
     default); graph: via the road network (GRAPH_BT, no planner); battery:
-    (volt, laadplaats node) -> BATTERY_BT around it."""
+    (limit, is_voltage, laadplaats node) -> BATTERY_BT around it."""
     planner, controller = resolve_algo(planner, controller)
     if graph:
         tree = GRAPH_BT.replace('default_controller="FollowPath"', 'default_controller="%s"' % controller)
         path = "/tmp/bt_graph_%s.xml" % controller
         if battery:
-            volt, node = battery
+            limit, is_voltage, node = battery
             staging, dock = dock_poses(node)
             main = tree.split('<BehaviorTree ID="MainTree">')[1].split("</BehaviorTree>")[0].strip("\n")
-            tree = (BATTERY_BT.replace("@MAIN@", main).replace("@VOLT@", "%.2f" % volt)
+            tree = (BATTERY_BT.replace("@MAIN@", main).replace("@VOLT@", "%.3f" % limit)
+                    .replace("@ISV@", "true" if is_voltage else "false")
                     .replace("@CTRL@", controller).replace("@STAGING@", bt_pose(*staging))
                     .replace("@DOCK@", bt_pose(*dock)).replace("@TYPE@", DOCK_TYPE))
             path = "/tmp/bt_graph_battery_%s.xml" % controller
@@ -717,9 +734,9 @@ class NavWebNode(Node):
         self.dock_node = None    # laadplaats node of the running "dock" command
         self.dock_handle = None
         self.battery_v = None    # last /battery_state voltage
-        self.battery_return = None   # volt limit of the running goal/route, or None
-        self.create_subscription(BatteryState, "/battery_state",
-                                 lambda m: setattr(self, "battery_v", m.voltage), 10)
+        self.battery_pct = None  # its percentage as sent (0-1 or 0-100), None = not reported
+        self.battery_return = None   # (limit, is_voltage) of the running goal/route, or None
+        self.create_subscription(BatteryState, "/battery_state", self._on_battery, 10)
         self.sound_client = self.create_client(Sound, "/sound")
         self.action_timer = None    # wait / photo timeout of a route point action
         self.photo_sub = None
@@ -914,7 +931,7 @@ class NavWebNode(Node):
         except ValueError:
             return
         kind = cmd.get("cmd")
-        if kind in ("goal", "route", "dock") and self.docked:
+        if kind in ("goal", "route", "dock") and (self.docked or self._at_dock()):
             # parked at the laadplaats: first drive off it, then the command
             self._undock(lambda: self._on_cmd(msg))
             return
@@ -1353,12 +1370,14 @@ class NavWebNode(Node):
                 return
             message = "naar de laadplaats: " + message
             self.dock_node = None
-        elif state == "succeeded" and self.battery_return and self.battery_v is not None \
-                and self.battery_v < self.battery_return:
+        elif state == "succeeded" and self._returned_to_dock():
             # BATTERY_BT took the second branch: the robot is at the laadplaats
             self.route, self.docked = None, True
-            self._set_status("succeeded", "dock", "batterij bijna leeg (%.2f V): teruggereden naar de laadplaats en aangemeerd"
-                             % self.battery_v)
+            pct = self.battery_pct
+            now = ("%.2f V" % self.battery_v if pct is None else "%d %%" % round(pct * 100 if pct <= 1.0 else pct)) \
+                if self._battery_low() else None
+            self._set_status("succeeded", "dock", "batterij bijna leeg%s: teruggereden naar de laadplaats en aangemeerd"
+                             % (" (%s)" % now if now else ""))
             return
         if mode == "route" and self.route:
             r = self.route
@@ -1677,7 +1696,7 @@ class NavWebNode(Node):
                 self.bt_lastst[str(e.uid)] = e.current_status
             # BATTERY_BT checks the battery every tick (10 ms): only its change
             # to "low" goes in the list, not the IDLE/FAILURE blinking
-            if e.node_name in ("BatteryLow", "BatteryNotLow", "BatteryStillLow") and not (
+            if e.node_name in ("BatteryLow", "BatteryNotLow") and not (
                     e.node_name == "BatteryLow" and e.current_status == "SUCCESS"):
                 continue
             self.bt_log.append([round(e.timestamp.sec + e.timestamp.nanosec * 1e-9, 2), e.uid,
@@ -1699,12 +1718,62 @@ class NavWebNode(Node):
             docks = [n for n in docks if n["id"] == int(node_id)]
         return docks[0] if docks else None
 
+    def _on_battery(self, msg):
+        self.battery_v = msg.voltage
+        p = msg.percentage
+        self.battery_pct = p if p == p and p >= 0 else None   # NaN = not reported
+
+    def _battery_low(self):
+        if not self.battery_return:
+            return False
+        limit, is_voltage = self.battery_return
+        value = self.battery_v if is_voltage else self.battery_pct
+        return value is not None and value < limit
+
+    def _at_dock(self):
+        """Robot stands at a laadplaats's dock pose (also when this node has
+        restarted meanwhile and forgot it docked): from there the planner
+        can't start (wall in front), so undock first."""
+        name = running_map()
+        if self.loc is None or not name:
+            return False
+        for node in load_graph(name)["nodes"]:
+            if "dock" in node:
+                _, dock = dock_poses(node)
+                if math.hypot(self.loc["x"] - dock[0], self.loc["y"] - dock[1]) < 0.15:
+                    return True
+        return False
+
+    def _returned_to_dock(self):
+        """After a goal with BATTERY_BT: did it end at the laadplaats instead of
+        the goal? Judged on the position, not on the battery: IsBatteryLow
+        keeps its last reading between goals, so a goal right after a battery
+        swap could still return while this node already read a full battery."""
+        node = self._laadplaats() if self.battery_return else None
+        if node is None or self.loc is None or self.target is None:
+            return False
+        _, dock = dock_poses(node)
+        at_dock = math.hypot(self.loc["x"] - dock[0], self.loc["y"] - dock[1]) < 0.2
+        goal_elsewhere = math.hypot(self.target["x"] - dock[0], self.target["y"] - dock[1]) > 0.5
+        return at_dock and goal_elsewhere
+
     def _battery_arg(self, cmd):
-        """(volt, laadplaats node) for BATTERY_BT, or None."""
-        volt = cmd.get("battery_return")
-        node = self._laadplaats() if volt and cmd.get("graph") else None
-        self.battery_return = float(volt) if node else None
-        return (float(volt), node) if node else None
+        """(limit, is_voltage, laadplaats node) for BATTERY_BT, or None: the
+        percentage in the scale the robot sends it, else the voltage."""
+        pct, volt = cmd.get("battery_return_pct"), cmd.get("battery_return")
+        node = self._laadplaats() if (pct or volt) and cmd.get("graph") else None
+        if not node:
+            self.battery_return = None
+            return None
+        if pct and self.battery_pct is not None:
+            limit = float(pct) / (100.0 if self.battery_pct <= 1.0 else 1.0)
+            self.battery_return = (limit, False)
+        elif volt:
+            self.battery_return = (float(volt), True)
+        else:
+            self.battery_return = None
+            return None
+        return self.battery_return + (node,)
 
     def _dock_start(self, cmd):
         node = self._laadplaats(cmd.get("node"))
@@ -1767,18 +1836,28 @@ class NavWebNode(Node):
         else:
             self._set_status("aborted", "dock", "aanmeren mislukt (foutcode %d)" % res.result.error_code)
 
+    UNDOCK_TIMEOUT = 25.0   # s: never wait longer to drive off the laadplaats
+
     def _undock(self, then):
-        """Drive off the laadplaats (docking_server), then run then()."""
-        if not self.undock_client.server_is_ready():
+        """Drive off the laadplaats, then run then(). After our own docking:
+        docking_server's UndockRobot. Standing there without docking_server
+        knowing it (this node or Nav2 restarted meanwhile): UndockRobot never
+        finished (2026-11-23), so a plain BackUp of DOCK_DEPTH + 5 cm. Either
+        way at most UNDOCK_TIMEOUT."""
+        own = self.docked and self.undock_client.server_is_ready()
+        if not own and not self.backup_client.server_is_ready():
             self.docked = False
             if then:
                 then()
             return
-        goal = UndockRobot.Goal()
-        goal.dock_type = DOCK_TYPE
         self._set_status("sending", "dock", "vertrekken van de laadplaats...")
+        state = {"done": False, "handle": None}
 
         def done(ok):
+            if state["done"]:
+                return
+            state["done"] = True
+            timer.cancel()
             self.docked = False
             if then:
                 then()
@@ -1786,14 +1865,31 @@ class NavWebNode(Node):
                 self._set_status("succeeded" if ok else "aborted", "dock",
                                  "vertrokken van de laadplaats" if ok else "vertrekken mislukt")
 
+        def timeout():
+            if state["handle"] is not None:
+                state["handle"].cancel_goal_async()
+            self.get_logger().warn("vertrekken van de laadplaats duurde te lang - verder")
+            done(False)
+        timer = self.create_timer(self.UNDOCK_TIMEOUT, timeout, clock=Clock(clock_type=ClockType.STEADY_TIME))
+
         def accepted(f):
             h = f.result()
             if not h.accepted:
                 done(False)
                 return
+            state["handle"] = h
             h.get_result_async().add_done_callback(
                 lambda r: done(r.result().status == GoalStatus.STATUS_SUCCEEDED))
-        self.undock_client.send_goal_async(goal).add_done_callback(accepted)
+        if own:
+            goal = UndockRobot.Goal()
+            goal.dock_type = DOCK_TYPE
+            self.undock_client.send_goal_async(goal).add_done_callback(accepted)
+        else:
+            goal = BackUp.Goal()
+            goal.target.x = DOCK_DEPTH + 0.05
+            goal.speed = 0.08
+            goal.time_allowance.sec = int(self.UNDOCK_TIMEOUT)
+            self.backup_client.send_goal_async(goal).add_done_callback(accepted)
 
     def _graph_ok(self, cmd, mode):
         """A goal/route via the road network needs one loaded for this map."""
@@ -1970,7 +2066,7 @@ class NavWebNode(Node):
         s["goal"] = self.target
         s["graph"] = {"nodes": self.graph_nodes if self.graph_loaded and self.graph_loaded[0] == name else 0}
         s["docked"] = self.docked
-        s["battery_return"] = self.battery_return
+        s["battery_return"] = list(self.battery_return) if self.battery_return else None
         s["truth_err"] = self._truth_error(name) if s["nav2_ready"] and self.loc else None
         if self.tolerance:
             s["tolerance"] = {"xy": self.tolerance[0], "yaw": self.tolerance[1]}

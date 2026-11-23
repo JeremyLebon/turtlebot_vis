@@ -1,1 +1,1 @@
-turtlebot_docker 35e59c8 (2026-11-23) 1.12.0: laadplaats + aanmeren, terug bij lage batterij, Pure Pursuit strikt
+turtlebot_docker 0808f1f (2026-11-23) 1.12.1: batterij-% uit /battery_state, Pure Pursuit strikt rustiger, vertrekken van de laadplaats

@@ -183,13 +183,15 @@ EXTRA_CONTROLLERS = {
             "rotate_to_heading_min_angle": 0.785, "max_angular_accel": 3.2,
             "max_robot_pose_search_dist": 10.0, "use_interpolation": False},
     # Strict Pure Pursuit for the road network (route_server, nav.html "rijden
-    # via het wegennet"): carrot 15 cm ahead instead of 25-80 cm, so the robot
-    # drives on to the node before it turns; turns on the spot from ~17 deg
-    # instead of 45 (RPP's own rotate-to-heading), then straight on along the
-    # next lane. Slower (0.15 m/s) and no cutting of corners.
+    # via het wegennet"): carrot 30 cm ahead (fixed) instead of 25-80 cm, so the
+    # robot drives on to near the node before it turns; turns on the spot from
+    # 35 deg (on a 90 deg corner ~18 cm before the node), then straight on along
+    # the next lane. 1.12.0 had 15 cm / 17 deg: AMCL's pose jumps of a few cm
+    # or degrees made the robot switch between driving and turning all the time
+    # (Jeremy, 23-11, "wiebelt / twijfelt").
     "RPPStrict": {"plugin": "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController",
-                  "desired_linear_vel": 0.15, "lookahead_dist": 0.15, "min_lookahead_dist": 0.12,
-                  "max_lookahead_dist": 0.2, "lookahead_time": 1.0,
+                  "desired_linear_vel": 0.15, "lookahead_dist": 0.3, "min_lookahead_dist": 0.3,
+                  "max_lookahead_dist": 0.3, "lookahead_time": 1.5,
                   "rotate_to_heading_angular_vel": 1.0, "transform_tolerance": 0.2,
                   "use_velocity_scaled_lookahead_dist": False, "min_approach_linear_velocity": 0.05,
                   "approach_velocity_scaling_dist": 0.3, "use_collision_detection": True,
@@ -198,7 +200,7 @@ EXTRA_CONTROLLERS = {
                   "use_cost_regulated_linear_velocity_scaling": False,
                   "regulated_linear_scaling_min_radius": 0.9, "regulated_linear_scaling_min_speed": 0.08,
                   "use_rotate_to_heading": True, "allow_reversing": False,
-                  "rotate_to_heading_min_angle": 0.3, "max_angular_accel": 3.2,
+                  "rotate_to_heading_min_angle": 0.6, "max_angular_accel": 3.2,
                   "max_robot_pose_search_dist": 10.0, "use_interpolation": True},
     # MPPI (Nav2 docs example) scaled down for the Pi 5 and the Burger:
     # 1000 instead of 2000 sampled trajectories, a 3 s horizon of 30 x 0.1 s

@@ -520,14 +520,33 @@ var HEADER_CSS =
 
 // Battery (3S LiPo) as the robot sees it: the OpenCR switches the motor
 // power OFF below 11.0 V (turtlebot3_diagnosis.cpp: ~5 s under 11.0 V ->
-// DYNAMIXEL power off + beeping, back on above 11.0 V). So 11.0 V = 0 %
-// here, not the OpenCR's own 10.5 V; 12.3 V = 100 %. While driving the
+// DYNAMIXEL power off + beeping, back on above 11.0 V). While driving the
 // voltage sags, so warn early.
+// Charge in %: the percentage field of /battery_state (what the robot or the
+// simulator itself reports, 0-1 or 0-100). Only without it: from the
+// voltage along a 3S LiPo discharge curve (same table as the HTML simulator,
+// LIPO in htmlsim's template.html). Until 1.12.0 always linear from the
+// voltage, 11.0 V = 0 % .. 12.3 V = 100 %: the simulator said 20 %, Fenix
+// 38 % (Jeremy, 23-11). The voltage stays for the warnings (motors off below 11.0 V).
 var BATT_EMPTY = 11.0, BATT_FULL = 12.3;
-function battState(v) {
+var BATT_LIPO = [[0, 10.8], [0.05, 11.1], [0.1, 11.3], [0.2, 11.5], [0.4, 11.7], [0.6, 11.85], [0.8, 12.1], [0.9, 12.3], [1, 12.6]];
+function battPct(v) {   // voltage -> %
+  var t = BATT_LIPO;
+  if (v <= t[0][1]) return 0;
+  for (var i = 1; i < t.length; i++)
+    if (v <= t[i][1]) return 100 * (t[i - 1][0] + (t[i][0] - t[i - 1][0]) * (v - t[i - 1][1]) / (t[i][1] - t[i - 1][1]));
+  return 100;
+}
+function battVolt(pct) {   // % -> voltage (same curve)
+  var t = BATT_LIPO, q = Math.max(0, Math.min(1, pct / 100));
+  for (var i = 1; i < t.length; i++)
+    if (q <= t[i][0]) return t[i - 1][1] + (t[i][1] - t[i - 1][1]) * (q - t[i - 1][0]) / (t[i][0] - t[i - 1][0]);
+  return t[t.length - 1][1];
+}
+function battState(v, topicPct) {
   if (v === null || v === undefined || isNaN(v)) return null;
-  var pct = Math.max(0, Math.min(100, (v - BATT_EMPTY) / (BATT_FULL - BATT_EMPTY) * 100));
-  if (v < BATT_EMPTY) return { pct: 0, level: "bad", text: "motoren uitgeschakeld door de OpenCR (onder 11,0 V) - nu opladen/wisselen" };
+  var pct = typeof topicPct === "number" && isFinite(topicPct) && topicPct >= 0 ? Math.min(100, topicPct) : battPct(v);
+  if (v < BATT_EMPTY) return { pct: pct, level: "bad", text: "motoren uitgeschakeld door de OpenCR (onder 11,0 V) - nu opladen/wisselen" };
   if (v < 11.2) return { pct: pct, level: "bad", text: "nu opladen - onder 11,0 V schakelt de OpenCR de motoren uit" };
   if (v < 11.4) return { pct: pct, level: "warn", text: "bijna leeg - opladen" };
   return { pct: pct, level: "ok", text: "" };
@@ -579,7 +598,7 @@ function laboRows(ctx) {
 
   var b = ctx.batt;
   if (b && now - b.t < 6000 && b.v !== null && b.v !== undefined) {
-    var bst = battState(b.v);
+    var bst = battState(b.v, b.pct);
     rows.push([bst.level, "Batterij", b.v.toFixed(1) + " V (" + Math.round(bst.pct) + " %)" + (bst.text ? " - " + bst.text : "")]);
   } else rows.push(["", "Batterij", "wacht op bringup"]);
 
@@ -828,7 +847,7 @@ function initHeader(ros, page) {
   function renderBatt() {
     var el = document.getElementById("hiBatt");
     var fresh = Date.now() - batt.t < 6000;
-    var bs = fresh ? battState(batt.v) : null;
+    var bs = fresh ? battState(batt.v, batt.pct) : null;
     var pct = bs ? bs.pct : null;
     var level = bs ? bs.level : "";
     el.style.color = hdrColor(level);
@@ -837,7 +856,7 @@ function initHeader(ros, page) {
     el.setAttribute("data-tip", pct === null
       ? "Batterij: onbekend - wordt enkel gemeten als de robot draait (bringup)"
       : "Batterij " + Math.round(pct) + " % - " + batt.v.toFixed(2) + " V" + (bs.text ? "\n" + bs.text : "") +
-        "\n0 % = 11,0 V: daar schakelt de OpenCR de motoren uit");
+        "\npercentage van de robot (/battery_state); onder 11,0 V schakelt de OpenCR de motoren uit");
     renderAlert();
   }
   setInterval(renderBatt, 2000);

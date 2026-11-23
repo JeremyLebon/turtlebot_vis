@@ -12,6 +12,11 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## 1.1.4 - 2026-11-23 (branch feature/route, image `:route`)
+- **Virtuele robot 1.12.1**: batterij op de Fenix-pagina = percentage van de
+  simulator (was een eigen berekening uit de spanning, andere waarde);
+  terug naar de laadplaats op dat percentage; Pure Pursuit strikt rustiger.
+
 ## 1.1.3 - 2026-11-23 (branch feature/route, image `:route`)
 - **Virtuele robot 1.12.0**: laadplaats in het wegennet + knop *Naar
   laadplaats* (aanmeren met docking_server), terug naar de laadplaats bij

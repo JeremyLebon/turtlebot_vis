@@ -447,7 +447,7 @@
       <select id="controllerSel" title="Lokale controller: volgt het pad en ontwijkt obstakels">
         <option value="FollowPath" title="DWB - probeert veel snelheden uit en kiest de beste (standaard van TurtleBot3)">DWB</option>
         <option value="RPP" title="Regulated Pure Pursuit - volgt een punt voor zich op het pad, rustig">Pure Pursuit</option>
-        <option value="RPPStrict" title="Pure Pursuit strikt: mikt 15 cm voor zich, rijdt tot op de knoop en draait daar ter plaatse - voor rijden via het wegennet (trager, 0,15 m/s)">Pure Pursuit strikt (rijbanen)</option>
+        <option value="RPPStrict" title="Pure Pursuit strikt: mikt 30 cm voor zich, volgt de rijbaan en draait in bochten ter plaatse - voor rijden via het wegennet (trager, 0,15 m/s)">Pure Pursuit strikt (rijbanen)</option>
         <option value="MPPI" title="MPPI - simuleert 1000 mogelijke trajecten per stap en kiest het beste; vloeiend (standaard op deze pagina, afgesteld voor de Pi 5)">MPPI</option>
       </select>
       <label class="sub" for="viaGraph">Wegennet</label>
@@ -773,16 +773,16 @@
   // goals and route points snap onto a node of the graph
   var viaGraph = document.getElementById("viaGraph");
   viaGraph.checked = lsGet("navViaGraph", "0") === "1";
-  // Back to the laadplaats on a low battery: % on the page, volts to Nav2
-  // (IsBatteryLow is_voltage; same scale as the header, BATT_EMPTY..BATT_FULL)
+  // Back to the laadplaats on a low battery: in %, like the header (percentage
+  // of /battery_state); the volts (LiPo curve, battVolt in common.js) are only
+  // nav_web_node's fallback for a robot that reports no percentage
   var batReturn = document.getElementById("batReturn"), batReturnPct = document.getElementById("batReturnPct");
   batReturn.checked = lsGet("navBatReturn", "0") === "1";
   batReturnPct.value = lsGet("navBatReturnPct", "20");
-  function batVolt(pct) { return +(BATT_EMPTY + pct / 100 * (BATT_FULL - BATT_EMPTY)).toFixed(2); }
+  function batVolt(pct) { return +battVolt(pct).toFixed(2); }
   function batReturnUi() {
     batReturn.disabled = !viaGraph.checked;
-    document.getElementById("batReturnInfo").textContent = "(" + batVolt(+batReturnPct.value || 20).toFixed(2) + " V" +
-      (viaGraph.checked ? "" : ", enkel via het wegennet") + ")";
+    document.getElementById("batReturnInfo").textContent = viaGraph.checked ? "" : "(enkel via het wegennet)";
   }
   batReturn.addEventListener("change", function () { lsSet("navBatReturn", batReturn.checked ? "1" : "0"); });
   batReturnPct.addEventListener("change", function () { lsSet("navBatReturnPct", batReturnPct.value); batReturnUi(); });
@@ -797,7 +797,10 @@
   function algo() {
     var a = { planner: plannerSel.value, controller: controllerSel.value, tolerance: tolerance() };
     if (viaGraph.checked) a.graph = true;
-    if (viaGraph.checked && batReturn.checked) a.battery_return = batVolt(+batReturnPct.value || 20);
+    if (viaGraph.checked && batReturn.checked) {
+      a.battery_return_pct = +batReturnPct.value || 20;      // compared with /battery_state percentage
+      a.battery_return = batVolt(a.battery_return_pct);       // fallback when the robot reports none
+    }
     return a;
   }
 
@@ -820,6 +823,7 @@
     ControllerSelector: "Kiest welke controller (DWB, RPP, MPPI): de keuze op deze pagina.",
     PlannerSelector: "Kiest welke planner (NavFn, Smac, Theta*): de keuze op deze pagina.",
     ComputePathToPose: "Planner: berekent een pad naar het doel over de global costmap (planner_server).",
+    WhileDoElse: "Controleert bij elke tick het eerste kind: lukt het, dan loopt het tweede kind, anders het derde (en wordt het andere gestopt).",
     IsBatteryLow: "Lukt als de batterij onder min_battery zit (hier in volt, van /battery_state).",
     Inverter: "Keert het resultaat om: gelukt wordt mislukt en omgekeerd.",
     DockRobot: "Meert aan de laadplaats (docking_server): nauwkeurig inparkeren vanaf het punt ervoor.",
