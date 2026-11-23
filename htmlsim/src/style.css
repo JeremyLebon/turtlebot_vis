@@ -47,6 +47,7 @@ body{background:var(--bg);color:var(--fg);font:15px/1.45 var(--f-body);display:f
 .modes button{border:0;border-right:1px solid var(--line);background:transparent;color:var(--fg);font:500 13px var(--f-body);padding:7px 12px;cursor:pointer}
 .modes button:last-child{border-right:0}
 .modes button.on{background:var(--fg);color:var(--surface)}
+.modes select{border:0;border-right:1px solid var(--line);background:transparent;color:var(--fg);font:500 12px var(--f-body);padding:0 4px;cursor:pointer}
 .legend{position:absolute;right:12px;bottom:12px;display:flex;gap:12px;flex-wrap:wrap;font:12px var(--f-mono);color:var(--muted);
   background:color-mix(in srgb,var(--surface) 80%,transparent);padding:4px 8px;border-radius:5px}
 .legend i{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:5px;border-radius:2px}

@@ -37,6 +37,8 @@
       <button data-mode="orbit" class="on">Camera</button>
       <button data-mode="place">Robot plaatsen</button>
       <button data-mode="box" title="Klik op de vloer: doos erbij. Klik op een doos: weg.">Doos</button>
+      <select id="boxH" title="Hoogte van een nieuwe doos. 12 cm ligt onder de 2D-lidar (18 cm): enkel de 3D-lidar ziet ze." aria-label="Hoogte doos">
+        <option value="0.35">35 cm</option><option value="0.12">12 cm (laag)</option></select>
       <button data-mode="init">Startpositie</button>
       <button data-mode="goal">Doel</button>
     </div>
@@ -1616,7 +1618,7 @@ renderer.domElement.addEventListener("pointerdown", e => {
   if (mode === "box") {   // klik op een doos: weg; klik op de vloer: nieuwe doos
     const hit = ray.intersectObjects(movableMeshes.map(([, mesh]) => mesh), false)[0];
     if (hit) { const i = movableMeshes.findIndex(([, mesh]) => mesh === hit.object); removeMovable(i); return; }
-    sim.addBox(v.x, v.y, 0); addMovableMesh(sim.movables[sim.movables.length - 1]); return;
+    sim.addBox(v.x, v.y, 0, 0.25, +$("boxH").value || 0.35); addMovableMesh(sim.movables[sim.movables.length - 1]); return;
   }
   placing = { x: v.x, y: v.y, th: mode === "place" ? sim.truthPose().th : 0 }; renderer.domElement.setPointerCapture(e.pointerId);
   const mk = mode === "goal" ? goalMarker : mode === "init" ? initMarker : null;

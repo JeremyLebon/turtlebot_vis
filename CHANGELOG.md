@@ -12,6 +12,12 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## 1.1.7 - 2026-11-24 (branch feature/route, image `:route`)
+- **Simulator 1.5.5: hoogte van een doos kiezen.** Naast de knop *Doos*:
+  35 cm (zoals tot nu) of 12 cm (laag). Een lage doos ligt onder de 2D-lidar
+  (18 cm): enkel de 3D-lidar ziet ze. Zo test je dat Nav2 met de 3D-lidar
+  (Sensoren > 3D-lidar) eromheen rijdt en zonder er tegenaan.
+
 ## 1.1.6 - 2026-11-24 (branch feature/route, image `:route`)
 - **Virtuele robot 1.13.0**: na de terugkeer naar de laadplaats rijdt de
   robot verder zodra de batterij weer vol genoeg is (vinkje bij
