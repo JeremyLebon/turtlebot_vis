@@ -259,6 +259,8 @@
         <button class="btn tip-r nav-only" id="dockBtn" data-icon="bolt" aria-label="Naar laadplaats" data-tip="Naar de laadplaats (knoop van het wegennet) en daar aanmeren"></button>
         <button class="btn tip-r nav-only" id="undockBtn" data-icon="fwd" style="display:none" aria-label="Vertrek van laadplaats" data-tip="Vertrekken van de laadplaats (achteruit weg)"></button>
         <button class="btn tip-r nav-only" id="missionResumeBtn" data-icon="play" style="display:none" aria-label="Verder met onderbroken route" data-tip="Verder met het doel of de route die onderbroken werd voor de laadplaats - nu, zonder te wachten op opladen"></button>
+        <button class="btn tip-r nav-only" id="retryBtn" data-icon="reboot" style="display:none" aria-label="Opnieuw proberen" data-tip="Opnieuw proberen: hetzelfde doel of routepunt"></button>
+        <button class="btn tip-r nav-only" id="skipBtn" data-icon="fwd" style="display:none" aria-label="Punt overslaan" data-tip="Dit routepunt overslaan en verder met het volgende"></button>
         <button class="btn tip-r nav-only" id="pauseBtn" data-icon="pause" style="display:none" aria-label="Pauze" data-tip="Pauze: doel of route onderbreken (later verder)"></button>
         <button class="btn tip-r nav-only" id="resumeBtn" data-icon="play" style="display:none" aria-label="Verder" data-tip="Verder rijden"></button>
         <button class="btn danger tip-r nav-only" id="cancelBtn" data-icon="x" aria-label="Annuleer" data-tip="Doel of route annuleren"></button>
@@ -1060,6 +1062,13 @@
     var stEl = document.getElementById("nsState");
     stEl.textContent = (STATE_TEXT[s.state] || s.state) + (s.mode ? " (" + (s.mode === "route" ? "route" : s.mode === "dock" ? "laadplaats" : "doel") + ")" : "");
     document.getElementById("undockBtn").style.display = s.docked ? "" : "none";
+    var fl = s.failed, nav = s.state === "navigating" || s.state === "sending";
+    document.getElementById("retryBtn").style.display = fl && !nav ? "" : "none";
+    document.getElementById("skipBtn").style.display = fl && !nav && fl.kind === "route" ? "" : "none";
+    if (fl) {
+      document.getElementById("retryBtn").setAttribute("data-tip", "Opnieuw proberen: " + (fl.kind === "route" ? "routepunt " + fl.waypoint + " van " + fl.waypoints : "hetzelfde doel"));
+      document.getElementById("skipBtn").setAttribute("data-tip", "Routepunt " + fl.waypoint + " overslaan en verder met het volgende");
+    }
     var rb = document.getElementById("missionResumeBtn");
     rb.style.display = s.resume ? "" : "none";
     if (s.resume) rb.setAttribute("data-tip", "Verder met " + (s.resume.kind === "route" ? "de route vanaf punt " + s.resume.waypoint + " van " + s.resume.waypoints : "het doel") +
@@ -2399,6 +2408,8 @@
   });
   document.getElementById("undockBtn").addEventListener("click", function () { sendCmd({ cmd: "undock" }); });
   document.getElementById("missionResumeBtn").addEventListener("click", function () { sendCmd({ cmd: "mission_resume" }); });
+  document.getElementById("retryBtn").addEventListener("click", function () { sendCmd({ cmd: "mission_retry" }); });
+  document.getElementById("skipBtn").addEventListener("click", function () { sendCmd({ cmd: "mission_skip" }); });
   document.getElementById("pauseBtn").addEventListener("click", function () { sendCmd({ cmd: "pause" }); });
   document.getElementById("resumeBtn").addEventListener("click", function () { sendCmd({ cmd: "resume" }); });
   // Exploring sends its own goals to the same Nav2: nav_web_node pauses it for ours

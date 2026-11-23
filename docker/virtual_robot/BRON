@@ -1,1 +1,1 @@
-turtlebot_docker 6e0c2cd (2026-11-23) 1.13.1: geblokkeerde rijbaan afsluiten en omrijden, 3D-lidar maakt costmap leeg
+turtlebot_docker b796062 (2026-11-23) 1.14.0: hervatten na een fout - opnieuw proberen / routepunt overslaan

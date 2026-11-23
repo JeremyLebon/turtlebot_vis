@@ -38,6 +38,9 @@
 #                        once the battery is back above that (a swapped battery),
 #                        a route from the point where it stopped. {"cmd": "mission_resume"}
 #                        -> go on now; "cancel" forgets it
+#                      {"cmd": "mission_retry"} / {"cmd": "mission_skip"} -> after a goal/route
+#                        failed (aborted): try the same goal/route point again, or (route)
+#                        go on with the next point ("failed" in the status)
 #                      {"cmd": "bt_view", "name": ""|<file>|"wegennet"} -> /web/bt shows
 #                        that behavior tree ("" = the one of the current goal)
 #   /web/nav_status  std_msgs/String (JSON) out, 2 Hz; also "loc" (AMCL
@@ -760,6 +763,7 @@ class NavWebNode(Node):
         self.battery_return = None   # (limit, is_voltage) of the running goal/route, or None
         self.mission_cmd = None  # page command of the running goal/route (to resume it)
         self.resume = None       # {"cmd", "at"}: interrupted by a low battery, go on at "at" %
+        self.failed = None       # {"cmd", "message"}: goal/route that failed - retry or skip (n-mon-resume)
         self.create_subscription(BatteryState, "/battery_state", self._on_battery, 10)
         self.sound_client = self.create_client(Sound, "/sound")
         self.action_timer = None    # wait / photo timeout of a route point action
@@ -1067,7 +1071,7 @@ class NavWebNode(Node):
                 self.paused_goal = None
                 if not self._graph_ok(cmd, "goal"):
                     return
-                self.mission_cmd, self.resume = dict(cmd), None
+                self.mission_cmd, self.resume, self.failed = dict(cmd), None, None
                 self.algo = self._algo(cmd)
                 bt = behavior_tree(cmd.get("planner"), cmd.get("controller"), bool(cmd.get("graph")),
                                    self._battery_arg(cmd))
@@ -1083,7 +1087,7 @@ class NavWebNode(Node):
                 self.paused_goal = None
                 if not self._graph_ok(cmd, "route"):
                     return
-                self.mission_cmd, self.resume = dict(cmd), None
+                self.mission_cmd, self.resume, self.failed = dict(cmd), None, None
                 poses = [clean_pose(p) for p in poses][:100]
                 self.algo = self._algo(cmd)
                 # resumed after charging: from the point where it stopped
@@ -1094,6 +1098,8 @@ class NavWebNode(Node):
                                                   bool(cmd.get("graph")), self._battery_arg(cmd)),
                               "tol": tol, "via_tol": parse_tolerance(cmd.get("via_tolerance")) or tol}
                 self._send_route_point()
+            elif kind in ("mission_retry", "mission_skip"):
+                self._mission_retry(kind == "mission_skip")
             elif kind == "mission_resume":
                 if self.resume:
                     self._mission_resume()
@@ -1102,6 +1108,7 @@ class NavWebNode(Node):
             elif kind == "cancel":
                 self.route = None
                 self.resume = None
+                self.failed = None
                 self.dock_node = None
                 if self.dock_handle is not None:
                     self.dock_handle.cancel_goal_async()
@@ -1503,7 +1510,12 @@ class NavWebNode(Node):
                 return
             else:
                 message = "route gestopt bij punt %d: %s" % (r["index"] + 1, message)
+                if state == "aborted" and self.mission_cmd:
+                    mc = dict(self.mission_cmd, start_index=r["index"], lap=r["lap"])
+                    self.failed = {"cmd": mc, "points": len(r["poses"]), "loop": r["loop"]}
             self.route = None
+        elif mode == "goal" and state == "aborted" and self.mission_cmd and self.mission_cmd.get("cmd") == "goal":
+            self.failed = {"cmd": dict(self.mission_cmd)}
         self._set_status(state, mode, message)
 
     def _next_route_point(self):
@@ -1868,6 +1880,31 @@ class NavWebNode(Node):
         if pct is not None and pct >= self.resume["at"]:
             self.get_logger().info("batterij %d %%: verder met het onderbroken doel/route" % pct)
             self._mission_resume()
+
+    def _mission_retry(self, skip):
+        """After a failed goal/route: the same goal or route point again, or
+        (skip, route only) the next point."""
+        f = self.failed
+        if not f:
+            self._set_status("idle", None, "niets om opnieuw te proberen")
+            return
+        cmd = dict(f["cmd"])
+        if skip:
+            if cmd.get("cmd") != "route":
+                self._set_status("idle", None, "overslaan kan enkel bij een route")
+                return
+            i = cmd.get("start_index", 0) + 1
+            if i >= f["points"]:
+                if not f.get("loop"):
+                    self.failed = None
+                    self._set_status("succeeded", "route", "laatste punt overgeslagen - route klaar")
+                    return
+                i, cmd["lap"] = 0, cmd.get("lap", 1) + 1
+            cmd["start_index"] = i
+        self.failed = None
+        msg = String()
+        msg.data = json.dumps(cmd)
+        self._on_cmd(msg)
 
     def _mission_resume(self):
         cmd = self.resume["cmd"]
@@ -2239,6 +2276,11 @@ class NavWebNode(Node):
         s["docked"] = self.docked
         s["closed_edges"] = len(self.closed_edges)
         s["battery_return"] = list(self.battery_return) if self.battery_return else None
+        if self.failed:
+            c = self.failed["cmd"]
+            s["failed"] = {"kind": c.get("cmd"),
+                           "waypoint": (c.get("start_index") or 0) + 1 if c.get("cmd") == "route" else None,
+                           "waypoints": self.failed.get("points")}
         if self.resume:
             c = self.resume["cmd"]
             s["resume"] = {"at": self.resume["at"], "kind": c.get("cmd"),

@@ -12,6 +12,10 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## 1.1.9 - 2026-11-24 (branch feature/route, image `:route`)
+- **Virtuele robot 1.14.0**: na een mislukt doel of routepunt knoppen
+  *Opnieuw proberen* en *Overslaan* op de kaart.
+
 ## 1.1.8 - 2026-11-24 (branch feature/route, image `:route`)
 - **Virtuele robot 1.13.1**: staat er een doos op een rijbaan, dan sluit
   Fenix die rijbaan af en rijdt de robot om via het wegennet; weggehaalde
