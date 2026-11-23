@@ -34,7 +34,10 @@
 #                        (docking_server); {"cmd": "undock"} -> drive off it. A goal/route
 #                        while docked undocks first. "goal"/"route" with "battery_return_pct":
 #                        % (fallback "battery_return": V) and "graph": back to the laadplaats
-#                        when the battery drops below it
+#                        when the battery drops below it; with "resume_pct": % it goes on
+#                        once the battery is back above that (a swapped battery),
+#                        a route from the point where it stopped. {"cmd": "mission_resume"}
+#                        -> go on now; "cancel" forgets it
 #                      {"cmd": "bt_view", "name": ""|<file>|"wegennet"} -> /web/bt shows
 #                        that behavior tree ("" = the one of the current goal)
 #   /web/nav_status  std_msgs/String (JSON) out, 2 Hz; also "loc" (AMCL
@@ -55,6 +58,10 @@
 #                    last status before IDLE}, "log": [...]},
 #                    from bt_navigator's /behavior_tree_log, 4 Hz on change,
 #                    only while subscribed (nav.html card "Behavior tree")
+#   /web/points      std_msgs/String (JSON) out: {"n": points in the cloud, "p": [x, y, z, ...]}
+#                    the 3D lidar (/points, PointCloud2) in base_footprint, thinned to
+#                    POINTS_VOXEL cubes, at most POINTS_MAX, 2 Hz, only while subscribed
+#                    (layer "3D-lidar" on nav.html)
 #   /web/particles   std_msgs/String (JSON) out: {"n": particles in AMCL,
 #                    "p": [x, y, yaw, ...]} of at most PARTICLES_MAX particles,
 #                    1 Hz, only while subscribed (layer "Particles" on nav.html):
@@ -98,7 +105,7 @@ from rclpy.action import ActionClient
 from rclpy.clock import Clock, ClockType
 from rclpy.node import Node
 from rclpy.time import Time
-from sensor_msgs.msg import BatteryState, CompressedImage
+from sensor_msgs.msg import BatteryState, CompressedImage, PointCloud2
 from std_msgs.msg import Bool, String
 from std_srvs.srv import Empty, Trigger
 from turtlebot3_msgs.srv import Sound
@@ -132,6 +139,10 @@ PHOTO_DIR = "/root/turtlebot_state/photos"
 PHOTO_KEEP = 300         # newest photos kept (~50 kB each)
 CAMERA_TOPIC = "/camera/image_raw/compressed"
 PARTICLES_MAX = 200      # /web/particles: enough to see the cloud spread out
+POINTS_TOPIC = os.environ.get("TB_LIDAR3D_TOPIC", "/points")
+POINTS_VOXEL = 0.08      # m: one point per cube for the page (~2900 -> ~1000 in the classroom)
+POINTS_MAX = 4000
+POINTS_PERIOD = 0.5      # s between clouds to the page
 
 
 def clean_pose(p):
@@ -736,6 +747,8 @@ class NavWebNode(Node):
         self.battery_v = None    # last /battery_state voltage
         self.battery_pct = None  # its percentage as sent (0-1 or 0-100), None = not reported
         self.battery_return = None   # (limit, is_voltage) of the running goal/route, or None
+        self.mission_cmd = None  # page command of the running goal/route (to resume it)
+        self.resume = None       # {"cmd", "at"}: interrupted by a low battery, go on at "at" %
         self.create_subscription(BatteryState, "/battery_state", self._on_battery, 10)
         self.sound_client = self.create_client(Sound, "/sound")
         self.action_timer = None    # wait / photo timeout of a route point action
@@ -801,6 +814,13 @@ class NavWebNode(Node):
         self.create_timer(0.5, self._publish_status, clock=Clock(clock_type=ClockType.STEADY_TIME))
         self.create_timer(2.0, self._check_nav2_active, clock=Clock(clock_type=ClockType.STEADY_TIME))
         self.create_timer(1.0, self._particles_tick, clock=Clock(clock_type=ClockType.STEADY_TIME))
+        # 3D lidar for the page, only while it shows the layer (a cloud is
+        # ~35 kB, 5x/s: too much for rosbridge as it is)
+        self.points_pub = self.create_publisher(String, "/web/points", 1)
+        self.points_sub = None
+        self.points_last = 0.0
+        self.points_tf = {}      # lidar frame -> (3x3 rotation, translation) into base_footprint
+        self.create_timer(1.0, self._points_tick, clock=Clock(clock_type=ClockType.STEADY_TIME))
         # Behavior tree card on nav.html: the tree of the current goal + live
         # status from bt_navigator, only while a page subscribes
         self.bt_pub = self.create_publisher(String, "/web/bt", 10)
@@ -814,6 +834,53 @@ class NavWebNode(Node):
         self.bt_last = (None, 0.0)  # (json, time) of the last /web/bt
         self.create_timer(0.25, self._bt_tick, clock=Clock(clock_type=ClockType.STEADY_TIME))
         self.get_logger().info("nav_web_node ready: /web/nav_cmd -> Nav2, /web/nav_status, /web/robot_pose")
+
+    # ---- 3D lidar (layer on nav.html) ----------------------------------------
+    def _points_tick(self):
+        want = self.points_pub.get_subscription_count() > 0
+        if want and self.points_sub is None:
+            self.points_sub = self.create_subscription(
+                PointCloud2, POINTS_TOPIC, self._on_points,
+                QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT))
+        elif not want and self.points_sub is not None:
+            self.destroy_subscription(self.points_sub)
+            self.points_sub = None
+
+    def _on_points(self, msg):
+        now = time.monotonic()
+        if now - self.points_last < POINTS_PERIOD or self.tf_buffer is None:
+            return   # the page shows the robot pose too, so the TF listener runs
+        frame = msg.header.frame_id
+        if frame not in self.points_tf:
+            try:   # the lidar is mounted on the robot: a static transform, looked up once
+                t = self.tf_buffer.lookup_transform(BASE_FRAME, frame, Time()).transform
+            except Exception:
+                return
+            q, tr = t.rotation, t.translation
+            x, y, z, w = q.x, q.y, q.z, q.w
+            rot = np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+                            [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+                            [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
+            self.points_tf[frame] = (rot, np.array([tr.x, tr.y, tr.z]))
+        rot, tr = self.points_tf[frame]
+        offs = {f.name: f.offset for f in msg.fields}
+        if not all(k in offs for k in ("x", "y", "z")) or msg.point_step == 0:
+            return
+        n = msg.width * msg.height
+        raw = np.frombuffer(bytes(msg.data), dtype=np.uint8)[:n * msg.point_step].reshape(n, msg.point_step)
+        xyz = np.stack([raw[:, offs[k]:offs[k] + 4].copy().view("<f4" if not msg.is_bigendian else ">f4")[:, 0]
+                        for k in ("x", "y", "z")], axis=1).astype(np.float64)
+        xyz = xyz[np.isfinite(xyz).all(axis=1)]
+        pts = xyz @ rot.T + tr
+        # one point per POINTS_VOXEL cube (the highest one shows best from above)
+        keys = np.floor(pts / POINTS_VOXEL).astype(np.int32)
+        order = np.argsort(-pts[:, 2])
+        _, first = np.unique(keys[order], axis=0, return_index=True)
+        pts = pts[order[first]][:POINTS_MAX]
+        pts = pts[np.argsort(pts[:, 2])]      # low first: high points drawn on top
+        self.points_last = now
+        self.points_pub.publish(String(data=json.dumps(
+            {"n": int(n), "p": np.round(pts, 2).flatten().tolist()}, separators=(",", ":"))))
 
     # ---- AMCL particles (layer on nav.html) -------------------------------
     def _particles_tick(self):
@@ -981,6 +1048,7 @@ class NavWebNode(Node):
                 self.paused_goal = None
                 if not self._graph_ok(cmd, "goal"):
                     return
+                self.mission_cmd, self.resume = dict(cmd), None
                 self.algo = self._algo(cmd)
                 bt = behavior_tree(cmd.get("planner"), cmd.get("controller"), bool(cmd.get("graph")),
                                    self._battery_arg(cmd))
@@ -996,15 +1064,25 @@ class NavWebNode(Node):
                 self.paused_goal = None
                 if not self._graph_ok(cmd, "route"):
                     return
+                self.mission_cmd, self.resume = dict(cmd), None
                 poses = [clean_pose(p) for p in poses][:100]
                 self.algo = self._algo(cmd)
-                self.route = {"poses": poses, "loop": bool(cmd.get("loop")), "lap": 1, "index": 0,
+                # resumed after charging: from the point where it stopped
+                start = min(max(int(cmd.get("start_index") or 0), 0), len(poses) - 1)
+                self.route = {"poses": poses, "loop": bool(cmd.get("loop")),
+                              "lap": max(int(cmd.get("lap") or 1), 1), "index": start,
                               "bt": behavior_tree(cmd.get("planner"), cmd.get("controller"),
                                                   bool(cmd.get("graph")), self._battery_arg(cmd)),
                               "tol": tol, "via_tol": parse_tolerance(cmd.get("via_tolerance")) or tol}
                 self._send_route_point()
+            elif kind == "mission_resume":
+                if self.resume:
+                    self._mission_resume()
+                else:
+                    self._set_status("idle", None, "niets om te hervatten")
             elif kind == "cancel":
                 self.route = None
+                self.resume = None
                 self.dock_node = None
                 if self.dock_handle is not None:
                     self.dock_handle.cancel_goal_async()
@@ -1143,6 +1221,7 @@ class NavWebNode(Node):
         self._set_status("relocalizing", None, "opnieuw lokaliseren: robot draait ter plaatse")
 
     def _check_nav2_active(self):
+        self._resume_tick()
         if not self.nav_client.server_is_ready() or self.nav2_active:
             self.bringup_retries = 0      # next Navigation start: retries again
             self.bringup_stuck = {}
@@ -1372,12 +1451,18 @@ class NavWebNode(Node):
             self.dock_node = None
         elif state == "succeeded" and self._returned_to_dock():
             # BATTERY_BT took the second branch: the robot is at the laadplaats
+            mc = dict(self.mission_cmd or {})
+            if mc.get("resume_pct"):
+                if mode == "route" and self.route:   # go on from the point it was driving to
+                    mc["start_index"], mc["lap"] = self.route["index"], self.route["lap"]
+                self.resume = {"cmd": mc, "at": float(mc["resume_pct"])}
             self.route, self.docked = None, True
-            pct = self.battery_pct
-            now = ("%.2f V" % self.battery_v if pct is None else "%d %%" % round(pct * 100 if pct <= 1.0 else pct)) \
+            pct = self._battery_pct100()
+            now = ("%.2f V" % self.battery_v if pct is None else "%d %%" % round(pct)) \
                 if self._battery_low() else None
-            self._set_status("succeeded", "dock", "batterij bijna leeg%s: teruggereden naar de laadplaats en aangemeerd"
-                             % (" (%s)" % now if now else ""))
+            self._set_status("succeeded", "dock", "batterij bijna leeg%s: teruggereden naar de laadplaats en aangemeerd%s"
+                             % (" (%s)" % now if now else "",
+                                " - rijdt verder bij %d %%" % self.resume["at"] if self.resume else ""))
             return
         if mode == "route" and self.route:
             r = self.route
@@ -1744,6 +1829,26 @@ class NavWebNode(Node):
                     return True
         return False
 
+    def _battery_pct100(self):
+        p = self.battery_pct
+        return None if p is None else (p * 100.0 if p <= 1.0 else p)
+
+    def _resume_tick(self):
+        """Interrupted by a low battery and docked: go on once charged (battery swapped)."""
+        if not self.resume or not self.docked:
+            return
+        pct = self._battery_pct100()
+        if pct is not None and pct >= self.resume["at"]:
+            self.get_logger().info("batterij %d %%: verder met het onderbroken doel/route" % pct)
+            self._mission_resume()
+
+    def _mission_resume(self):
+        cmd = self.resume["cmd"]
+        self.resume = None
+        msg = String()
+        msg.data = json.dumps(cmd)
+        self._on_cmd(msg)       # docked: undocks first
+
     def _returned_to_dock(self):
         """After a goal with BATTERY_BT: did it end at the laadplaats instead of
         the goal? Judged on the position, not on the battery: IsBatteryLow
@@ -2069,6 +2174,11 @@ class NavWebNode(Node):
         s["graph"] = {"nodes": self.graph_nodes if self.graph_loaded and self.graph_loaded[0] == name else 0}
         s["docked"] = self.docked
         s["battery_return"] = list(self.battery_return) if self.battery_return else None
+        if self.resume:
+            c = self.resume["cmd"]
+            s["resume"] = {"at": self.resume["at"], "kind": c.get("cmd"),
+                           "waypoint": (c.get("start_index") or 0) + 1 if c.get("cmd") == "route" else None,
+                           "waypoints": len(c.get("poses") or []) if c.get("cmd") == "route" else None}
         s["truth_err"] = self._truth_error(name) if s["nav2_ready"] and self.loc else None
         if self.tolerance:
             s["tolerance"] = {"xy": self.tolerance[0], "yaw": self.tolerance[1]}

@@ -12,6 +12,13 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## 1.1.6 - 2026-11-24 (branch feature/route, image `:route`)
+- **Virtuele robot 1.13.0**: na de terugkeer naar de laadplaats rijdt de
+  robot verder zodra de batterij weer vol genoeg is (vinkje bij
+  Algoritmes), een route vanaf het punt waar hij gestopt was; 3D-lidar van de
+  simulator (`/points`) als obstakelbron voor Nav2 en als laag op de kaart
+  (Sensoren > 3D-lidar aanzetten in de simulator).
+
 ## 1.1.5 - 2026-11-23 (branch feature/route, image `:route`)
 - **Virtuele robot 1.12.2**: terugkeer naar de laadplaats bij lage batterij
   betrouwbaar (3/3 in de simulator), juiste melding na het aanmeren.

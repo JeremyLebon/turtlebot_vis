@@ -258,6 +258,7 @@
         <span class="rsep nav-only"></span>
         <button class="btn tip-r nav-only" id="dockBtn" data-icon="bolt" aria-label="Naar laadplaats" data-tip="Naar de laadplaats (knoop van het wegennet) en daar aanmeren"></button>
         <button class="btn tip-r nav-only" id="undockBtn" data-icon="fwd" style="display:none" aria-label="Vertrek van laadplaats" data-tip="Vertrekken van de laadplaats (achteruit weg)"></button>
+        <button class="btn tip-r nav-only" id="missionResumeBtn" data-icon="play" style="display:none" aria-label="Verder met onderbroken route" data-tip="Verder met het doel of de route die onderbroken werd voor de laadplaats - nu, zonder te wachten op opladen"></button>
         <button class="btn tip-r nav-only" id="pauseBtn" data-icon="pause" style="display:none" aria-label="Pauze" data-tip="Pauze: doel of route onderbreken (later verder)"></button>
         <button class="btn tip-r nav-only" id="resumeBtn" data-icon="play" style="display:none" aria-label="Verder" data-tip="Verder rijden"></button>
         <button class="btn danger tip-r nav-only" id="cancelBtn" data-icon="x" aria-label="Annuleer" data-tip="Doel of route annuleren"></button>
@@ -336,13 +337,14 @@
         <button class="btn tip-l" id="zoomFit" data-icon="fit" aria-label="Hele kaart" data-tip="Hele kaart"></button>
         <span class="rsep"></span>
         <button class="btn tip-l layer" data-layer="showScan" data-icon="scan" aria-label="Laserscan" data-tip="Laserscan (rood) op de kaart: ligt hij op de muren, dan klopt de lokalisatie (op Mappen standaard aan)"></button>
+        <button class="btn tip-l layer" data-layer="showCloud" data-icon="lidar" aria-label="3D-lidar" data-tip="3D-lidar (/points) van bovenaf, kleur = hoogte: blauw laag, rood op 35 cm en hoger. Grijs = vloer. In de simulator: Sensoren > 3D-lidar aanzetten"></button>
         <button class="btn tip-l layer" data-layer="showLocalCm" data-icon="localcm" aria-label="Local costmap" data-tip="Local costmap: obstakels + veiligheidsmarge rond de robot (3 x 3 m)"></button>
         <button class="btn tip-l layer nav-only" data-layer="showParticles" data-icon="particles" aria-label="Particles (AMCL)" data-tip="Particles van AMCL (oranje streepjes): elke streep is een gok waar de robot staat en waar hij naartoe kijkt. Dicht bij elkaar = zeker, uitgewaaierd = onzeker"></button>
         <button class="btn tip-l layer" data-layer="showGraph" data-icon="graph" aria-label="Wegennet" data-tip="Wegennet: knopen en rijbanen van deze kaart (Route Server)"></button>
         <button class="btn tip-l layer" data-layer="showGlobalCm" data-icon="globalcm" aria-label="Global costmap" data-tip="Global costmap: hele kaart + veiligheidsmarge (planner)"></button>
         <button class="btn tip-l" id="navPadBtn" data-icon="index" aria-label="Bijsturen" data-tip="Bijsturen (teleop) tonen/verbergen - gaat voor op Nav2 zolang je een pijl ingedrukt houdt"></button>
         <button class="btn tip-l" id="camPipBtn" data-icon="camera" aria-label="Camera" data-tip="Camerabeeld in de kaart"></button>
-        <span class="hidden-cbs"><input type="checkbox" id="showLocalCm"><input type="checkbox" id="showScan"><input type="checkbox" id="showGlobalCm"><input type="checkbox" id="showParticles"><input type="checkbox" id="showGraph"></span>
+        <span class="hidden-cbs"><input type="checkbox" id="showLocalCm"><input type="checkbox" id="showScan"><input type="checkbox" id="showGlobalCm"><input type="checkbox" id="showParticles"><input type="checkbox" id="showGraph"><input type="checkbox" id="showCloud"></span>
       </div>
       <button id="mapSwap" aria-label="Kaart groot" title="Kaart weer groot"></button>
       <div id="navPad" style="display:none">
@@ -363,6 +365,7 @@
       <span class="nav-only" style="--c: var(--orange)">doel</span>
       <span class="nav-only" style="--c: var(--purple)">route</span>
       <span style="--c: #ff4d6d">laserscan</span>
+      <span id="legCloud" style="--c: linear-gradient(90deg, #3b82f6, #22c55e, #eab308, #ef4444); display:none">3D-lidar (laag &rarr; 35 cm)</span>
       <span style="--c: #e5484d">verboden / muur</span>
       <span style="--c: #3fb950">voorkeurszone</span>
       <span style="--c: #4ea1ff">snelheidszone</span>
@@ -458,7 +461,9 @@
       <label class="sub" for="batReturn">Batterij</label>
       <span><label class="sub" title="Zakt de batterij onder deze grens tijdens een doel of route via het wegennet, dan stopt de robot en rijdt hij naar de laadplaats (behavior tree: IsBatteryLow). Vraagt een laadplaats in het wegennet."><input type="checkbox" id="batReturn"> terug naar de laadplaats onder</label>
         <input type="number" id="batReturnPct" min="5" max="90" step="5" value="20" style="width:4em"> %
-        <span class="sub" id="batReturnInfo"></span></span>
+        <span class="sub" id="batReturnInfo"></span>
+        <br><label class="sub" title="Na de terugkeer naar de laadplaats wacht de robot tot de batterij weer boven deze grens zit (batterij gewisseld) en rijdt hij verder: een route vanaf het punt waar hij gestopt was. Meteen verder: knop Verder op de kaart."><input type="checkbox" id="resumeAfter"> daarna verder rijden bij</label>
+        <input type="number" id="resumePct" min="30" max="100" step="5" value="90" style="width:4em"> %</span>
       <label class="sub" for="tolSel">Nauwkeurigheid</label>
       <select id="tolSel" title="Wanneer is de robot 'aangekomen'? Nauwkeuriger dan AMCL (5-10 cm) heeft geen zin: dan gaat hij wiebelen of blijven draaien">
         <option value="ruim" title="25 cm, 14 graden - standaard van TurtleBot3">ruim (25 cm)</option>
@@ -782,9 +787,15 @@
   function batVolt(pct) { return +battVolt(pct).toFixed(2); }
   function batReturnUi() {
     batReturn.disabled = !viaGraph.checked;
+    resumeAfter.disabled = !viaGraph.checked || !batReturn.checked;
     document.getElementById("batReturnInfo").textContent = viaGraph.checked ? "" : "(enkel via het wegennet)";
   }
-  batReturn.addEventListener("change", function () { lsSet("navBatReturn", batReturn.checked ? "1" : "0"); });
+  var resumeAfter = document.getElementById("resumeAfter"), resumePct = document.getElementById("resumePct");
+  resumeAfter.checked = lsGet("navResumeAfter", "0") === "1";
+  resumePct.value = lsGet("navResumePct", "90");
+  resumeAfter.addEventListener("change", function () { lsSet("navResumeAfter", resumeAfter.checked ? "1" : "0"); });
+  resumePct.addEventListener("change", function () { lsSet("navResumePct", resumePct.value); });
+  batReturn.addEventListener("change", function () { lsSet("navBatReturn", batReturn.checked ? "1" : "0"); batReturnUi(); });
   batReturnPct.addEventListener("change", function () { lsSet("navBatReturnPct", batReturnPct.value); batReturnUi(); });
   function viaGraphUi() {
     batReturnUi();
@@ -800,6 +811,7 @@
     if (viaGraph.checked && batReturn.checked) {
       a.battery_return_pct = +batReturnPct.value || 20;      // compared with /battery_state percentage
       a.battery_return = batVolt(a.battery_return_pct);       // fallback when the robot reports none
+      if (resumeAfter.checked) a.resume_pct = Math.max(a.battery_return_pct + 10, +resumePct.value || 90);
     }
     return a;
   }
@@ -1048,6 +1060,10 @@
     var stEl = document.getElementById("nsState");
     stEl.textContent = (STATE_TEXT[s.state] || s.state) + (s.mode ? " (" + (s.mode === "route" ? "route" : s.mode === "dock" ? "laadplaats" : "doel") + ")" : "");
     document.getElementById("undockBtn").style.display = s.docked ? "" : "none";
+    var rb = document.getElementById("missionResumeBtn");
+    rb.style.display = s.resume ? "" : "none";
+    if (s.resume) rb.setAttribute("data-tip", "Verder met " + (s.resume.kind === "route" ? "de route vanaf punt " + s.resume.waypoint + " van " + s.resume.waypoints : "het doel") +
+      " - nu, zonder te wachten tot de batterij " + Math.round(s.resume.at) + " % is");
     stEl.style.color = s.state === "succeeded" ? "var(--green)" : (s.state === "aborted" || s.state === "error" || s.state === "rejected") ? "var(--red)" : "";
     var nav = s.state === "navigating";
     document.getElementById("nsDist").textContent = nav && s.distance_remaining != null ? s.distance_remaining.toFixed(2) + " m" : "--";
@@ -1972,6 +1988,49 @@
     box.addEventListener("change", function () { lsSet(c[2], box.checked ? "1" : "0"); setCostmap(c[0], box.checked); });
   });
 
+  // ---- 3D lidar (optional overlay) ----
+  // nav_web_node thins /points (PointCloud2, ~2900 points 5x/s) to one point
+  // per 8 cm cube in base_footprint, 2x/s, only while this layer subscribes.
+  // Placed with the robot pose, coloured by height: what Nav2 counts as an
+  // obstacle lies between 3 and 35 cm (launch_control_node's costmaps).
+  var cloud = null, cloudT = 0;   // [x, y, z, ...] in base_footprint
+  var cloudTopic = new ROSLIB.Topic({ ros: ros, name: "/web/points", messageType: "std_msgs/msg/String", queue_length: 1 });
+  function setCloud(on) {
+    document.getElementById("legCloud").style.display = on ? "" : "none";
+    if (on) cloudTopic.subscribe(function (msg) {
+      try { cloud = JSON.parse(msg.data).p; cloudT = Date.now(); } catch (e) { cloud = null; }
+      draw();
+    });
+    else { cloudTopic.unsubscribe(); cloud = null; draw(); }
+  }
+  function cloudColor(z) {
+    if (z < 0.03) return "rgba(160,160,160,0.35)";   // floor
+    var t = Math.min(1, z / 0.35), h = 220 - 220 * t;   // blue (low) -> red (35 cm and up)
+    return "hsl(" + h.toFixed(0) + ",85%," + (z > 0.35 ? 45 : 55) + "%)";
+  }
+  function drawCloud() {
+    if (!cloud || !robot) return;
+    var dpr = window.devicePixelRatio || 1, sz = Math.max(2, 2.2 * dpr * Math.sqrt(view.z));
+    var c = Math.cos(robot.yaw), s = Math.sin(robot.yaw), last = null;
+    for (var i = 0; i + 2 < cloud.length; i += 3) {
+      var bx = cloud[i], by = cloud[i + 1], col = cloudColor(cloud[i + 2]);
+      if (col !== last) { ctx.fillStyle = col; last = col; }
+      var p = toCanvas(robot.x + c * bx - s * by, robot.y + s * bx + c * by);
+      ctx.fillRect(p[0] - sz / 2, p[1] - sz / 2, sz, sz);
+    }
+  }
+  (function () {
+    var box = document.getElementById("showCloud");
+    box.checked = lsGet("navCloud", "0") === "1";
+    if (box.checked) setCloud(true);
+    box.addEventListener("change", function () { lsSet("navCloud", box.checked ? "1" : "0"); setCloud(box.checked); });
+    // no cloud after 4 s: tell why (3D lidar off in the simulator, or none on the robot)
+    setInterval(function () {
+      var leg = document.getElementById("legCloud");
+      if (box.checked) leg.textContent = Date.now() - cloudT < 4000 ? "3D-lidar (laag \u2192 35 cm)" : "3D-lidar: geen /points (simulator: Sensoren > 3D-lidar)";
+    }, 2000);
+  })();
+
   // ---- AMCL particles (optional overlay) ----
   // nav_web_node thins /particle_cloud (up to 2000 poses) to 200, 1x/s, and
   // only while this layer subscribes: off = no traffic at all
@@ -2014,6 +2073,7 @@
     drawCostmap(costmaps.global, null);
     drawCostmap(costmaps.local, mapOdom);
     drawScan();
+    drawCloud();
     drawParticles();
 
     // 1 m grid ticks along the edges would clutter small maps; a scale bar instead
@@ -2338,6 +2398,7 @@
     sendCmd(Object.assign({ cmd: "dock" }, a));
   });
   document.getElementById("undockBtn").addEventListener("click", function () { sendCmd({ cmd: "undock" }); });
+  document.getElementById("missionResumeBtn").addEventListener("click", function () { sendCmd({ cmd: "mission_resume" }); });
   document.getElementById("pauseBtn").addEventListener("click", function () { sendCmd({ cmd: "pause" }); });
   document.getElementById("resumeBtn").addEventListener("click", function () { sendCmd({ cmd: "resume" }); });
   // Exploring sends its own goals to the same Nav2: nav_web_node pauses it for ours

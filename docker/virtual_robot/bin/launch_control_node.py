@@ -53,6 +53,11 @@ FIXED_LAUNCHES = {
 # wachten op de simulator; SLAM en Navigatie op simulatietijd (/clock).
 SIM = os.environ.get("FENIX_SIM") == "1"
 SIM_TF_TOLERANCE = 1.0   # s, virtual robot only (write_nav2_params)
+# 3D lidar (sensor_msgs/PointCloud2 on /points) as an extra obstacle source
+# for Nav2: the HTML simulator's Burger has one (lidar_3d_link, 16 rings,
+# +-15 deg, 5 Hz; Sensoren > 3D-lidar), a real robot only with TB_LIDAR3D=1.
+LIDAR3D = SIM or os.environ.get("TB_LIDAR3D") == "1"
+LIDAR3D_TOPIC = os.environ.get("TB_LIDAR3D_TOPIC", "/points")
 if SIM:
     FIXED_LAUNCHES["bringup"] = ["ros2", "launch", "/root/turtlebot3_ws/launch/sim_bringup.launch.py"]
 
@@ -516,6 +521,25 @@ def write_nav2_params():
                        "slowdown_radius": 0.2},
         "dock_approach_timeout": 30.0, "max_retries": 2,
         "undock_linear_tolerance": 0.05, "undock_angular_tolerance": 0.1}}
+    if LIDAR3D:
+        # Points from 3 cm (above the floor) to 35 cm (the Burger with its 3D
+        # lidar is ~25 cm high): what the robot can hit, also below or above
+        # the 2D lidar's plane at 18 cm (low boxes, chair seats, table edges).
+        # Local costmap: its voxel layer (3D, clears along the rays); global
+        # costmap: the obstacle layer, so the planner goes around them too.
+        # No data (3D lidar off in the simulator) is fine: no expected rate.
+        points = {"topic": LIDAR3D_TOPIC, "data_type": "PointCloud2", "marking": True, "clearing": True,
+                  "min_obstacle_height": 0.03, "max_obstacle_height": 0.35,
+                  "obstacle_max_range": 2.5, "obstacle_min_range": 0.0,
+                  "raytrace_max_range": 3.0, "raytrace_min_range": 0.0}
+        lc3 = params["local_costmap"]["local_costmap"]["ros__parameters"]
+        gc3 = params["global_costmap"]["global_costmap"]["ros__parameters"]
+        for layer in (lc3.get("voxel_layer"), gc3.get("obstacle_layer")):
+            if isinstance(layer, dict):
+                srcs = layer.get("observation_sources", "scan").split()
+                if "points" not in srcs:
+                    layer["observation_sources"] = " ".join(srcs + ["points"])
+                layer["points"] = dict(points)
     apply_nav2_overrides(params)
     if SIM:
         # Virtual robot: /clock and /tf come from a browser tab via rosbridge.
