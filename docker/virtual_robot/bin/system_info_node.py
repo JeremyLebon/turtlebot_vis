@@ -22,7 +22,11 @@ import urllib.request
 import fenix_services
 import rclpy
 from rclpy.node import Node
+from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
+from nav_msgs.msg import Odometry
 from rcl_interfaces.msg import Log
+from rclpy.qos import QoSProfile, ReliabilityPolicy
+from sensor_msgs.msg import BatteryState, Imu, LaserScan
 from std_msgs.msg import String
 
 IFACE = os.environ.get("STATUS_PAGE_IFACE", "wlan0")
@@ -802,6 +806,191 @@ class MonitorPush:
             self.busy = False
 
 
+# ---- /diagnostics (diagnostic_msgs) -------------------------------------------
+# The robot's own judgement of its health, as the ROS standard: the same
+# thresholds as the labo-check of the status page (common.js: piPower,
+# piTemp, fanState, diskState, servicesState, pingState, laboRows), but
+# decided here, once, for every page, the fleet monitor and tools such as
+# rqt_robot_monitor or the diagnostics panel of Foxglove/Lichtblick. Names
+# "Group/Item": the status page groups on the part before the slash.
+# Thresholds of the TurtleBot (OpenCR 3S LiPo, Pi 5) for now; later from the
+# robot profile (t75).
+DIAG_PERIOD = 2.0
+SENSOR_TOPICS = (("Lidar", "/scan", LaserScan), ("IMU", "/imu", Imu), ("Odometrie", "/odom", Odometry))
+BATT_MOTORS_OFF, BATT_CHARGE_NOW, BATT_LOW = 11.0, 11.2, 11.4   # V (OpenCR cuts the motors < 11.0 V)
+ROSOUT_RECENT_S = 60
+
+
+def diag_status(name, level, message, hardware_id, **values):
+    st = DiagnosticStatus()
+    st.name, st.level, st.message, st.hardware_id = name, level, message, hardware_id
+    st.values = [KeyValue(key=k, value=str(v)) for k, v in values.items() if v is not None]
+    return st
+
+
+def build_diagnostics(data, ls, batt, nav, rates, hw):
+    """List of DiagnosticStatus from /system_info data (data), /launch_status
+    (ls, {} if stale), the battery ({v, pct, t} or None), /web/nav_status
+    (nav or None) and sensor rates ({label: hz})."""
+    OK, WARN, ERR = DiagnosticStatus.OK, DiagnosticStatus.WARN, DiagnosticStatus.ERROR
+    out = []
+
+    def add(name, level, message, **values):
+        out.append(diag_status(name, level, message, hw, **values))
+
+    # -- Pi
+    t = data.get("throttled")
+    if t is not None:
+        if t & 0x1:
+            lvl, msg = ERR, "onderspanning"
+        elif t & 0x6:
+            lvl, msg = ERR, "afgeremd (throttled)"
+        elif t & 0x10000:
+            lvl, msg = WARN, "onderspanning gehad sinds opstart"
+        elif t & 0x60000:
+            lvl, msg = WARN, "afgeremd geweest sinds opstart"
+        else:
+            lvl, msg = OK, "OK"
+        add("Pi/Voeding", lvl, msg, throttled=hex(t), ext5v_v=data.get("ext5v_v"))
+    c = data.get("cpu_temp_c")
+    if c is not None:
+        add("Pi/Temperatuur", OK if c < 70 else WARN if c < 80 else ERR, "%.0f °C" % c, cpu_temp_c=c)
+    f = data.get("fan")
+    if f:
+        if f.get("pwm_percent", 0) > 0 and f.get("rpm") == 0:
+            add("Pi/Ventilator", ERR, "aangestuurd maar draait niet", **f)
+        else:
+            add("Pi/Ventilator", OK, "uit (koel genoeg)" if f.get("rpm") == 0 else "%s tpm" % f.get("rpm"), **f)
+    free, total = data.get("disk_free_gb"), data.get("disk_total_gb")
+    sd = (data.get("sd_errors") or {}).get("count")
+    if free is not None:
+        lvl = ERR if sd else OK if free > 2 else WARN if free > 1 else ERR
+        add("Pi/SD-kaart", lvl, "%.1f GB vrij van %.0f GB%s" % (free, total or 0, " - %d fout(en) sinds opstart" % sd if sd else ""),
+            disk_free_gb=free, sd_errors=sd)
+    host = data.get("host") or {}
+    if isinstance(host, dict) and host.get("prev_shutdown_clean") is not None:
+        clean = host["prev_shutdown_clean"]
+        add("Pi/Vorige afsluiting", OK if clean else WARN,
+            "netjes afgesloten" if clean else "onverwacht - stroom weg / batterij uitgetrokken?",
+            prev_boot_end=host.get("prev_boot_end"))
+
+    # -- Netwerk
+    dbm = data.get("wifi_signal_dbm")
+    if dbm is not None:
+        add("Netwerk/Wifi", OK if dbm > -60 else WARN if dbm >= -70 else ERR, "%d dBm" % dbm,
+            signal_dbm=dbm, band=data.get("wifi_band"), channel=data.get("wifi_channel"))
+    p = data.get("ping") or {}
+    if p.get("avg_ms") is not None:
+        lvl = ERR if (p.get("loss_percent", 0) > 20 or p.get("jitter_ms", 0) > 30) else \
+            WARN if (p.get("loss_percent", 0) > 0 or p.get("jitter_ms", 0) > 10) else OK
+        add("Netwerk/Wifi naar AP", lvl, "%.1f ms, jitter %.1f ms%s" % (
+            p["avg_ms"], p.get("jitter_ms", 0), ", %d%% verlies" % p["loss_percent"] if p.get("loss_percent") else ""), **p)
+    elif p.get("loss_percent") == 100:
+        add("Netwerk/Wifi naar AP", ERR, "AP niet bereikbaar")
+    i = data.get("internet")
+    if i:
+        if i.get("online"):
+            add("Netwerk/Internet", OK, "ja", latency_ms=i.get("latency_ms"))
+        elif i.get("ip"):
+            add("Netwerk/Internet", WARN, "geen DNS", latency_ms=i.get("latency_ms"))
+        else:
+            add("Netwerk/Internet", OK, "nee (niet nodig om te rijden, wel voor updates)")
+    ntp = data.get("ntp") or {}
+    if ntp.get("synced") is not None:
+        add("Netwerk/Klok", OK if ntp["synced"] else WARN,
+            "NTP OK" + (" (%s)" % ntp["server"] if ntp.get("server") else "") if ntp["synced"] else "NTP niet gesynchroniseerd",
+            server=ntp.get("server"))
+
+    # -- ROS
+    add("ROS/Zenoh-router", OK if data.get("zenoh_router") else ERR,
+        "poort 7447, %d laptop(s) verbonden" % len(data.get("zenoh_clients") or []) if data.get("zenoh_router") else "draait niet")
+    sv = data.get("services")
+    if sv:
+        down = sorted(k for k, v in sv.items() if v is False)
+        sup = data.get("supervisor") or {}
+        restarted = ["%s %dx" % (k, v.get("restarts", 0)) for k, v in sup.items()]
+        msg = "niet actief: " + ", ".join(down) if down else "alle diensten actief"
+        if restarted:
+            msg += " - herstart na crash: " + ", ".join(restarted)
+        add("ROS/Diensten", ERR if down else WARN if restarted else OK, msg,
+            **{k: ("actief" if v else "niet actief") for k, v in sv.items()})
+    now = time.time()
+    recent = [e for e in data.get("rosout_errors") or [] if now - e.get("t", 0) < ROSOUT_RECENT_S]
+    add("ROS/Foutmeldingen", WARN if recent else OK,
+        "%d fout(en) de laatste minuut - laatste: %s: %s" % (len(recent), recent[-1]["node"], recent[-1]["msg"][:120])
+        if recent else "geen fouten de laatste minuut")
+
+    # -- Robot: bringup, batterij, camera, joystick
+    dev = data.get("devices") or {}
+    bringup = bool(ls.get("bringup"))
+    if bringup and ls.get("robot_node", True):
+        add("Robot/Bringup", OK, "draait")
+    elif dev.get("opencr") is False and dev.get("usb_power") == "off":
+        add("Robot/Bringup", OK, "niet gestart, USB-stroom uit (spaarstand)")
+    elif dev.get("opencr") is False:
+        add("Robot/Bringup", ERR, "OpenCR niet gevonden (/dev/ttyACM0 - USB-kabel?)")
+    elif bringup:
+        add("Robot/Bringup", ERR, "OpenCR antwoordt niet (batterij? USB?)")
+    else:
+        add("Robot/Bringup", OK, "niet gestart")
+    if batt and now - batt["t"] < 10:
+        v, pct = batt["v"], batt.get("pct")
+        pct_s = " (%d %%)" % round(pct) if pct is not None else ""
+        if v < BATT_MOTORS_OFF:
+            lvl, msg = ERR, "%.2f V%s - motoren uitgeschakeld door de OpenCR, nu opladen/wisselen" % (v, pct_s)
+        elif v < BATT_CHARGE_NOW:
+            lvl, msg = ERR, "%.2f V%s - nu opladen" % (v, pct_s)
+        elif v < BATT_LOW:
+            lvl, msg = WARN, "%.2f V%s - bijna leeg" % (v, pct_s)
+        else:
+            lvl, msg = OK, "%.2f V%s" % (v, pct_s)
+        add("Robot/Batterij", lvl, msg, voltage=round(v, 2), percentage=round(pct) if pct is not None else None)
+    else:
+        add("Robot/Batterij", ERR if bringup else OK, "geen /battery_state" if bringup else "wacht op bringup")
+    if ls:
+        if ls.get("sensors_source") == "simulator" and not ls.get("camera_sensor"):
+            add("Robot/Camera", OK, "beeld uit de simulator")
+        elif not ls.get("camera_sensor"):
+            add("Robot/Camera", OK, "geen camera aangesloten")
+        elif not ls.get("camera_enabled"):
+            add("Robot/Camera", OK, "uitgeschakeld")
+        else:
+            add("Robot/Camera", OK if ls.get("camera") else ERR,
+                "draait (%s)" % ls["camera_sensor"] if ls.get("camera") else "camera_node draait niet")
+        jd = ls.get("joystick_device")
+        if ls.get("joystick"):
+            add("Robot/Joystick", OK if jd else ERR, "aan (%s)" % jd if jd else "aan, maar ontvanger niet gevonden")
+        else:
+            add("Robot/Joystick", OK, "uit" + (" (%s gedetecteerd)" % jd if jd else ""))
+
+    # -- Sensoren (frequentie gemeten met raw-abonnementen)
+    for label, topic, _ in SENSOR_TOPICS:
+        hz = rates.get(label, 0.0)
+        if hz > 0:
+            add("Sensoren/" + label, OK, "%.0f Hz" % hz, topic=topic, hz=round(hz, 1))
+        else:
+            add("Sensoren/" + label, ERR if bringup else OK, "geen data op " + topic if bringup else "wacht op bringup",
+                topic=topic)
+
+    # -- Navigatie
+    if ls.get("navigation") or (nav and nav.get("nav2_ready")):
+        if not nav or not nav.get("nav2_ready"):
+            add("Navigatie/Nav2", WARN, "start op")
+        elif not nav.get("nav2_active"):
+            add("Navigatie/Nav2", WARN, "wacht op de beginpositie" if not nav.get("loc") else "start op")
+        else:
+            add("Navigatie/Nav2", OK, "actief" + (" - kaart %s" % nav["map"] if nav.get("map") else ""))
+        loc = (nav or {}).get("loc")
+        if loc:
+            q = loc.get("quality")
+            add("Navigatie/Lokalisatie", ERR if q == "lost" else WARN if q == "doubt" else OK,
+                {"good": "goed", "doubt": "twijfel - rij een stukje", "lost": "kwijt - opnieuw lokaliseren"}.get(q, str(q)),
+                quality=q)
+    else:
+        add("Navigatie/Nav2", OK, "niet gestart")
+    return out
+
+
 class SystemInfoNode(Node):
     def __init__(self):
         super().__init__("system_info")
@@ -822,6 +1011,15 @@ class SystemInfoNode(Node):
         self.lidar_hours = LidarHours()
         threading.Thread(target=self._slow_loop, daemon=True).start()
         self.timer = self.create_timer(2.0, self.publish_info)
+        # /diagnostics: the robot's judgement of its health (build_diagnostics)
+        self.diag_pub = self.create_publisher(DiagnosticArray, "/diagnostics", 10)
+        # sensor rates: raw subscriptions (no deserialization, cheap on the Pi)
+        self.sensor_counts = {label: 0 for label, _, _ in SENSOR_TOPICS}
+        self.sensor_rates = {}
+        self.sensor_t = time.monotonic()
+        best_effort = QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT)
+        for label, topic, mtype in SENSOR_TOPICS:
+            self.create_subscription(mtype, topic, lambda _m, k=label: self._count(k), best_effort, raw=True)
 
         # Robot alerts (common.js): last ERROR/FATAL lines from /rosout. Here
         # and not in every page: the pages then don't get every log line.
@@ -833,13 +1031,13 @@ class SystemInfoNode(Node):
         self.monitor = MonitorPush(MONITOR_URL)
         self.launch_status = {}
         self.battery = None
-        if MONITOR_URL:
-            from sensor_msgs.msg import BatteryState
-            self.create_subscription(String, "/launch_status", self._on_launch_status, 10)
-            self.create_subscription(BatteryState, "/battery_state", self._on_battery, 10)
-            # navigation state for the monitor tile (nav_web_node, 2 Hz)
-            self.nav = None
-            self.create_subscription(String, "/web/nav_status", self._on_nav_status, 10)
+        # also for /diagnostics, so always (until 1.14: only with a monitor)
+        self.create_subscription(String, "/launch_status", self._on_launch_status, 10)
+        self.create_subscription(BatteryState, "/battery_state", self._on_battery, 10)
+        # navigation state for the monitor tile and /diagnostics (nav_web_node, 2 Hz)
+        self.nav = None
+        self.nav_raw = None
+        self.create_subscription(String, "/web/nav_status", self._on_nav_status, 10)
 
     def _on_launch_status(self, msg):
         try:
@@ -860,7 +1058,26 @@ class SystemInfoNode(Node):
                                    "level": "FATAL" if msg.level >= LOG_FATAL else "ERROR", "msg": msg.msg[:300]})
 
     def _on_battery(self, msg):
-        self.battery = {"v": round(msg.voltage, 2), "t": time.time()}
+        p = msg.percentage
+        pct = None if p != p or p < 0 else (p * 100.0 if p <= 1.0 else p)   # NaN = not reported
+        self.battery = {"v": round(msg.voltage, 2), "pct": pct, "t": time.time()}
+
+    def _count(self, label):
+        self.sensor_counts[label] += 1
+
+    def publish_diagnostics(self, data):
+        now = time.monotonic()
+        dt = now - self.sensor_t
+        if dt >= DIAG_PERIOD * 0.9:
+            self.sensor_rates = {k: n / dt for k, n in self.sensor_counts.items()}
+            self.sensor_counts = {k: 0 for k in self.sensor_counts}
+            self.sensor_t = now
+        ls = self.launch_status if time.time() - self.launch_status.get("_t", 0) < 10 else {}
+        nav = self.nav_raw if self.nav and time.time() - self.nav["t"] < 10 else None
+        msg = DiagnosticArray()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.status = build_diagnostics(data, ls, self.battery, nav, self.sensor_rates, self.hostname)
+        self.diag_pub.publish(msg)
 
     def _on_nav_status(self, msg):
         try:
@@ -868,6 +1085,7 @@ class SystemInfoNode(Node):
         except ValueError:
             return
         self.nav = {"t": time.time(), "summary": nav_summary(s)}
+        self.nav_raw = s
 
     def _monitor_payload(self, data):
         keep = ("bringup", "slam", "navigation", "camera", "joystick", "robot_node",
@@ -1038,6 +1256,10 @@ class SystemInfoNode(Node):
         msg = String()
         msg.data = json.dumps(data)
         self.pub.publish(msg)
+        try:
+            self.publish_diagnostics(data)
+        except Exception as exc:   # never let a diagnostics bug stop /system_info
+            self.get_logger().warn("diagnostics: %s" % exc, throttle_duration_sec=60)
         self.monitor.maybe_push(self._monitor_payload(data))
 
 

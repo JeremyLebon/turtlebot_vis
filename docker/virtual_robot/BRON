@@ -1,1 +1,1 @@
-turtlebot_docker f15a591 (2026-11-23) 1.14.1: vrij uitwijken zonder route, volledig pad op de kaart, wegennet rustiger
+turtlebot_docker 3c8a4df (2026-11-24) 1.15.0: /diagnostics (diagnostic_msgs) uit system_info_node + kaart Diagnose

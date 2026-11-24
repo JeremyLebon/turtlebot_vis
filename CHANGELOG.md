@@ -12,6 +12,14 @@ Eigen versies, los daarvan:
   (`docker/virtual_robot/VERSION`, `tools/sync_virtual_robot.sh`), op de
   Fenix-pagina bij Status.
 
+## 1.2.0 - 2026-11-24 (branch feature/diagnostics, image `:diag` - test, niet voor de studenten)
+- **Virtuele robot 1.15.0: `/diagnostics` + kaart "Diagnose"** op de
+  Fenix-pagina Status (systeem). Zie de CHANGELOG van turtlebot_docker 1.15.0.
+- Vertrekt van `feature/route` (vis 1.1.10, virtuele robot 1.14.1);
+  `docker-compose.yaml` gebruikt `nobel86/turtlebot-rpi5-vis:diag`. Testen
+  in een aparte map (`git clone -b feature/diagnostics ... turtlebot_vis_diag`)
+  of de compose-tag aanpassen.
+
 ## 1.1.10 - 2026-11-24 (branch feature/route, image `:route`)
 - **Virtuele robot 1.14.1**: vrij uitwijken als er geen route over het
   wegennet meer is; volledig pad (aanloopstuk + route) op de kaart; wegennet

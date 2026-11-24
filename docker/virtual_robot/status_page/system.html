@@ -178,6 +178,12 @@
   .check-list li:last-child { border-bottom: none; }
   .check-list .name { flex: none; width: 40%; color: var(--muted); }
   .check-list .dot { flex: none; transform: translateY(-1px); }
+  .diag-group { margin: 10px 0 2px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .diag-list li { cursor: pointer; flex-wrap: wrap; }
+  .diag-list .name { width: 26%; }
+  .diag-list .msg { flex: 1; min-width: 0; }
+  .diag-list .vals { flex-basis: 100%; display: none; font-family: ui-monospace, monospace; font-size: 0.75rem; color: var(--muted); padding: 2px 0 2px 16px; }
+  .diag-list li.open .vals { display: block; }
   footer {
     margin-top: 24px;
     color: var(--muted);
@@ -230,6 +236,13 @@
   <div class="card status-card">
     <h2>Labo-check <span id="laboSum" style="text-transform:none;letter-spacing:0"></span></h2>
     <ul class="check-list" id="laboList"><li class="sub">--</li></ul>
+  </div>
+
+  <div class="card wide status-card">
+    <h2>Diagnose <span id="diagSum" style="text-transform:none;letter-spacing:0"></span></h2>
+    <div class="sub" style="margin-bottom:4px">Wat de robot zelf over zijn gezondheid meldt (<code>/diagnostics</code>,
+      ROS-standaard): ook andere nodes en drivers verschijnen hier. Klik op een regel voor de waarden.</div>
+    <div id="diagList"><div class="sub">wacht op /diagnostics...</div></div>
   </div>
 
   <div class="card">
@@ -530,6 +543,57 @@
       return '<li><span class="dot ' + r[0] + '"></span><span class="name">' + escHtml(r[1]) + "</span><span>" + escHtml(r[2]) + "</span></li>";
     }).join("");
   }, 1000);
+
+  // ---- Diagnose: /diagnostics (diagnostic_msgs/DiagnosticArray) ----
+  // Every status by name, from any node (system_info_node on this robot,
+  // drivers, other software); grouped on the part before "/" (or ": ").
+  // Not updated for DIAG_STALE_MS: shown as stale (grey).
+  var DIAG_STALE_MS = 10000, diag = {}, diagOpen = {};
+  var DIAG_LEVEL = ["ok", "warn", "bad", ""];   // OK, WARN, ERROR, STALE -> dot class
+  new ROSLIB.Topic({ ros: ros, name: "/diagnostics", messageType: "diagnostic_msgs/msg/DiagnosticArray", throttle_rate: 1000 })
+    .subscribe(function (msg) {
+      var now = Date.now();
+      (msg.status || []).forEach(function (st) {
+        // level is a byte: a number, or a 1-char string over some rosbridge versions
+        var lv = typeof st.level === "string" ? st.level.charCodeAt(0) : st.level;
+        diag[st.name] = { level: lv, message: st.message, hw: st.hardware_id, values: st.values || [], t: now };
+      });
+    });
+  function diagGroup(name) {
+    var i = name.indexOf("/"), j = name.indexOf(": ");
+    return i > 0 ? name.slice(0, i) : j > 0 ? name.slice(0, j) : "Overig";
+  }
+  function renderDiag() {
+    var now = Date.now(), names = Object.keys(diag), el = document.getElementById("diagList");
+    if (!names.length) return;
+    var groups = {}, order = [], bad = 0, warn = 0;
+    names.forEach(function (n) {
+      var g = diagGroup(n);
+      if (!groups[g]) { groups[g] = []; order.push(g); }
+      groups[g].push(n);
+    });
+    el.innerHTML = order.map(function (g) {
+      return '<div class="diag-group">' + escHtml(g) + '</div><ul class="check-list diag-list">' + groups[g].map(function (n) {
+        var d = diag[n], stale = now - d.t > DIAG_STALE_MS, lv = stale ? 3 : d.level;
+        if (lv === 2) bad++; else if (lv === 1) warn++;
+        var short = n.indexOf("/") > 0 ? n.slice(n.indexOf("/") + 1) : n.indexOf(": ") > 0 ? n.slice(n.indexOf(": ") + 2) : n;
+        var vals = d.values.map(function (kv) { return escHtml(kv.key) + ": " + escHtml(kv.value); }).join("<br>");
+        return '<li data-n="' + escHtml(n) + '" class="' + (diagOpen[n] ? "open" : "") + '"><span class="dot ' + (DIAG_LEVEL[lv] || "") + '"></span>' +
+          '<span class="name">' + escHtml(short) + '</span><span class="msg">' + escHtml(stale ? "geen update (" + Math.round((now - d.t) / 1000) + " s)" : d.message) + "</span>" +
+          '<span class="vals">' + (vals || "geen waarden") + (d.hw ? "<br>hardware_id: " + escHtml(d.hw) : "") + "</span></li>";
+      }).join("") + "</ul>";
+    }).join("");
+    var se = document.getElementById("diagSum");
+    se.textContent = "- " + (bad ? bad + (bad > 1 ? " fouten" : " fout") : warn ? warn + (warn > 1 ? " waarschuwingen" : " waarschuwing") : "alles OK");
+    se.style.color = hdrColor(bad ? "bad" : warn ? "warn" : "ok");
+  }
+  document.getElementById("diagList").addEventListener("click", function (e) {
+    var li = e.target.closest("li[data-n]");
+    if (!li) return;
+    diagOpen[li.dataset.n] = !diagOpen[li.dataset.n];
+    li.classList.toggle("open");
+  });
+  setInterval(renderDiag, 1000);
 
   // ---- Beheer: PIN ----
   document.addEventListener("fenix-admin", function (e) {

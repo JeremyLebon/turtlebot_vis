@@ -3,7 +3,7 @@ services:
     build:
       context: ./
       dockerfile: docker/Dockerfile
-    image: nobel86/turtlebot-rpi5-vis:route  # branch feature/route (test Route Server); studenten: :jazzy
+    image: nobel86/turtlebot-rpi5-vis:diag  # branch feature/diagnostics (test /diagnostics); studenten: :jazzy
     stdin_open: true
     network_mode: host
     tty: true
