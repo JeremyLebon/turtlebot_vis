@@ -8,6 +8,10 @@ Versie: `VERSION` (wijzigingen in `CHANGELOG.md`); `./start.sh` en `check`
 tonen de versie van de scripts, de simulator en de virtuele robot. Image en
 virtuele robot draaien **ROS 2 Jazzy**, zoals de robots.
 
+| HTML-simulator (`./start.sh --htmlsim`) | Fenix-pagina van de virtuele robot (`./start.sh --fenix`) |
+|---|---|
+| ![TurtleBot Sim in de wereld Klaslokaal](docs/img/htmlsim.jpg) | ![Fenix-pagina: Rijden met lidar, camera en sensoren](docs/img/fenix.jpg) |
+
 ## Op de laptop (Ubuntu of WSL op Windows)
 
 De container praat via **Zenoh** met de robot: een rechtstreekse
@@ -90,8 +94,6 @@ rviz2                    # of: ros2 launch turtlebot3_navigation2 navigation2.la
 ./start.sh --htmlsim
 ```
 
-![TurtleBot Sim in de wereld Klaslokaal](docs/img/htmlsim.jpg)
-
 Start in de container een eigen Zenoh-router en rosbridge; surf naar
 <http://127.0.0.1:8080/sim/>. De **TB3 Lite Sim 3D** (TurtleBot3 in de browser,
 met de automatische tests van de huiswerkopdrachten) verbindt vanzelf. Je
@@ -118,8 +120,6 @@ Zelfde knoppen en paden als op de robot; de simulator speelt de hardware en
 rijdt op `/cmd_vel_out`, zoals de motoren. Kaarten en zones in
 `ros2_ws/virtuele_robot/`. In rust ~0,4 GB, tijdens Navigatie ~1 GB.
 Niet automatisch bij `--htmlsim` (huiswerk): stoppen met `fenix stop`.
-
-![Fenix-pagina van de virtuele robot: Rijden met lidar, camera en sensoren](docs/img/fenix.jpg)
 
 De robotbestanden komen uit turtlebot_docker: `tools/sync_virtual_robot.sh`,
 daarna de image opnieuw bouwen.
