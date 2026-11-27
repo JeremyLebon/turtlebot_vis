@@ -29,7 +29,7 @@ door WSL2 heen.
 ### Setup
 
 ```bash
-git clone --recurse-submodules https://github.com/JeremyLebon/turtlebot_vis.git
+git clone https://github.com/JeremyLebon/turtlebot_vis.git
 cd turtlebot_vis
 ```
 
@@ -140,27 +140,66 @@ nummer).
 
 ### Problemen oplossen
 
-- Eerst `check` in de container: die zegt meestal wat er mis is.
-- `check` meldt **Image beschadigd** (of twist_mux/SLAM faalt bij één
-  student terwijl het bij anderen werkt): in WSL `docker compose down` en
+Eerst **`check`** in de container (of `./start.sh`, dat doet hem ook): per
+onderdeel ✔ of !, met eronder wat je moet doen. De meest voorkomende:
+
+**Verbinding met de robot**
+
+- **Robot: nog geen robot gekozen** of **Zenoh-router `10.0.<nr>.10:7447`
+  NIET bereikbaar**: laptop op de wifi `TB-AP-<nr>` van jouw robot? Robot aan
+  (melodie gehoord)? Dan `robot` in de container (opnieuw zoeken), of vast:
+  `robot <nr>`.
+- **Topics: geen enkel topic zichtbaar**: zelfde vragen; `ROS_DOMAIN_ID` moet
+  exact het robotnummer zijn (de automatische keuze zorgt daarvoor, zie de
+  regel bij het openen van de shell: `TurtleBot <nr>`).
+- **Data: topics zichtbaar, maar er komt GEEN data binnen** of
+  **ROS-versie: robot draait humble/jazzy, deze laptop ...**: robot en laptop
+  draaien een andere ROS-versie. De versie van de robot staat op de
+  Fenix-pagina; v1.x = Jazzy = deze image (`:jazzy`).
+- **Bringup staat uit**: geen `/scan`, `/odom` of motoren. Start **Bringup** op
+  de Fenix-pagina (`http://10.0.<nr>.10:8080`, tab Rijden).
+- **Dubbel** (bridges meer dan één keer): restjes van een vorige modus
+  (simulator, andere robot); opruimen met `robot <nr>`.
+- Geen camerabeeld of alles hapert: neem in Lichtblick of rviz2 altijd
+  `/camera/image_raw/compressed`, nooit `/camera/image_raw` (ongeveer
+  110 Mbit/s: genoeg om de wifi van de robot te laten vastlopen).
+
+**Laptop en Docker**
+
+- **Image beschadigd** (of twist_mux/SLAM faalt bij één student terwijl het
+  bij anderen werkt): in WSL `docker compose down` en
   `docker image rm nobel86/turtlebot-rpi5-vis:jazzy`, dan `./start.sh --pull`
   op een goed netwerk. Een gewone `--pull` herstelt het niet.
-- `ros2 topic list` toont niets: welke robot meldt de shell bij het openen
-  (`TurtleBot <nr>`)? Geen of de verkeerde: laptop op de juiste wifi
-  `TB-AP-<nr>`, robot aan? Dan `robot` (opnieuw zoeken). `ROS_DOMAIN_ID`
-  moet exact het robotnummer zijn (onderdeel van Zenoh's
-  topic-key-namespacing) - de automatische keuze zorgt daarvoor. Draait de
-  bringup op de robot? Anders `ros2 daemon stop` en opnieuw proberen.
-- Geen GUI-venster (rviz2/rqt): gebruik Lichtblick (hierboven), of probeer
-  `LIBGL_ALWAYS_SOFTWARE=1 rviz2` (tekenen via de CPU i.p.v. de GPU).
-- WSLg nakijken: controleer of WSLg werkt met een simpele
-  test buiten Docker (bv. `xeyes` of een andere Linux GUI-app rechtstreeks
-  in WSL), vóór je het in de container probeert.
-- De compose gebruikt `network_mode: host`. Op Docker Desktop (Windows)
-  moet host-networking expliciet aanstaan: Docker Desktop instellingen ->
-  Resources -> Network -> "Enable host networking". Staat dit uit, dan
-  lijkt de container te starten maar is poort 7447 van buiten de container
-  niet bereikbaar zoals verwacht.
+- **Geheugen** (WSL ... GB vrij, programma afgesloten wegens
+  geheugentekort): sluit andere programma's; `diagnose` in de container toont
+  live het geheugen per onderdeel. `start.sh` begrenst WSL zelf
+  (`wsl_check.sh`); na een wijziging in `.wslconfig` eerst `wsl --shutdown`
+  in PowerShell.
+- `docker compose pull` op de robotwifi lukt niet: die heeft geen internet.
+  Pull op eduroam of thuis (ongeveer 5 GB).
+- `git pull` stopt met *Your local changes ... would be overwritten* en
+  noemt `.env`: oude robotinstelling, niet meer nodig. `git checkout .env`
+  en opnieuw `git pull` (andere bestanden: `git stash`; je code in `ros2_ws`
+  blijft staan).
+- Poort 8080 bezet (Lichtblick of simulator laadt niet): `VIS_PORT=8081` in
+  `.env`, surf naar <http://127.0.0.1:8081>.
+- Docker Desktop: `network_mode: host` moet aanstaan (Instellingen ->
+  Resources -> Network -> *Enable host networking*). Anders lijkt de
+  container te starten, maar bereikt hij de robot niet.
+
+**Vensters en browser**
+
+- **Display: geen DISPLAY** of rviz2/rqt opent geen venster: gebruik
+  Lichtblick (<http://127.0.0.1:8080>), of probeer
+  `LIBGL_ALWAYS_SOFTWARE=1 rviz2`. Werkt WSLg zelf? Test buiten Docker met een
+  GUI-app in WSL (bv. `xeyes`).
+- Lichtblick zegt *Connection failed*: kijk in
+  `/tmp/vis_services/foxglove_bridge.log`. Wacht de bridge op de robot, dan is
+  de robot niet bereikbaar (zie hierboven).
+- **Simulator**: verbindt niet (`ws://127.0.0.1:9090`): `robot htmlsim` in
+  de container start rosbridge opnieuw. **Fenix-pagina (virtuele robot)
+  antwoordt niet**: `fenix stop`, `fenix start`; logs in
+  `/tmp/vis_services/vr_*.log`.
 
 ## Camera kalibreren (intrinsiek)
 
