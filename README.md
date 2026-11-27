@@ -1,7 +1,12 @@
 # Turtlebot Vis
 
 Visualisatie-client (rviz2/rqt) voor op de studenten-laptop, om een
-turtlebot van op afstand te bekijken/besturen.
+turtlebot van op afstand te bekijken/besturen. Zonder robot: de
+HTML-simulator en een virtuele robot met de Fenix-pagina (zie onder).
+
+Versie: `VERSION` (wijzigingen in `CHANGELOG.md`); `./start.sh` en `check`
+tonen de versie van de scripts, de simulator en de virtuele robot. Image en
+virtuele robot draaien **ROS 2 Jazzy**, zoals de robots.
 
 ## Op de laptop (Ubuntu of WSL op Windows)
 
@@ -26,8 +31,8 @@ cd turtlebot_vis
 
 ### Starten
 
-De image staat al op Docker Hub (`nobel86/turtlebot-rpi5-vis:zenoh`): eerst
-pullen, **met internet** (ca. 4 GB):
+De image staat op Docker Hub (`nobel86/turtlebot-rpi5-vis:jazzy`): eerst
+pullen, **met internet** (ca. 5 GB):
 
 ```bash
 docker compose pull
@@ -44,7 +49,13 @@ gevonden, Zenoh-router bereikbaar, aantal topics, komt er echt data binnen,
 zelfde ROS-versie als de robot, Lichtblick, bridge, display voor rviz2,
 `ros2_ws`) en opent een shell in de container. `exit` verlaat de shell, de
 container blijft draaien. Opties: `./start.sh --no-shell` (enkel starten en
-check), `./start.sh --pull` (eerst de nieuwste image ophalen).
+check), `./start.sh --pull` (eerst de nieuwste scripts met `git pull` en de
+nieuwste image ophalen; is `start.sh` zelf veranderd, dan start de nieuwe
+versie meteen), `./start.sh --help` (alle opties). Onder WSL begrenst
+`start.sh` ook het geheugen van WSL (`wsl_check.sh`).
+
+Bezet een ander programma poort 8080? Zet `VIS_PORT=8081` in `.env` (of
+`VIS_PORT=8081 ./start.sh`) en surf naar <http://127.0.0.1:8081>.
 
 Nog een terminal in de container: **`./connect.sh`** (start de container
 eerst als hij niet draait). Eén commando: `./connect.sh ros2 topic list`.
@@ -79,6 +90,8 @@ rviz2                    # of: ros2 launch turtlebot3_navigation2 navigation2.la
 ./start.sh --htmlsim
 ```
 
+![TurtleBot Sim in de wereld Klaslokaal](docs/img/htmlsim.jpg)
+
 Start in de container een eigen Zenoh-router en rosbridge; surf naar
 <http://127.0.0.1:8080/sim/>. De **TB3 Lite Sim 3D** (TurtleBot3 in de browser,
 met de automatische tests van de huiswerkopdrachten) verbindt vanzelf. Je
@@ -87,16 +100,27 @@ internet nodig. Terug naar de echte robot: `robot` in de container. Gazebo in
 de container: `./start.sh --sim`. Broncode en tests van de simulator:
 `htmlsim/` (zie `htmlsim/README.md`).
 
+**Project sessie 4** (meetronde) in de simulator: wereld **Klaslokaal**
+(9 x 7 m), taak *Project: meetronde* onder Opdrachten, met P1-P3 en de
+bronnen (gaslek, warmte) per studentnummer. Gesimuleerde sensoren
+(temperatuur, vochtigheid, druk, licht, CO2, TVOC, CO, geluid) en camera
+zoals op de echte robot, aan/uit onder *Sensoren*. pandas, matplotlib,
+seaborn en reportlab (analyse en PDF) zitten in de image.
+
 ### Virtuele robot en Fenix-pagina (back-up voor de echte robot)
 
 `./start.sh --fenix` (of `fenix start` in de container, bij `robot htmlsim`)
-start naast de simulator ook de software van de echte TurtleBot: de Fenix-pagina op <http://127.0.0.1:8090> (knop **Fenix-pagina**
-in de simulator) met Rijden, Mappen (SLAM met Cartographer, kaart opslaan,
+start naast de simulator ook de software van de echte TurtleBot: de
+Fenix-pagina op <http://127.0.0.1:8090> (knop **Fenix-pagina** in de
+simulator) met Rijden, Mappen (SLAM met Cartographer, kaart opslaan,
 zones), Navigatie (Nav2, planners, routes), twist_mux en cmd_vel_guard.
 Zelfde knoppen en paden als op de robot; de simulator speelt de hardware en
 rijdt op `/cmd_vel_out`, zoals de motoren. Kaarten en zones in
 `ros2_ws/virtuele_robot/`. In rust ~0,4 GB, tijdens Navigatie ~1 GB.
 Niet automatisch bij `--htmlsim` (huiswerk): stoppen met `fenix stop`.
+
+![Fenix-pagina van de virtuele robot: Rijden met lidar, camera en sensoren](docs/img/fenix.jpg)
+
 De robotbestanden komen uit turtlebot_docker: `tools/sync_virtual_robot.sh`,
 daarna de image opnieuw bouwen.
 
@@ -117,6 +141,10 @@ nummer).
 ### Problemen oplossen
 
 - Eerst `check` in de container: die zegt meestal wat er mis is.
+- `check` meldt **Image beschadigd** (of twist_mux/SLAM faalt bij één
+  student terwijl het bij anderen werkt): in WSL `docker compose down` en
+  `docker image rm nobel86/turtlebot-rpi5-vis:jazzy`, dan `./start.sh --pull`
+  op een goed netwerk. Een gewone `--pull` herstelt het niet.
 - `ros2 topic list` toont niets: welke robot meldt de shell bij het openen
   (`TurtleBot <nr>`)? Geen of de verkeerde: laptop op de juiste wifi
   `TB-AP-<nr>`, robot aan? Dan `robot` (opnieuw zoeken). `ROS_DOMAIN_ID`
